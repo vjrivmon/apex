@@ -43,6 +43,25 @@ from mcp.types import TextContent, Tool
 from context_db import ApexContextDB
 from wiki_scaffold import create_wiki, append_log, update_index
 
+# --- Debug monitor (envía eventos si está corriendo) ---
+
+_DEBUG_MONITOR_URL = "http://localhost:8099/event"
+
+
+async def _debug_log(tool: str, arguments: dict, result: str, duration_ms: int = 0) -> None:
+    """Envía evento al debug monitor si está corriendo. No falla si no está."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=1.0) as client:
+            await client.post(_DEBUG_MONITOR_URL, json={
+                "tool": tool,
+                "arguments": arguments,
+                "result": result[:500],
+                "duration_ms": duration_ms,
+            })
+    except Exception:
+        pass  # Monitor no está corriendo, no pasa nada
+
 # --- Detectar directorio del proyecto ---
 
 def _find_project_root() -> Path:
@@ -260,14 +279,17 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     db = _get_db()
+    import time
+    _t0 = time.monotonic()
 
     try:
         if name == "apex_get_context":
             level = arguments.get("level", "timeline")
             if not (await _db_exists(db)):
-                return [TextContent(type="text", text="No se encontró .apex/context.db en este proyecto. Usa apex_init_project primero.")]
-            result = await db.get_context(level)
-            return [TextContent(type="text", text=result)]
+                result = [TextContent(type="text", text="No se encontró .apex/context.db en este proyecto. Usa apex_init_project primero.")]
+            else:
+                ctx = await db.get_context(level)
+                result = [TextContent(type="text", text=ctx)]
 
         elif name == "apex_init_project":
             root = _find_project_root()
@@ -280,27 +302,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             # Crear wiki scaffold
             domain = arguments.get("domain", "")
             wiki_dir = create_wiki(str(root), arguments["name"], domain)
-            return [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
+            result = [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
 
         elif name == "apex_set_phase":
             await db.set_phase(arguments["phase_number"], arguments["status"], arguments.get("notes", ""))
-            return [TextContent(type="text", text=f"Fase {arguments['phase_number']} → {arguments['status']}")]
+            result = [TextContent(type="text", text=f"Fase {arguments['phase_number']} → {arguments['status']}")]
 
         elif name == "apex_add_decision":
             did = await db.add_decision(
                 arguments["category"], arguments["decision"], arguments["reasoning"],
                 phase=arguments.get("phase"), alternatives=arguments.get("alternatives", ""))
-            return [TextContent(type="text", text=f"Decisión #{did} registrada: {arguments['decision'][:80]}")]
+            result = [TextContent(type="text", text=f"Decisión #{did} registrada: {arguments['decision'][:80]}")]
 
         elif name == "apex_invalidate_decision":
             await db.invalidate_decision(arguments["decision_id"], arguments.get("reason", ""))
-            return [TextContent(type="text", text=f"Decisión #{arguments['decision_id']} invalidada")]
+            result = [TextContent(type="text", text=f"Decisión #{arguments['decision_id']} invalidada")]
 
         elif name == "apex_add_error":
             eid = await db.add_error(
                 arguments["source"], arguments["description"], arguments["lesson"],
                 phase=arguments.get("phase"), severity=arguments.get("severity", "medium"))
-            return [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}")]
+            result = [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}")]
 
         elif name == "apex_add_component":
             await db.add_component(
@@ -309,36 +331,37 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 files=arguments.get("files"))
             if arguments.get("status") and arguments["status"] != "planned":
                 await db.update_component_status(arguments["id"], arguments["status"])
-            return [TextContent(type="text", text=f"Componente '{arguments['name']}' registrado como {arguments.get('status', 'planned')}")]
+            result = [TextContent(type="text", text=f"Componente '{arguments['name']}' registrado como {arguments.get('status', 'planned')}")]
 
         elif name == "apex_update_component":
             await db.update_component_status(arguments["id"], arguments["status"])
-            return [TextContent(type="text", text=f"Componente '{arguments['id']}' → {arguments['status']}")]
+            result = [TextContent(type="text", text=f"Componente '{arguments['id']}' → {arguments['status']}")]
 
         elif name == "apex_add_next_step":
             sid = await db.add_next_step(
                 arguments["description"], priority=arguments.get("priority", 5),
                 phase=arguments.get("phase"))
-            return [TextContent(type="text", text=f"Paso #{sid} añadido [P{arguments.get('priority', 5)}]: {arguments['description'][:80]}")]
+            result = [TextContent(type="text", text=f"Paso #{sid} añadido [P{arguments.get('priority', 5)}]: {arguments['description'][:80]}")]
 
         elif name == "apex_complete_step":
             await db.complete_step(arguments["step_id"])
-            return [TextContent(type="text", text=f"Paso #{arguments['step_id']} completado")]
+            result = [TextContent(type="text", text=f"Paso #{arguments['step_id']} completado")]
 
         elif name == "apex_search":
             results = await db.search(arguments["query"], limit=arguments.get("limit", 10))
             if not results:
-                return [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}'")]
-            lines = [f"Resultados para '{arguments['query']}':"]
-            for r in results:
-                lines.append(f"- [{r['source']}] {r['content'][:150]}")
-            return [TextContent(type="text", text="\n".join(lines))]
+                result = [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}'")]
+            else:
+                lines = [f"Resultados para '{arguments['query']}':"]
+                for r in results:
+                    lines.append(f"- [{r['source']}] {r['content'][:150]}")
+                result = [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "apex_log_session":
             await db.log_session(
                 arguments["summary"], key_outcomes=arguments.get("key_outcomes", ""),
                 phase=arguments.get("phase"))
-            return [TextContent(type="text", text=f"Sesión registrada: {arguments['summary'][:80]}")]
+            result = [TextContent(type="text", text=f"Sesión registrada: {arguments['summary'][:80]}")]
 
         elif name == "apex_wiki_add":
             await db.add_wiki_page(
@@ -354,13 +377,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 page_path.write_text(f"# {arguments['title']}\n\n{arguments['content']}", encoding="utf-8")
                 append_log(str(wiki_dir), f"Actualizada página: {arguments['slug']}")
                 update_index(str(wiki_dir))
-            return [TextContent(type="text", text=f"Wiki página '{arguments['slug']}' guardada")]
+            result = [TextContent(type="text", text=f"Wiki página '{arguments['slug']}' guardada")]
 
         else:
-            return [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
+            result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
 
     except Exception as e:
+        _duration = int((time.monotonic() - _t0) * 1000)
+        await _debug_log(name, arguments, f"ERROR: {str(e)}", _duration)
         return [TextContent(type="text", text=f"Error en {name}: {str(e)}")]
+
+    # Log al debug monitor después de cada llamada exitosa
+    _duration = int((time.monotonic() - _t0) * 1000)
+    await _debug_log(name, arguments, result[0].text if result else "", _duration)
+    return result
 
 
 async def _db_exists(db: ApexContextDB) -> bool:
