@@ -1,0 +1,379 @@
+"""APEX MCP Server — Expone context.db como herramientas de Claude Code.
+
+Herramientas disponibles:
+  - apex_get_context(level)    → Contexto del proyecto (compact/timeline/full)
+  - apex_set_phase(num, status)→ Actualizar fase actual
+  - apex_add_decision(...)     → Registrar decisión con temporal facts
+  - apex_add_error(...)        → Registrar error (bidireccional)
+  - apex_add_component(...)    → Registrar componente del proyecto
+  - apex_add_next_step(...)    → Añadir siguiente paso
+  - apex_complete_step(id)     → Marcar paso como completado
+  - apex_search(query)         → Búsqueda FTS5 en todo el contexto
+  - apex_init_project(name)    → Inicializar .apex/ en el proyecto actual
+  - apex_log_session(summary)  → Registrar resumen de sesión
+
+Configuración en .claude/settings.json:
+  {
+    "mcpServers": {
+      "apex": {
+        "command": "python3",
+        "args": ["/home/vicente/RoadToDevOps/apex/mcp/apex_server.py"]
+      }
+    }
+  }
+
+El server detecta automáticamente el directorio del proyecto vía CWD.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+
+# Añadir lib/ al path para importar context_db y wiki_scaffold
+_apex_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_apex_root / "lib"))
+
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import TextContent, Tool
+
+from context_db import ApexContextDB
+from wiki_scaffold import create_wiki, append_log, update_index
+
+# --- Detectar directorio del proyecto ---
+
+def _find_project_root() -> Path:
+    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/."""
+    cwd = Path.cwd()
+    for parent in [cwd, *cwd.parents]:
+        if (parent / ".apex").exists():
+            return parent
+        if (parent / ".git").exists():
+            return parent
+        if parent == parent.parent:
+            break
+    return cwd
+
+
+def _get_db() -> ApexContextDB:
+    """Obtiene la instancia de context.db para el proyecto actual."""
+    root = _find_project_root()
+    db_path = root / ".apex" / "context.db"
+    return ApexContextDB(str(db_path))
+
+
+# --- MCP Server ---
+
+server = Server("apex")
+
+
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    return [
+        Tool(
+            name="apex_get_context",
+            description="Obtiene el contexto del proyecto APEX. Niveles: 'compact' (~200 tokens), 'timeline' (~800 tokens), 'full' (~2000 tokens).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "enum": ["compact", "timeline", "full"],
+                        "description": "Nivel de detalle del contexto",
+                        "default": "timeline",
+                    }
+                },
+            },
+        ),
+        Tool(
+            name="apex_init_project",
+            description="Inicializa .apex/ en el proyecto actual. Crea context.db, wiki scaffold, y registra metadatos.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Nombre del proyecto"},
+                    "description": {"type": "string", "description": "Descripción breve"},
+                    "solution_type": {"type": "string", "description": "Tipo de solución (cli/bot/mcp/app/agent/streamlit)"},
+                    "domain": {"type": "string", "description": "Dominio del proyecto (ej: supermercados, educación)"},
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="apex_set_phase",
+            description="Actualiza el estado de una fase del proyecto (0-14). Estados: pending, in_progress, completed, skipped.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "phase_number": {"type": "integer", "minimum": 0, "maximum": 14},
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "skipped"]},
+                    "notes": {"type": "string", "description": "Observaciones sobre la fase", "default": ""},
+                },
+                "required": ["phase_number", "status"],
+            },
+        ),
+        Tool(
+            name="apex_add_decision",
+            description="Registra una decisión tomada en el proyecto. Las decisiones tienen temporal facts (se pueden invalidar).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["architecture", "stack", "design", "data", "security", "deploy", "ux", "testing"],
+                        "description": "Categoría de la decisión",
+                    },
+                    "decision": {"type": "string", "description": "Qué se decidió (markdown)"},
+                    "reasoning": {"type": "string", "description": "Por qué se tomó esta decisión (markdown)"},
+                    "phase": {"type": "integer", "description": "Fase en la que se tomó"},
+                    "alternatives": {"type": "string", "description": "Alternativas descartadas y por qué"},
+                },
+                "required": ["category", "decision", "reasoning"],
+            },
+        ),
+        Tool(
+            name="apex_invalidate_decision",
+            description="Marca una decisión como ya no vigente (temporal fact). La decisión no se borra, pasa al historial.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "decision_id": {"type": "integer", "description": "ID de la decisión a invalidar"},
+                    "reason": {"type": "string", "description": "Por qué se invalida"},
+                },
+                "required": ["decision_id", "reason"],
+            },
+        ),
+        Tool(
+            name="apex_add_error",
+            description="Registra un error cometido (por Claude o por el usuario). Si el error ya existe, incrementa recurrence_count.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "enum": ["claude", "user"], "description": "Quién cometió el error"},
+                    "description": {"type": "string", "description": "Qué salió mal"},
+                    "lesson": {"type": "string", "description": "Lección aprendida para el futuro"},
+                    "phase": {"type": "integer", "description": "Fase en la que ocurrió"},
+                    "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"], "default": "medium"},
+                },
+                "required": ["source", "description", "lesson"],
+            },
+        ),
+        Tool(
+            name="apex_add_component",
+            description="Registra un componente del proyecto (domain entity, agent, port, adapter, etc.).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "ID único (ej: scraper-mercadona)"},
+                    "name": {"type": "string", "description": "Nombre legible"},
+                    "type": {"type": "string", "enum": ["domain", "agent", "port", "adapter", "api", "test", "config", "skill"]},
+                    "status": {"type": "string", "enum": ["planned", "in_progress", "implemented", "tested", "verified"], "default": "planned"},
+                    "phase": {"type": "integer"},
+                    "description": {"type": "string"},
+                    "files": {"type": "array", "items": {"type": "string"}, "description": "Archivos que implementan este componente"},
+                },
+                "required": ["id", "name", "type"],
+            },
+        ),
+        Tool(
+            name="apex_update_component",
+            description="Actualiza el estado de un componente existente.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["planned", "in_progress", "implemented", "tested", "verified"]},
+                },
+                "required": ["id", "status"],
+            },
+        ),
+        Tool(
+            name="apex_add_next_step",
+            description="Añade un siguiente paso al proyecto con prioridad.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "description": "Qué hay que hacer"},
+                    "priority": {"type": "integer", "minimum": 1, "maximum": 10, "description": "1=urgente, 10=nice-to-have", "default": 5},
+                    "phase": {"type": "integer"},
+                },
+                "required": ["description"],
+            },
+        ),
+        Tool(
+            name="apex_complete_step",
+            description="Marca un siguiente paso como completado.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "step_id": {"type": "integer"},
+                },
+                "required": ["step_id"],
+            },
+        ),
+        Tool(
+            name="apex_search",
+            description="Búsqueda full-text (FTS5) en todo el contexto del proyecto: decisiones, errores, componentes, wiki.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Texto a buscar"},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="apex_log_session",
+            description="Registra un resumen de la sesión actual para persistir entre conversaciones.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Resumen de lo que se hizo en esta sesión"},
+                    "key_outcomes": {"type": "string", "description": "Resultados clave", "default": ""},
+                    "phase": {"type": "integer"},
+                },
+                "required": ["summary"],
+            },
+        ),
+        Tool(
+            name="apex_wiki_add",
+            description="Añade o actualiza una página en la knowledge base (LLM-Wiki) del proyecto.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string", "description": "Ruta de la página (ej: entities/product, concepts/normalization)"},
+                    "title": {"type": "string"},
+                    "content": {"type": "string", "description": "Contenido markdown"},
+                    "page_type": {"type": "string", "enum": ["entity", "concept", "comparison", "query", "raw"], "default": "entity"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["slug", "title", "content"],
+            },
+        ),
+    ]
+
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    db = _get_db()
+
+    try:
+        if name == "apex_get_context":
+            level = arguments.get("level", "timeline")
+            if not (await _db_exists(db)):
+                return [TextContent(type="text", text="No se encontró .apex/context.db en este proyecto. Usa apex_init_project primero.")]
+            result = await db.get_context(level)
+            return [TextContent(type="text", text=result)]
+
+        elif name == "apex_init_project":
+            root = _find_project_root()
+            await db.initialize()
+            await db.set_meta("nombre", arguments["name"])
+            if arguments.get("description"):
+                await db.set_meta("descripción", arguments["description"])
+            if arguments.get("solution_type"):
+                await db.set_meta("tipo_solución", arguments["solution_type"])
+            # Crear wiki scaffold
+            domain = arguments.get("domain", "")
+            wiki_dir = create_wiki(str(root), arguments["name"], domain)
+            return [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
+
+        elif name == "apex_set_phase":
+            await db.set_phase(arguments["phase_number"], arguments["status"], arguments.get("notes", ""))
+            return [TextContent(type="text", text=f"Fase {arguments['phase_number']} → {arguments['status']}")]
+
+        elif name == "apex_add_decision":
+            did = await db.add_decision(
+                arguments["category"], arguments["decision"], arguments["reasoning"],
+                phase=arguments.get("phase"), alternatives=arguments.get("alternatives", ""))
+            return [TextContent(type="text", text=f"Decisión #{did} registrada: {arguments['decision'][:80]}")]
+
+        elif name == "apex_invalidate_decision":
+            await db.invalidate_decision(arguments["decision_id"], arguments.get("reason", ""))
+            return [TextContent(type="text", text=f"Decisión #{arguments['decision_id']} invalidada")]
+
+        elif name == "apex_add_error":
+            eid = await db.add_error(
+                arguments["source"], arguments["description"], arguments["lesson"],
+                phase=arguments.get("phase"), severity=arguments.get("severity", "medium"))
+            return [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}")]
+
+        elif name == "apex_add_component":
+            await db.add_component(
+                arguments["id"], arguments["name"], arguments["type"],
+                phase=arguments.get("phase"), description=arguments.get("description", ""),
+                files=arguments.get("files"))
+            if arguments.get("status") and arguments["status"] != "planned":
+                await db.update_component_status(arguments["id"], arguments["status"])
+            return [TextContent(type="text", text=f"Componente '{arguments['name']}' registrado como {arguments.get('status', 'planned')}")]
+
+        elif name == "apex_update_component":
+            await db.update_component_status(arguments["id"], arguments["status"])
+            return [TextContent(type="text", text=f"Componente '{arguments['id']}' → {arguments['status']}")]
+
+        elif name == "apex_add_next_step":
+            sid = await db.add_next_step(
+                arguments["description"], priority=arguments.get("priority", 5),
+                phase=arguments.get("phase"))
+            return [TextContent(type="text", text=f"Paso #{sid} añadido [P{arguments.get('priority', 5)}]: {arguments['description'][:80]}")]
+
+        elif name == "apex_complete_step":
+            await db.complete_step(arguments["step_id"])
+            return [TextContent(type="text", text=f"Paso #{arguments['step_id']} completado")]
+
+        elif name == "apex_search":
+            results = await db.search(arguments["query"], limit=arguments.get("limit", 10))
+            if not results:
+                return [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}'")]
+            lines = [f"Resultados para '{arguments['query']}':"]
+            for r in results:
+                lines.append(f"- [{r['source']}] {r['content'][:150]}")
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_log_session":
+            await db.log_session(
+                arguments["summary"], key_outcomes=arguments.get("key_outcomes", ""),
+                phase=arguments.get("phase"))
+            return [TextContent(type="text", text=f"Sesión registrada: {arguments['summary'][:80]}")]
+
+        elif name == "apex_wiki_add":
+            await db.add_wiki_page(
+                arguments["slug"], arguments["title"], arguments["content"],
+                page_type=arguments.get("page_type", "entity"),
+                tags=arguments.get("tags"))
+            # También escribir el archivo .md en el wiki filesystem
+            root = _find_project_root()
+            wiki_dir = root / ".apex" / "wiki"
+            if wiki_dir.exists():
+                page_path = wiki_dir / f"{arguments['slug']}.md"
+                page_path.parent.mkdir(parents=True, exist_ok=True)
+                page_path.write_text(f"# {arguments['title']}\n\n{arguments['content']}", encoding="utf-8")
+                append_log(str(wiki_dir), f"Actualizada página: {arguments['slug']}")
+                update_index(str(wiki_dir))
+            return [TextContent(type="text", text=f"Wiki página '{arguments['slug']}' guardada")]
+
+        else:
+            return [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error en {name}: {str(e)}")]
+
+
+async def _db_exists(db: ApexContextDB) -> bool:
+    """Verifica si context.db existe."""
+    return db.db_path.exists()
+
+
+# --- Entry point ---
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
