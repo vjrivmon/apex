@@ -88,20 +88,36 @@ y verificados.
 
 ### Fase 0 -- Socratico
 
-Cuestiona la idea ANTES de construir nada.
+Cuestiona la idea ANTES de construir nada. Investiga el mercado. Filtra ideas
+sin valor real.
 
 Sub-pasos en orden:
 
-- **[0a]** Ronda 1: "Que lo diferencia de lo que ya existe? Que has probado y
-  por que no te sirve?"
-- **[0b]** Ronda 2: "Realmente necesitas una UI? Un CLI, bot de Telegram,
-  servidor MCP, o script no basta?"
-- **[0c]** Ronda 3: "Quien lo usa? Con que frecuencia? Cuantos usuarios?"
-- **[0d]** Ronda 4: "Cual es el escenario donde falla? Que pasa si no tienes
-  internet, si la BD se corrompe, si el scraping falla?"
-- **[0e]** Ronda 5: "Si solo pudieras hacer UNA cosa, cual seria?"
-- **[0f]** Registrar TODAS las decisiones con `apex_add_decision(phase=0, ...)`
-- **[0g]** `apex_set_phase(phase_number=0, status="completed")`
+- **[0a]** Recopilar contexto: Escuchar la idea completa del usuario sin
+  interrumpir. Extraer: problema, publico objetivo, tipo de solucion propuesta,
+  dominio.
+- **[0b]** Investigacion de mercado: Usar WebSearch para buscar si ya existen
+  soluciones similares. Buscar: "{idea} app", "{problema} herramienta",
+  "{dominio} software open source". Analizar resultados:
+  - Si existen competidores: presentar al usuario con analisis de
+    fortalezas/debilidades. Preguntar: "Que haria tu version diferente?"
+  - Si no existen: posible Oceano Azul. Preguntar: "Por que crees que nadie lo
+    ha hecho? Falta de demanda o falta de ejecucion?"
+- **[0c]** Ronda 1: "Que problema REAL estas resolviendo? Como lo resuelves HOY
+  sin esta herramienta?"
+- **[0d]** Ronda 2: "Realmente necesitas UI? Un CLI, bot de Telegram, servidor
+  MCP, o script no basta?"
+- **[0e]** Ronda 3: "Quien lo usa? Con que frecuencia? Necesita funcionar
+  offline?"
+- **[0f]** Ronda 4: "Cual es el escenario donde falla? Que pasa si la BD se
+  corrompe, si el servicio externo cae, si no hay internet?"
+- **[0g]** Reflexion de valor: Escribir un parrafo que explique el problema
+  latente que existe y que aporta de valor la solucion propuesta. Guardar en
+  wiki: `apex_wiki_add(slug="concepts/value-proposition")`.
+- **[0h]** Registrar TODAS las decisiones + investigacion de mercado con
+  `apex_add_decision(phase=0, ...)`. Incluir resultados de la busqueda de
+  competidores.
+- **[0i]** `apex_set_phase(phase_number=0, status="completed")`
 
 ---
 
@@ -125,11 +141,25 @@ Sub-pasos en orden:
 
 ### Fase 2 -- Diseno
 
-REGLA: NUNCA describas un diseno por texto. Usa Pencil MCP para crear mockups
-visuales. Si la decision afecta al aspecto visual, DEBE acompanarse de un .pen.
+REGLA: NUNCA describas un diseno por texto. Usa las herramientas de diseno para
+crear mockups visuales. Si la decision afecta al aspecto visual, DEBE
+acompanarse de un artefacto visual.
 
 Esta fase tiene 3 bloques: Arquitectura, Identidad Visual, y UX. Se ejecutan EN
 ORDEN. No saltar a wireframes sin tener la paleta definida.
+
+#### Herramientas de diseno y su mejor uso
+
+| Herramienta   | Mejor para                                       | MCP tool prefix / skill              |
+| ------------- | ------------------------------------------------ | ------------------------------------ |
+| Pencil MCP    | Wireframes, layouts, mockups detallados          | `mcp__pencil__*`                     |
+| Paper.design  | Exportar a JSX/Tailwind, iteracion rapida        | `mcp__paper__*` (si disponible)      |
+| Google Stitch | Generacion completa de pantallas, design systems | skill: stitch-design, stitch-loop    |
+| AI Designer   | Prototipado HTML rapido                          | `mcp__aidesigner__*` (si disponible) |
+| Excalidraw    | Diagramas, flujos, mapas de navegacion           | `mcp__claude_ai_Excalidraw__*`       |
+
+El agente debe decidir cual usar para cada tarea. Si hay duda, PREGUNTAR al
+usuario.
 
 #### Bloque A: Arquitectura
 
@@ -141,72 +171,95 @@ ORDEN. No saltar a wireframes sin tener la paleta definida.
 
 #### Bloque B: Identidad Visual (Design System)
 
-OBLIGATORIO si el proyecto tiene UI. Usar Pencil MCP + Stitch +
+OBLIGATORIO si el proyecto tiene UI. Usar MULTIPLES herramientas de diseno +
 awesome-design-md.
 
-- **[2c]** Moodboard. Buscar 2-3 referencias visuales de apps similares o con el
-  estilo deseado. Consultar awesome-design-md (VoltAgent repo) para DESIGN.md de
-  referencia. Preguntar al usuario: "Que estilo visual te gusta?" con opciones
-  concretas (dark minimal, warm editorial, playful, premium). Crear un .pen con
-  el moodboard.
-- **[2d]** Paleta de colores. Definir:
-  - Color primario (brand/CTA)
-  - Color secundario (accent)
-  - Backgrounds (surface, elevated, marketing)
-  - Texto (primary, secondary, tertiary, muted)
-  - Status (success, warning, error, info)
-  - Borders y shadows Crear .pen con swatches de color. Registrar con
-    `apex_add_decision(category="design", decision="Paleta: primary=#X...")`.
-    Guardar en wiki: `apex_wiki_add(slug="concepts/design-system")`.
-- **[2e]** Tipografia. Definir:
-  - Font family principal (headings) + fallbacks
-  - Font family secundaria (body) + fallbacks
-  - Font monospace (code/data)
-  - Escala tipografica: display, h1, h2, h3, body, small, caption
-  - Pesos: regular, medium, semibold, bold
-  - Letter-spacing por tamano Registrar en wiki design-system.
-- **[2f]** Espaciado y radios. Definir:
+- **[2c]** Preferencias del usuario: ANTES de crear nada, consultar context.db
+  para historial de estilos preferidos del usuario (buscar decisions con
+  category="design"). Si hay historial: "En proyectos anteriores elegiste estilo
+  X con paleta Y. Quieres mantener esa linea o explorar algo nuevo?" Si no hay
+  historial: preguntar con AskUserQuestion mostrando opciones visuales.
+- **[2d]** Moodboard COMPARATIVO: Generar moodboards en MULTIPLES herramientas:
+  - Pencil MCP: moodboard con layout de referencia
+  - Stitch (skill stitch-design): diseno de referencia desde prompt
+  - Consultar awesome-design-md para DESIGN.md de apps similares Presentar las
+    2-3 opciones al usuario para que elija.
+- **[2e]** Paleta de colores: Definir COMPLETA:
+  - Brand: primary, secondary
+  - Surfaces: background, surface, elevated, overlay
+  - Text: primary, secondary, tertiary, muted, inverse
+  - Status: success, warning, error, info
+  - Borders, shadows, dividers Generar swatches visuales con Pencil MCP.
+    Registrar en context.db Y en wiki:
+    `apex_wiki_add(slug="concepts/design-system")`.
+- **[2f]** Tipografia: Definir:
+  - Heading family + fallbacks (ej: Geist, Inter Variable)
+  - Body family + fallbacks
+  - Mono family + fallbacks (ej: Berkeley Mono, Geist Mono)
+  - Escala completa: display (48-72px), h1-h4, body, small, caption, micro
+  - Pesos por nivel: display=500-600, body=400, emphasis=500-600
+  - Letter-spacing por tamano (negativo en display, normal en body)
+  - Line-height por nivel Registrar en wiki design-system.
+- **[2g]** Espaciado, radios y elevation: Definir:
   - Base unit (4px u 8px)
-  - Escala de spacing: xs, sm, md, lg, xl, 2xl
-  - Border radius: sm, md, lg, pill
-  - Breakpoints responsive
-- **[2g]** Iconografia. Decidir paquete de iconos: Lucide, Phosphor, Heroicons,
-  o SVG custom. NUNCA emojis. Registrar decision.
+  - Escala: 2xs(2), xs(4), sm(8), md(16), lg(24), xl(32), 2xl(48), 3xl(64)
+  - Border radius: none(0), sm(4), md(8), lg(12), xl(16), full(9999)
+  - Elevation: flat, subtle, standard, elevated, dialog (shadow values)
+  - Breakpoints: sm(640), md(768), lg(1024), xl(1280)
+- **[2h]** Iconografia: Elegir paquete (Lucide, Phosphor, Heroicons) y tamanos
+  estandar. NUNCA emojis. Registrar decision.
+- **[2i]** Accesibilidad visual:
+  - Verificar contraste WCAG AA minimo (4.5:1 para texto, 3:1 para grandes)
+  - Touch targets minimo 44x44px
+  - Focus visible en todos los interactivos
+  - Roles ARIA documentados para componentes custom
+  - Plan de screen reader para flujos principales
 
 #### Bloque C: UX y Pantallas
 
-- **[2h]** Wireframes principales con Pencil MCP. Crear un .pen por pantalla.
-  Minimo: pantalla principal, flujo critico, configuracion. Usar la paleta y
-  tipografia definidas en el bloque B.
-- **[2i]** Flujo de pantallas con Pencil MCP. Mapa de navegacion: TODAS las
-  pantallas conectadas con flechas. Cada boton/link indica pantalla destino. Un
-  .pen con el mapa completo.
-- **[2j]** User flows. Documentar flujos principales paso a paso: Accion ->
-  Pantalla -> Resultado -> Siguiente accion. Minimo 3 flujos: flujo principal,
-  flujo secundario, flujo de error.
-- **[2k]** Registrar TODOS los componentes detectados con `apex_add_component`
-- **[2l]** Guardar design system completo en wiki:
+- **[2j]** Wireframes en MULTIPLES herramientas:
+  - Pencil MCP para wireframes low-fi de cada pantalla
+  - Stitch para un high-fi de la pantalla principal Presentar opciones al
+    usuario para decidir direccion.
+- **[2k]** Mapa de navegacion con Excalidraw MCP: Todas las pantallas como
+  nodos, flechas entre ellas indicando que boton/link lleva a donde. Exportar
+  como imagen.
+- **[2l]** User flows: Documentar minimo 3 flujos:
+  - Flujo principal (happy path)
+  - Flujo secundario (alternativa)
+  - Flujo de error (que pasa cuando algo falla) Formato: Accion -> Pantalla ->
+    Resultado -> Siguiente accion.
+- **[2m]** Registrar TODOS los componentes detectados con `apex_add_component`
+- **[2n]** Guardar design system completo en wiki + context.db:
   `apex_wiki_add(slug="concepts/design-system", content="paleta+typo+spacing")`
-- **[2m]** `apex_set_phase(phase_number=2, status="completed")`
+- **[2o]** `apex_set_phase(phase_number=2, status="completed")`
 
 ---
 
 ### Fase 3 -- SPEC
 
-Especificacion por fases, no monolitica.
+Especificacion por fases, no monolitica. Empieza con reflexion profunda.
 
 Sub-pasos en orden:
 
-- **[3a]** Generar SPEC.md con secciones: Problema, Solucion, Usuarios,
+- **[3a]** Reflexion del problema: "Que problema REAL se esta resolviendo? Cual
+  es el problema latente? Que valor aporta esta solucion que no existe hoy?"
+  Escribir 2-3 parrafos de analisis. Guardar en wiki:
+  `apex_wiki_add(slug="concepts/problem-analysis")`.
+- **[3b]** Modelo de datos: Diagrama ER con Mermaid (erDiagram). Definir todas
+  las entidades, sus atributos, y las relaciones entre ellas. Incluir tipos de
+  datos, constraints, e indices. Registrar en wiki:
+  `apex_wiki_add(slug="entities/data-model")`.
+- **[3c]** Generar SPEC.md con secciones: Problema, Solucion, Usuarios,
   Funcionalidad core (fase 1), Funcionalidad extendida (fase 2+), Stack,
   Arquitectura, Restricciones, Metricas de exito.
-- **[3b]** Dividir la funcionalidad en checkpoints (MVP -> v1 -> v2). Cada
+- **[3d]** Dividir la funcionalidad en checkpoints (MVP -> v1 -> v2). Cada
   checkpoint debe ser deployable y usable.
-- **[3c]** Definir criterios de "hecho" para cada checkpoint.
-- **[3d]** Revisar con el usuario. Pedir feedback en bloque (NO interrumpir con
+- **[3e]** Definir criterios de "hecho" para cada checkpoint.
+- **[3f]** Revisar con el usuario. Pedir feedback en bloque (NO interrumpir con
   preguntas una a una).
-- **[3e]** Registrar SPEC como wiki: `apex_wiki_add(title="SPEC", ...)`
-- **[3f]** `apex_set_phase(phase_number=3, status="completed")`
+- **[3g]** Registrar SPEC como wiki: `apex_wiki_add(title="SPEC", ...)`
+- **[3h]** `apex_set_phase(phase_number=3, status="completed")`
 
 ---
 
@@ -216,9 +269,12 @@ ANTES de escribir codigo, pensar en que puede fallar.
 
 Sub-pasos en orden:
 
-- **[4a]** Generar EDGE-CASES.md con minimo 15 escenarios agrupados por
+- **[4a]** Generar TODOS los edge cases posibles, sin limite. Agrupar por
   categoria: inputs invalidos, red/servicios caidos, concurrencia, datos
-  corruptos, limites (0, max, unicode, inyeccion), permisos, estados imposibles.
+  corruptos, limites (0, max, unicode, inyeccion), permisos, estados imposibles,
+  recursos agotados (disco, memoria, conexiones), temporales (timezone, DST,
+  leap year), internacionalizacion, navegadores/dispositivos. Cuantos mas,
+  mejor. NO limitar.
 - **[4b]** Para cada edge case: describir escenario, comportamiento esperado, y
   estrategia de mitigacion.
 - **[4c]** Priorizar: cuales bloquean el MVP y cuales son post-MVP.
@@ -310,7 +366,12 @@ Sub-pasos en orden:
 - **[9d]** Edge case tests: implementar los escenarios de EDGE-CASES.md marcados
   como MVP-blocking.
 - **[9e]** Verificar que TODOS los tests pasan antes de continuar.
-- **[9f]** `apex_set_phase(phase_number=9, status="completed")`
+- **[9f]** Coverage report: Ejecutar coverage y generar report HTML.
+  - Python: `pytest --cov --cov-report=html`
+  - JS/TS: `npx nyc` / `jest --coverage` Threshold minimo: 80% en domain, 60%
+    global. Si no se alcanza, registrar que falta y como next_step con
+    `apex_add_next_step`.
+- **[9g]** `apex_set_phase(phase_number=9, status="completed")`
 
 ---
 
@@ -342,7 +403,23 @@ Sub-pasos en orden:
   servicios externos, disco.
 - **[11e]** Rollback plan documentado: como volver a la version anterior en
   menos de 5 minutos. Registrar con `apex_wiki_add(title="ROLLBACK-PLAN")`.
-- **[11f]** `apex_set_phase(phase_number=11, status="completed")`
+- **[11f]** Dominio y SSL: Configurar dominio (si aplica). Opciones:
+  - Caddy (auto-SSL con Let's Encrypt, configuracion minima)
+  - Nginx + certbot
+  - Cloudflare (DNS + proxy + SSL) Documentar configuracion elegida. Registrar
+    con `apex_add_decision(category="deploy", decision="SSL: ...")`.
+- **[11g]** Launch / Go-Live checklist:
+  - [ ] Todos los tests pasan (green CI)
+  - [ ] Security audit completado (sin issues criticos)
+  - [ ] Backups configurados y probados
+  - [ ] Monitoring activo (health checks respondiendo)
+  - [ ] Documentacion de usuario lista
+  - [ ] Rollback plan probado
+  - [ ] Usuarios notificados / onboarding preparado
+  - [ ] Metricas de exito definidas (de SPEC) -> como medirlas Registrar fecha
+        de lanzamiento en context.db con
+        `apex_add_decision(category="launch", decision="Go-live: YYYY-MM-DD")`.
+- **[11h]** `apex_set_phase(phase_number=11, status="completed")`
 
 ---
 
@@ -407,7 +484,13 @@ Sub-pasos en orden:
   - CHANGELOG.md -- generado desde `git log --oneline`
 - **[14d]** Migraciones de BD documentadas: cada cambio de esquema con su
   migracion reversible.
-- **[14e]** `apex_set_phase(phase_number=14, status="completed")`
+- **[14e]** Plan de deprecacion: Documentar que pasa cuando:
+  - Una dependencia deja de mantenerse (alternativas evaluadas)
+  - Una API externa cambia (versioning strategy)
+  - Un modelo de Ollama se retira (fallback models) Configurar: dependabot o
+    renovate para PRs automaticos de actualizacion. Registrar con
+    `apex_add_decision(category="maintenance", decision="...")`.
+- **[14f]** `apex_set_phase(phase_number=14, status="completed")`
 
 ---
 
@@ -455,8 +538,9 @@ Despues de CADA cambio de frontend (cualquier fase), ejecutar esta verificacion:
    decisiones, errores, componentes, fases.
 3. **NUNCA** generar codigo antes de fase 5. Las fases 0-4 son de analisis y
    diseno.
-4. **NUNCA** describir un diseno visual con texto. Usar Pencil MCP para crear
-   .pen files. Si la decision afecta al aspecto visual, DEBE tener mockup.
+4. **NUNCA** describir un diseno visual con texto. Usar Pencil MCP, Stitch,
+   Excalidraw u otra herramienta de diseno para crear artefactos visuales. Si la
+   decision afecta al aspecto visual, DEBE tener mockup.
 5. **NUNCA** usar emojis como iconos en el codigo. Siempre Lucide, Phosphor,
    Heroicons o SVG custom.
 6. **NUNCA** preguntar "cual sub-paso quieres hacer primero". Los sub-pasos son
@@ -475,6 +559,13 @@ Despues de CADA cambio de frontend (cualquier fase), ejecutar esta verificacion:
     aprendida.
 13. **SIEMPRE** registrar decisiones invalidadas con `apex_invalidate_decision`
     cuando cambie el contexto.
+14. **NUNCA** inventar decisiones de diseno. Si hay CUALQUIER duda sobre estilo,
+    paleta, tipografia, o layout, PREGUNTAR al usuario con AskUserQuestion.
+    Consultar context.db para historial de preferencias antes de proponer.
+15. Para diseno visual: generar opciones en MULTIPLES herramientas y presentar
+    al usuario para que elija. No acotarse a una sola herramienta.
+16. El agente decide el ORDEN de implementacion, no el usuario. El usuario
+    define QUE quiere, el agente decide COMO y en que orden construirlo.
 
 ---
 
@@ -482,7 +573,7 @@ Despues de CADA cambio de frontend (cualquier fase), ejecutar esta verificacion:
 
 1. Construir frontend antes de verificar que el backend devuelve datos reales.
 2. No investigar fuentes de datos antes de implementar scrapers.
-3. Tomar decisiones de diseno visual sin mockup en Pencil MCP.
+3. Tomar decisiones de diseno visual sin mockup en herramienta de diseno.
 4. SPEC monolitica sin checkpoints incrementales.
 5. Asumir siempre "app web con dashboard" sin evaluar alternativas.
 6. Ir de prisa saltando fases en vez de disenar bien.
@@ -490,27 +581,29 @@ Despues de CADA cambio de frontend (cualquier fase), ejecutar esta verificacion:
 8. Declarar "hecho" sin verificar que funciona de verdad.
 9. Proponer herramientas de un SO diferente al del usuario.
 10. Usar emojis donde deberian ir iconos de una libreria profesional.
+11. Usar una sola herramienta de diseno cuando hay multiples disponibles.
+12. No investigar competidores antes de empezar a construir.
 
 ---
 
 ## Resumen de fases
 
 ```
- 0. Socratico       -> Cuestiona, filtra, refina (5 rondas)
+ 0. Socratico       -> Escuchar, investigar mercado, cuestionar (4 rondas + reflexion)
  1. Tipo solucion   -> CLI/bot/MCP/app/agente (evaluar SO)
- 2. Diseno          -> C4 + wireframes Pencil + flujo pantallas + user flows
- 3. SPEC            -> Por fases con checkpoints deployables
- 4. Edge cases      -> ANTES del codigo, minimo 15 escenarios
+ 2. Diseno          -> C4 + design system + wireframes multi-tool + navegacion Excalidraw + user flows
+ 3. SPEC            -> Reflexion + modelo de datos + checkpoints deployables
+ 4. Edge cases      -> ANTES del codigo, TODOS los posibles, sin limite
  5. Scaffold        -> Estructura + config + verificar que compila
  6. Core            -> Domain, ports, casos de uso, agentes
  7. Infra           -> BD, LLM, scraping, adapters
  8. Integracion     -> Conectar todo, Streamlit para validar
- 9. Testing         -> Unit 80% + integration + E2E Playwright + edge cases
+ 9. Testing         -> Unit 80% + integration + E2E Playwright + edge cases + coverage report
 10. Seguridad       -> Validation, auth, headers, rate limit, audit
-11. Deploy          -> Docker + CI/CD GitHub Actions + health checks + rollback
+11. Deploy          -> Docker + CI/CD + health checks + rollback + SSL + go-live checklist
 12. Iteracion       -> Features (mini-socratico) / bugs (fix+test) / mejoras (medir)
 13. Escalado        -> Profiling + caching + monitoring + health dashboard
-14. Mantenimiento   -> CI/CD + backups + docs auto-generadas + migraciones
+14. Mantenimiento   -> CI/CD + backups + docs auto-generadas + migraciones + plan deprecacion
 ```
 
 $ARGUMENTS

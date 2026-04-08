@@ -71,7 +71,7 @@ SMA_PATTERNS: list[dict] = [
         "document": (
             "Consensus Pattern: Multiple agents independently solve the same problem, "
             "then a judge/aggregator agent selects or synthesises the best answer.  "
-            "Best for high-stakes decisions where reliability matters more than speed "
+            "Best for high-stakes decisións where reliability matters more than speed "
             "(e.g. code review, medical diagnosis triage).  "
             "Pros: fault tolerance, diverse perspectives, reduces hallucination.  "
             "Cons: expensive (N x computation), needs a good aggregation strategy.  "
@@ -79,7 +79,7 @@ SMA_PATTERNS: list[dict] = [
         ),
         "metadata": {
             "pattern": "consensus",
-            "when_to_use": "High-stakes decisions, reliability over speed",
+            "when_to_use": "High-stakes decisións, reliability over speed",
             "pros": "Fault tolerant, diverse perspectives, reduces hallucination",
             "cons": "Expensive (N x computation), needs aggregation strategy",
             "paper_ref": "Du et al. 2023 — LLM-Debate",
@@ -176,111 +176,504 @@ SMA_PATTERNS: list[dict] = [
 # ---------------------------------------------------------------------------
 
 REAL_CASES: list[dict] = [
+    # --- Proyectos reales de Vicente Rivas (~/RoadToDevOps/) ---
     {
-        "id": "case-feedbackia",
+        "id": "case-claude-007-agents",
         "document": (
-            "FeedbackIA: Multi-agent system for automated student feedback in "
-            "university courses.  Uses an orchestrator-worker pattern with 3 agents: "
-            "Analyzer (reads student submissions), Evaluator (rubric-based scoring), "
-            "and Narrator (generates personalised narrative feedback).  "
-            "Stack: Python, FastAPI, Ollama (mistral:7b), ChromaDB for rubric RAG.  "
-            "Result: 85% student satisfaction, 60% reduction in professor grading time.  "
-            "Domain: Education / EdTech.  Lessons learned: rubric RAG dramatically "
-            "improved consistency; smaller models (7B) were sufficient for evaluation."
+            "claude-007-agents: Sistema avanzado de orquestación multi-agente con "
+            "68 agentes especializados en una jerarquía de 4 niveles. "
+            "Nivel 1: Master Orchestrator (coordinación estratégica). "
+            "Nivel 2: Directors (decisión por dominio: backend, frontend, infra, seguridad). "
+            "Nivel 3: Planners (análisis especializado). "
+            "Nivel 4: Specialists (implementación). "
+            "Incluye matrices de compatibilidad entre agentes, circuit breakers, "
+            "retries con backoff, y logging estructurado JSON. "
+            "Stack: Node.js, TypeScript, MCP (Model Context Protocol), Claude models. "
+            "Ubicación: ~/RoadToDevOps/claude-007-agents/. "
+            "Lección clave: la jerarquía de 4 niveles permite escalar a 68+ agentes "
+            "sin perder coherencia; las matrices de compatibilidad evitan conflictos."
         ),
         "metadata": {
-            "case": "FeedbackIA",
-            "domain": "Education",
+            "case": "claude-007-agents",
+            "domain": "Desarrollo de software / Orquestación IA",
             "pattern": "orchestrator-worker",
-            "agents": 3,
-            "stack": "Python, FastAPI, Ollama, ChromaDB",
-            "result": "85% satisfaction, 60% grading time reduction",
+            "agents": 68,
+            "stack": "Node.js, TypeScript, MCP, Claude",
+            "result": "68 agentes coordinados en 4 niveles jerárquicos",
+        },
+    },
+    {
+        "id": "case-claude-agent-bootstrap",
+        "document": (
+            "claude-agent-bootstrap: Framework para construir sistemas de agentes "
+            "inteligentes con separación clara de responsabilidades. "
+            "Arquitectura jerárquica de 4 niveles con selección de modelo por nivel: "
+            "Level 1 Orchestrator (Claude Opus, coordinación estratégica), "
+            "Level 2 Directors (Claude Sonnet, decisiones por dominio), "
+            "Level 3 Planners (Claude Haiku, análisis especializado), "
+            "Level 4 Specialists (Sonnet/Opus, implementación). "
+            "Generación de proyectos basada en templates. Auto-configuración "
+            "según stack tecnológico detectado. "
+            "Stack: Node.js, TypeScript, Claude Opus/Sonnet/Haiku. "
+            "Ubicación: ~/RoadToDevOps/claude-agent-bootstrap/. "
+            "Lección clave: asignar modelos por coste/capacidad a cada nivel "
+            "optimiza el presupuesto sin sacrificar calidad en decisiones críticas."
+        ),
+        "metadata": {
+            "case": "claude-agent-bootstrap",
+            "domain": "Framework de agentes / Meta-herramienta",
+            "pattern": "orchestrator-worker",
+            "agents": 4,
+            "stack": "Node.js, TypeScript, Claude Opus/Sonnet/Haiku",
+            "result": "Framework reutilizable con selección de modelo por nivel",
         },
     },
     {
         "id": "case-catan-coach",
         "document": (
-            "Catan Coach: AI-powered coaching assistant for the board game Settlers "
-            "of Catan.  Uses a reflection pattern: a Strategy agent proposes moves, "
-            "a Critic agent evaluates them against game theory heuristics, and iteration "
-            "continues until quality threshold is met.  Stack: TypeScript, Next.js, "
-            "Ollama (deepseek-r1:14b for reasoning).  "
-            "Result: Beat average human players 70% of the time in simulated games.  "
-            "Domain: Gaming / Strategy.  Lessons learned: deepseek-r1's chain-of-thought "
-            "was essential for strategic reasoning; 3-iteration cap prevented infinite loops."
+            "Catan Coach: Asistente de coaching IA para el juego Colonos de Catan. "
+            "Arquitectura hexagonal con patrón expert-network y 7 agentes: "
+            "RouterAgent (clasifica preguntas reglas vs estrategia), "
+            "RulesAgent (RAG sobre reglas oficiales), "
+            "StrategyAgent (RAG sobre guías de estrategia), "
+            "GeneratorAgent (generación de respuestas), "
+            "SuggestionAgent (preguntas relacionadas), "
+            "LevelDetector (progresión de nivel del jugador), "
+            "ConceptTracker (persistencia de aprendizaje). "
+            "Stack: Next.js 16, Ollama (gemma3:27b, qwen3:8b), ChromaDB. "
+            "Mobile-first, offline-capable (localStorage), Web Speech API. "
+            "Ubicación: ~/RoadToDevOps/catan-coach/. "
+            "Lección clave: RAG dual (reglas + estrategia) en colecciones separadas "
+            "mejoró drásticamente la precisión; detección de nivel progresiva "
+            "personaliza la experiencia."
         ),
         "metadata": {
             "case": "Catan Coach",
-            "domain": "Gaming",
-            "pattern": "reflection",
-            "agents": 2,
-            "stack": "TypeScript, Next.js, Ollama",
-            "result": "70% win rate vs average humans",
+            "domain": "Gaming / Educación",
+            "pattern": "expert-network",
+            "agents": 7,
+            "stack": "Next.js, Ollama, ChromaDB",
+            "result": "RAG dual con 7 agentes especializados, mobile-first",
+        },
+    },
+    {
+        "id": "case-agent-forge",
+        "document": (
+            "AgentForge: Chat conversacional que transforma un problema real en un "
+            "Sistema Multi-Agente (SMA) con arquitectura hexagonal. "
+            "El propio AgentForge es un SMA con patrón orquestador-worker: "
+            "ConversationAgent (gemma4:e4b, chat fluido), "
+            "ArchitectAgent (deepseek-r1:14b, árbol de decisión), "
+            "RAGAgent (gemma4:e2b, recupera patrones), "
+            "CodeGenAgent (qwen3:32b via VRAIN, genera hexagonal), "
+            "OrchestratorAgent (coordina sin procesar). "
+            "7 patrones SMA en ChromaDB + 5 casos reales. "
+            "Flujo: KICKOFF -> ANALYSIS -> AGENT_DESIGN -> ARCHITECTURE -> CODE_GEN -> EVAL -> EXPORT. "
+            "Stack: FastAPI, Next.js 15, Ollama/VRAIN, ChromaDB. "
+            "Ubicación: ~/RoadToDevOps/agent-forge/. "
+            "Lección clave: dogfooding (el sistema usa su propio patrón) valida "
+            "la arquitectura; modelos 100% locales eliminan dependencia de APIs."
+        ),
+        "metadata": {
+            "case": "AgentForge",
+            "domain": "Meta-herramienta / Diseño de agentes",
+            "pattern": "orchestrator-worker",
+            "agents": 5,
+            "stack": "FastAPI, Next.js 15, Ollama, VRAIN, ChromaDB",
+            "result": "Genera SMAs completos con código hexagonal",
+        },
+    },
+    {
+        "id": "case-smart-agent-workflow",
+        "document": (
+            "Smart Agent Workflow MCP: Automatización de flujos de desarrollo con "
+            "MCP (Model Context Protocol) y gestión de estado. "
+            "Patrón reactor (event-driven): eventos de git disparar agentes. "
+            "Funcionalidades: aislamiento con git worktrees, gates obligatorios "
+            "de tests E2E, verificación de build con auto-rollback, "
+            "persistencia de memoria entre sesiones, knowledge graph. "
+            "Stack: TypeScript, Node.js, MCP SDK, Playwright (E2E). "
+            "Ubicación: ~/RoadToDevOps/smart-agent-workflow-mcp/. "
+            "Lección clave: los worktrees de git proporcionan aislamiento "
+            "perfecto para desarrollo paralelo; los gates de E2E previenen "
+            "regressions antes del merge."
+        ),
+        "metadata": {
+            "case": "Smart Agent Workflow MCP",
+            "domain": "DevOps / Automatización",
+            "pattern": "reactor",
+            "agents": 3,
+            "stack": "TypeScript, Node.js, MCP SDK, Playwright",
+            "result": "Workflow automatizado con gates E2E y knowledge graph",
+        },
+    },
+    {
+        "id": "case-career-ops",
+        "document": (
+            "Career Ops: Pipeline de orquestación de tareas para búsqueda de "
+            "empleo automatizada. Patrón pipeline con worker coordination. "
+            "Componentes: portal scanners (45+ empresas preconfiguradas), "
+            "procesamiento batch con coordinación de workers, "
+            "generación de PDF (CVs optimizados para ATS), "
+            "verificación de integridad. "
+            "Stack: Node.js, TypeScript, Playwright (PDF), YAML config. "
+            "Ubicación: ~/RoadToDevOps/career-ops/. "
+            "Lección clave: la configuración basada en YAML permitió "
+            "añadir 45+ portales sin cambiar código; Playwright para "
+            "PDF es más fiable que librerías dedicadas."
+        ),
+        "metadata": {
+            "case": "Career Ops",
+            "domain": "Automatización / Productividad",
+            "pattern": "pipeline",
+            "agents": 4,
+            "stack": "Node.js, TypeScript, Playwright, YAML",
+            "result": "45+ portales automatizados, CVs ATS-optimized",
+        },
+    },
+    {
+        "id": "case-osyris",
+        "document": (
+            "Osyris: Sistema de gestión para grupo scout con agentes IA "
+            "especializados por área operativa. "
+            "Patrón expert-network: cada dominio (actividades, tesorería, "
+            "comunicación, formación) tiene su propio agente. "
+            "Stack: Next.js 15, React 19, TypeScript, Express.js, MySQL, JWT. "
+            "Integración con Google Drive, dark mode, mobile-first. "
+            "Testing: Jest + Playwright. "
+            "Ubicación: ~/RoadToDevOps/osyris/. "
+            "Lección clave: agentes por dominio operativo mapean "
+            "perfectamente la estructura organizacional real."
+        ),
+        "metadata": {
+            "case": "Osyris",
+            "domain": "Gestión organizacional / ONG",
+            "pattern": "expert-network",
+            "agents": 5,
+            "stack": "Next.js 15, Express.js, MySQL, JWT",
+            "result": "Gestión scout completa con agentes por área",
+        },
+    },
+    {
+        "id": "case-encesa",
+        "document": (
+            "Encesa: PWA offline-first para gestión de gastos con OCR. "
+            "Patrón pipeline: captura imagen -> OCR (Tesseract.js client-side) -> "
+            "extracción de datos -> almacenamiento IndexedDB -> sync manual a Supabase. "
+            "Funciona 100% offline, instalable en iOS Safari. "
+            "Stack: Vite, React 18, TypeScript, Dexie.js (IndexedDB), Supabase, Tesseract.js. "
+            "Ubicación: ~/RoadToDevOps/encesa/. "
+            "Lección clave: IndexedDB como almacenamiento primario con sync "
+            "manual elimina la dependencia de conectividad; OCR client-side "
+            "con Tesseract.js evita enviar imágenes al servidor."
+        ),
+        "metadata": {
+            "case": "Encesa",
+            "domain": "Finanzas personales / PWA",
+            "pattern": "pipeline",
+            "agents": 4,
+            "stack": "Vite, React, Dexie.js, Supabase, Tesseract.js",
+            "result": "PWA 100% offline con OCR client-side",
         },
     },
     {
         "id": "case-neurospot",
         "document": (
-            "NeuroSpot: IoT + AI system for parking spot detection using ESP32 cameras "
-            "and edge inference.  Uses a pipeline pattern: Image Capture agent → Object "
-            "Detection agent (YOLOv8-nano on edge) → Aggregator agent (consolidates "
-            "multiple camera feeds) → API Publisher agent.  "
-            "Stack: MicroPython (ESP32), Python FastAPI, MQTT, TimescaleDB.  "
-            "Result: 95% detection accuracy, <2s end-to-end latency.  "
-            "Domain: IoT / Smart City.  Lessons learned: edge inference critical for "
-            "latency; MQTT provided reliable async communication between agents."
+            "NeuroSpot: Plataforma de detección temprana de TDAH en niños "
+            "mediante juegos cognitivos + análisis de voz e imagen. "
+            "Patrón pipeline: SessionCoordinator -> GameDataCollectors -> "
+            "NeuroAnalyzer -> ReportGenerator. "
+            "Usa AWS SageMaker para ML, Rekognition para análisis facial, "
+            "S3 para almacenamiento. "
+            "Stack: Next.js, AWS (SageMaker, Rekognition, S3), React. "
+            "Ubicación: ~/RoadToDevOps/NeuroSpot/. "
+            "Lección clave: combinar múltiples señales (cognitiva, vocal, visual) "
+            "mejora drásticamente la precisión del screening; "
+            "AWS services permiten escalar el ML sin infra propia."
         ),
         "metadata": {
             "case": "NeuroSpot",
-            "domain": "IoT / Smart City",
+            "domain": "Salud / Detección TDAH",
             "pattern": "pipeline",
             "agents": 4,
-            "stack": "MicroPython, FastAPI, MQTT, TimescaleDB",
-            "result": "95% accuracy, <2s latency",
+            "stack": "Next.js, AWS SageMaker/Rekognition/S3",
+            "result": "Screening TDAH multi-señal con ML en cloud",
         },
     },
     {
-        "id": "case-strata",
+        "id": "case-meridian",
         "document": (
-            "Strata: Multi-agent content generation platform for marketing teams.  "
-            "Uses an expert-network pattern: a Router agent classifies content type "
-            "(blog, social, email, ad copy) and delegates to specialised Writer agents.  "
-            "A Brand Voice agent applies tone-of-voice guidelines post-generation.  "
-            "Stack: Python, FastAPI, Ollama (qwen3:32b via VRAIN), Supabase.  "
-            "Result: 3x content output vs manual writing, 90% brand consistency score.  "
-            "Domain: Marketing / Content.  Lessons learned: larger models (32B) "
-            "significantly outperformed 7B for creative writing; brand voice as a "
-            "separate agent was more flexible than system prompts."
+            "Meridian: IDE agéntico de escritorio que automatiza el desarrollo de software "
+            "a través de 13 fases autónomas, cada una con un agente dedicado. "
+            "Fases: Discovery, Specification, Architecture, UX/Flows, User Stories, Tasks, "
+            "Scaffold, Core, Interfaces, Testing, Review, Staging, Production. "
+            "Stack: React 19 + TypeScript + Tailwind CSS + Monaco Editor (frontend), "
+            "Tauri (Rust) con SQLite (backend), Ollama (LLM local). "
+            "Zustand para estado persistido, xterm.js para terminal integrado. "
+            "21 tests pasando, auto-commits por fase. "
+            "Ubicación: ~/RoadToDevOps/meridian/. "
+            "Lección clave: un agente por fase de desarrollo permite flexibilidad; "
+            "Monaco Editor proporciona edición potente sin dependencias externas."
         ),
         "metadata": {
-            "case": "Strata",
-            "domain": "Marketing",
-            "pattern": "expert-network",
-            "agents": 5,
-            "stack": "Python, FastAPI, Ollama, Supabase",
-            "result": "3x content output, 90% brand consistency",
+            "case": "Meridian",
+            "domain": "Herramientas de desarrollo / IDE",
+            "pattern": "pipeline",
+            "agents": 13,
+            "stack": "React 19, Tauri/Rust, SQLite, Ollama, Monaco Editor",
+            "result": "IDE con 13 fases autónomas de desarrollo",
         },
     },
     {
-        "id": "case-tfg-dni",
+        "id": "case-feedback-juanmi",
         "document": (
-            "TFG DNI Validator: Bachelor thesis project for automated Spanish DNI "
-            "(national ID) document verification.  Uses a consensus pattern: three "
-            "independent OCR+Validation agents process the document image, and a "
-            "Judge agent compares results to determine authenticity.  "
-            "Stack: Python, OpenCV, Tesseract OCR, FastAPI, SQLite.  "
-            "Result: 98.5% validation accuracy, 0.3% false positive rate.  "
-            "Domain: Document Processing / Identity.  Lessons learned: consensus "
-            "of 3 agents reduced false positives by 5x compared to single agent; "
-            "image preprocessing quality was the biggest factor in accuracy."
+            "FeedbackIA (feedback-juanmi): SMA con arquitectura hexagonal para generar "
+            "feedback académico personalizado a estudiantes universitarios. "
+            "10 agentes: FeedbackAgent, QualityAgent, StyleAgent, MetricsAgent, "
+            "SessionReviewAgent, CoherenceAgent, DiffExplanationAgent, "
+            "PromptEvolutionAgent, OrchestratorAgent, BenchmarkAgent. "
+            "A/B testing ciego con 4 modelos (gemma3:27b, llama3.3:70b, deepseek-v3.2, qwen3:32b). "
+            "Dashboard de observabilidad en tiempo real con grafo de agentes. "
+            "Stack: FastAPI (port 8002), Next.js 16, Ollama via VRAIN UPV, SQLite. "
+            "24 tests pasando. "
+            "Ubicación: ~/RoadToDevOps/feedback-juanmi/. "
+            "Lección clave: style profile learning del profesor mejora consistencia; "
+            "A/B testing ciego revela diferencias reales entre modelos."
         ),
         "metadata": {
-            "case": "TFG DNI Validator",
-            "domain": "Document Processing",
-            "pattern": "consensus",
-            "agents": 4,
-            "stack": "Python, OpenCV, Tesseract, FastAPI, SQLite",
-            "result": "98.5% accuracy, 0.3% false positive rate",
+            "case": "FeedbackIA",
+            "domain": "Educación / EdTech",
+            "pattern": "orchestrator-worker",
+            "agents": 10,
+            "stack": "FastAPI, Next.js 16, Ollama/VRAIN, SQLite",
+            "result": "10 agentes con A/B testing y observabilidad real-time",
+        },
+    },
+    {
+        "id": "case-catan-advisor-api",
+        "document": (
+            "Catan Advisor API: Backend FastAPI con visión IA y algoritmo genético "
+            "para coaching en Catan. Analiza fotos del tablero con qwen2.5vl:7b "
+            "y recomienda movimientos óptimos usando un cromosoma de 93 parámetros "
+            "entrenado en 40.000 partidas simuladas. "
+            "Endpoints: POST /vision/analyze (foto a BoardState), "
+            "POST /coach/recommend (recursos a acción óptima), "
+            "POST /game/new (sesión compartible CTN-XXXX). "
+            "Storage: Redis con fallback a JSON. 29 tests. "
+            "Stack: FastAPI, Ollama qwen2.5vl:7b, Redis. "
+            "Ubicación: ~/RoadToDevOps/catan-advisor-api/. "
+            "Lección clave: modelos de visión extraen estado del tablero de fotos; "
+            "93 parámetros genéticos entrenados en 40K juegos dan coaching robusto."
+        ),
+        "metadata": {
+            "case": "Catan Advisor API",
+            "domain": "Gaming / Visión IA",
+            "pattern": "pipeline",
+            "agents": 3,
+            "stack": "FastAPI, Ollama qwen2.5vl, Redis, Algoritmo Genético",
+            "result": "93 params, 40K juegos, 29 tests",
+        },
+    },
+    {
+        "id": "case-gestion-centromat",
+        "document": (
+            "Gestión Centromat: Sistema Kanban digital para imprenta con arquitectura "
+            "hexagonal y PWA. Reemplaza libretas de papel por tablero digital. "
+            "4 columnas: Por Hacer, En Proceso, Hecho, Pagado. "
+            "Formularios dinámicos por categoría (impresión/fotografía/acabados). "
+            "Cmd+K spotlight search, historial de clientes, drag & drop nativo. "
+            "Stack: Next.js 16, TypeScript, Tailwind CSS v4, Firebase (Auth+Firestore+Storage). "
+            "4 roles: superadmin, admin, operador. "
+            "Deploy: export estático en Plesk (gestion.centromat.info). "
+            "Ubicación: ~/RoadToDevOps/gestion-centromat/. "
+            "Lección clave: Firebase permite colaboración en tiempo real sin backend; "
+            "drag & drop nativo HTML5 es más fiable que librerías."
+        ),
+        "metadata": {
+            "case": "Gestión Centromat",
+            "domain": "Gestión empresarial / Kanban",
+            "pattern": "pipeline",
+            "agents": 0,
+            "stack": "Next.js 16, Firebase, Tailwind CSS v4, PWA",
+            "result": "Sistema Kanban en producción para imprenta real",
+        },
+    },
+    {
+        "id": "case-tutor-ohm",
+        "document": (
+            "Tutor Ohm: Sistema de benchmarking enterprise para evaluar LLMs como "
+            "tutores socráticos especializados en circuitos y Ley de Ohm. "
+            "Detecta 4 concepciones alternativas automáticamente: "
+            "AC1 (circuito abierto), AC6 (cortocircuito), AC9 (razonamiento local), "
+            "AC14 (topología serie/paralelo). "
+            "7 ejercicios con complejidad creciente. "
+            "Soporta 6+ modelos LLM: DeepSeek R1, Llama 3.1, Qwen 2.5, Phi 4, etc. "
+            "Dashboard en tiempo real con WebSocket. "
+            "Stack: FastAPI, React 18.2+, Ollama, Docker. "
+            "Ubicación: ~/RoadToDevOps/tutor_ohm/. "
+            "Lección clave: detección automática de concepciones erróneas mejora "
+            "la tutoría; el método socrático requiere adherencia estricta."
+        ),
+        "metadata": {
+            "case": "Tutor Ohm",
+            "domain": "Educación / Benchmarking LLM",
+            "pattern": "pipeline",
+            "agents": 3,
+            "stack": "FastAPI, React, Ollama, Docker, WebSocket",
+            "result": "Benchmark de 6+ LLMs con detección de concepciones erróneas",
+        },
+    },
+    {
+        "id": "case-rag-redes",
+        "document": (
+            "RAG Redes y Sistemas: Sistema educativo RAG para tutoría de redes "
+            "informáticas y sistemas. Incluye sistema de exámenes adaptativos "
+            "que ajusta la dificultad según rendimiento del alumno. "
+            "20 preguntas por examen, escalado: Fácil -> Medio -> Difícil. "
+            "Pistas contextuales para respuestas incorrectas. "
+            "Stack: Node.js, ChromaDB, Ollama. "
+            "Ubicación: ~/RoadToDevOps/RAG-Redes-y-Sistemas/. "
+            "Lección clave: dificultad adaptativa mejora engagement; "
+            "ChromaDB vector search es efectivo para educación."
+        ),
+        "metadata": {
+            "case": "RAG Redes y Sistemas",
+            "domain": "Educación / RAG adaptativo",
+            "pattern": "pipeline",
+            "agents": 2,
+            "stack": "Node.js, ChromaDB, Ollama",
+            "result": "Exámenes adaptativos con RAG educativo",
+        },
+    },
+    {
+        "id": "case-hyperloop-tc",
+        "document": (
+            "Hyperloop TC: Simulador de banco de pruebas del booster de Hyperloop UPV. "
+            "Motor de física en Go con streaming WebSocket en tiempo real. "
+            "Máquina de estados: IDLE -> PRECHARGE -> READY -> RUNNING -> BOOSTING -> "
+            "BRAKING -> STOPPED. Velocidad simulación 5x más lento que real. "
+            "Calculadora: masa/distancia -> posición óptima de frenado. "
+            "Stack: Go 1.22+ (backend), React + TypeScript + Vite + Three.js (frontend). "
+            "WebSocket en ws://localhost:5001/backend/stream. "
+            "Ubicación: ~/RoadToDevOps/hyperloop-tc/. "
+            "Lección clave: simulación basada en física requiere gestión cuidadosa "
+            "del timing; WebSocket es excelente para telemetría real-time."
+        ),
+        "metadata": {
+            "case": "Hyperloop TC",
+            "domain": "Ingeniería / Simulación",
+            "pattern": "reactor",
+            "agents": 0,
+            "stack": "Go, React, Three.js, WebSocket",
+            "result": "Simulador de física en tiempo real para Hyperloop UPV",
+        },
+    },
+    {
+        "id": "case-generador-forms",
+        "document": (
+            "Generador Forms IA: Automatizador de Google Forms usando LLMs locales. "
+            "Pipeline: extraer forms existentes -> base de conocimiento -> "
+            "lenguaje natural -> especificación -> auto-crear en Google Forms. "
+            "Stack: Node.js, Ollama (deepseek-r1:14b, qwen2.5:14b, llama3.3:70b), "
+            "Google Forms API + Drive API, OAuth 2.0. "
+            "Ubicación: ~/RoadToDevOps/generador-forms-ia/. "
+            "Lección clave: LLMs locales proporcionan privacidad y ahorro; "
+            "RAG asegura consistencia con formularios existentes."
+        ),
+        "metadata": {
+            "case": "Generador Forms IA",
+            "domain": "Automatización / Google Workspace",
+            "pattern": "pipeline",
+            "agents": 2,
+            "stack": "Node.js, Ollama, Google Forms API, OAuth 2.0",
+            "result": "Generación automática de formularios con LLM local",
+        },
+    },
+    {
+        "id": "case-strambotica",
+        "document": (
+            "Strambotica: Plataforma e-commerce artesanal con filosofía KISS. "
+            "Astro 4.x con islands architecture (mínimo JS client-side). "
+            "Supabase para PostgreSQL + Auth + Storage. "
+            "Integración BBVA TPV para pagos. Multi-idioma (ES/EN/FR/PT/NL). "
+            "31 productos, 658 variantes, inventario dinámico. "
+            "10 agentes especializados para desarrollo. "
+            "Stack: Astro 4.x, React Islands, Tailwind CSS, Supabase, BBVA TPV. "
+            "Ubicación: ~/RoadToDevOps/strambotica/. "
+            "Lección clave: principio KISS — simplicidad por defecto, "
+            "zero JS innecesario, static > API."
+        ),
+        "metadata": {
+            "case": "Strambotica",
+            "domain": "E-commerce / Artesanía",
+            "pattern": "pipeline",
+            "agents": 10,
+            "stack": "Astro 4.x, Supabase, Tailwind CSS, BBVA TPV",
+            "result": "E-commerce real con 658 variantes y pagos BBVA",
+        },
+    },
+    {
+        "id": "case-react-fastapi-boilerplate",
+        "document": (
+            "React-FastAPI Boilerplate: Template full-stack con arquitectura hexagonal "
+            "en el backend y feature-based en el frontend. "
+            "Backend: FastAPI + MongoDB + Motor async + OAuth2 + JWT. "
+            "Frontend: React 19 + TypeScript + Vite. "
+            "8 agentes especializados de Claude para desarrollo. "
+            "Ubicación: ~/RoadToDevOps/react-fastapi-boilerplate/. "
+            "Lección clave: la combinación hexagonal (backend) + feature-based "
+            "(frontend) proporciona la mejor separación de concerns."
+        ),
+        "metadata": {
+            "case": "React-FastAPI Boilerplate",
+            "domain": "Template / Boilerplate",
+            "pattern": "orchestrator-worker",
+            "agents": 8,
+            "stack": "FastAPI, React 19, MongoDB, Motor async, OAuth2",
+            "result": "Template reutilizable con arquitectura hexagonal",
+        },
+    },
+    {
+        "id": "case-visitech-portfolio",
+        "document": (
+            "Visitech Portfolio: Portfolio de alto rendimiento con integración "
+            "automática de GitHub e ISR (Incremental Static Regeneration). "
+            "Datos de proyectos en tiempo real desde GitHub API v3. "
+            "ISR: páginas se regeneran cada hora. Webhook para actualizaciones instantáneas. "
+            "Lighthouse 90+ en todas las métricas. "
+            "Stack: Next.js 14 (App Router), Tailwind CSS, shadcn/ui, Framer Motion, "
+            "Vercel (deploy + analytics). "
+            "Ubicación: ~/RoadToDevOps/visitech_portfolio/. "
+            "Lección clave: ISR elimina el trade-off entre rendimiento y frescura; "
+            "GitHub API como fuente de datos reduce mantenimiento manual."
+        ),
+        "metadata": {
+            "case": "Visitech Portfolio",
+            "domain": "Portfolio / Personal Branding",
+            "pattern": "pipeline",
+            "agents": 0,
+            "stack": "Next.js 14, Vercel, GitHub API, Framer Motion",
+            "result": "Lighthouse 90+, ISR, datos live de GitHub",
+        },
+    },
+    {
+        "id": "case-waitlist-hero",
+        "document": (
+            "Waitlist Hero: Micro-SaaS para pre-lanzamientos de productos. "
+            "Sistema de referidos, magic link auth, CSV export, "
+            "widget embebible por script. "
+            "Stack: Next.js 14, Supabase, Resend (emails). "
+            "Ubicación: ~/RoadToDevOps/waitlist-hero/. "
+            "Lección clave: un micro-SaaS bien enfocado se construye rápido; "
+            "Supabase + Resend cubren auth + emails sin backend custom."
+        ),
+        "metadata": {
+            "case": "Waitlist Hero",
+            "domain": "SaaS / Pre-lanzamiento",
+            "pattern": "pipeline",
+            "agents": 0,
+            "stack": "Next.js 14, Supabase, Resend",
+            "result": "Micro-SaaS funcional con referidos y widget embebible",
         },
     },
 ]

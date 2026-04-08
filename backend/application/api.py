@@ -50,12 +50,9 @@ async def lifespan(app: FastAPI):
 
     llm = OllamaAdapter(settings.ollama_base_url)
     vector_store = ChromaAdapter(settings.chroma_host, settings.chroma_port)
-    session_repo = SQLiteSessionRepo(settings.database_url)
-    project_repo = SQLiteProjectRepo(settings.database_url)
+    session_repo = SQLiteSessionRepo()
+    project_repo = SQLiteProjectRepo()
     exporter = ZipExporter()
-
-    await session_repo.initialize()
-    await project_repo.initialize()
 
     _design_use_case = DesignSMAUseCase(
         llm=llm,
@@ -193,6 +190,116 @@ async def pattern_stats():
         "pattern_count": await uc.get_pattern_count(),
         "case_count": await uc.get_case_count(),
     }
+
+
+# --- Stats (combined endpoint for dashboard) ---
+
+
+@app.get("/api/stats")
+async def dashboard_stats():
+    uc = _get_design_uc()
+    puc = _get_patterns_uc()
+    sessions = await uc._session_repo.list_all()
+    try:
+        pattern_count = await puc.get_pattern_count()
+        case_count = await puc.get_case_count()
+    except Exception:
+        pattern_count = 0
+        case_count = 0
+
+    completed = sum(1 for s in sessions if s.phase.value == "export")
+    total_skills = sum(len(s.generated_skills) for s in sessions)
+
+    return {
+        "total_projects": len(sessions),
+        "completed_projects": completed,
+        "pattern_count": pattern_count,
+        "case_count": case_count,
+        "skills_generated": total_skills,
+        "active_agents": 8,
+    }
+
+
+# --- Skills ---
+
+
+@app.get("/api/skills")
+async def list_skills():
+    uc = _get_design_uc()
+    sessions = await uc._session_repo.list_all()
+    all_skills = []
+    for s in sessions:
+        for skill in s.generated_skills:
+            skill["session_id"] = s.id
+            all_skills.append(skill)
+    return all_skills
+
+
+# --- Agent Status ---
+
+
+@app.get("/api/agents/status")
+async def agent_status():
+    """Returns the status of all 8 APEX agents."""
+    agents = [
+        {
+            "name": "OrchestratorAgent",
+            "display_name": "Orquestador",
+            "description": "Coordina todos los agentes. Nunca procesa datos directamente.",
+            "model": "coordinador",
+            "status": "activo",
+        },
+        {
+            "name": "ConversationAgent",
+            "display_name": "Conversación",
+            "description": "Interfaz de lenguaje natural. Gestiona la entrevista y genera el SPEC.",
+            "model": settings.ollama_conversation_model,
+            "status": "activo",
+        },
+        {
+            "name": "ArchitectAgent",
+            "display_name": "Arquitecto",
+            "description": "Diseña la arquitectura SMA usando el árbol de decisión.",
+            "model": settings.ollama_architect_model,
+            "status": "activo",
+        },
+        {
+            "name": "RAGAgent",
+            "display_name": "RAG",
+            "description": "Recupera patrones y casos reales de la base de conocimiento.",
+            "model": settings.ollama_rag_model,
+            "status": "activo",
+        },
+        {
+            "name": "CodeGenAgent",
+            "display_name": "Generador de Código",
+            "description": "Genera código hexagonal completo para el SMA diseñado.",
+            "model": settings.ollama_codegen_model,
+            "status": "activo",
+        },
+        {
+            "name": "SkillGenAgent",
+            "display_name": "Generador de Skills",
+            "description": "Genera skills de Claude Code a partir de la arquitectura.",
+            "model": settings.ollama_codegen_model,
+            "status": "activo",
+        },
+        {
+            "name": "ReviewAgent",
+            "display_name": "Revisor",
+            "description": "Revisa el código generado: seguridad, calidad, arquitectura.",
+            "model": settings.ollama_architect_model,
+            "status": "activo",
+        },
+        {
+            "name": "EvalAgent",
+            "display_name": "Evaluador",
+            "description": "Diseña la estrategia de evaluación y benchmarks del SMA.",
+            "model": settings.ollama_conversation_model,
+            "status": "activo",
+        },
+    ]
+    return agents
 
 
 # --- WebSocket ---
