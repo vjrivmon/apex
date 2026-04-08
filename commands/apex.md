@@ -125,26 +125,69 @@ Sub-pasos en orden:
 
 ### Fase 2 -- Diseno
 
-REGLA: NUNCA describas un diseno por texto. Usa Pencil MCP para crear un mockup
-visual. Si la decision afecta al aspecto visual, DEBE acompanarse de un archivo
-.pen.
+REGLA: NUNCA describas un diseno por texto. Usa Pencil MCP para crear mockups
+visuales. Si la decision afecta al aspecto visual, DEBE acompanarse de un .pen.
 
-Sub-pasos en orden:
+Esta fase tiene 3 bloques: Arquitectura, Identidad Visual, y UX. Se ejecutan EN
+ORDEN. No saltar a wireframes sin tener la paleta definida.
+
+#### Bloque A: Arquitectura
 
 - **[2a]** Diagrama C4 (context + container) con Mermaid. Validar que la
   arquitectura tiene sentido antes de continuar. Registrar con
-  `apex_add_decision`.
-- **[2b]** Wireframes principales con Pencil MCP. Crear un .pen por pantalla
-  principal. Minimo: pantalla principal, flujo critico, pantalla de
-  configuracion.
-- **[2c]** Flujo de pantallas con Pencil MCP. Mapa de navegacion que muestre
-  TODAS las pantallas conectadas con flechas. Cada boton/link tiene una flecha a
-  la pantalla destino. Generar un .pen con el mapa completo de navegacion.
-- **[2d]** User flows. Documentar los flujos principales del usuario paso a
-  paso: desde que abre la app hasta que completa su objetivo. Formato: Accion ->
-  Pantalla -> Resultado -> Siguiente accion.
-- **[2e]** Registrar componentes detectados con `apex_add_component`
-- **[2f]** `apex_set_phase(phase_number=2, status="completed")`
+  `apex_add_decision(category="architecture")`.
+- **[2b]** Diagrama C4 componentes (si es complejo). Descomponer cada container
+  en sus componentes internos.
+
+#### Bloque B: Identidad Visual (Design System)
+
+OBLIGATORIO si el proyecto tiene UI. Usar Pencil MCP + Stitch +
+awesome-design-md.
+
+- **[2c]** Moodboard. Buscar 2-3 referencias visuales de apps similares o con el
+  estilo deseado. Consultar awesome-design-md (VoltAgent repo) para DESIGN.md de
+  referencia. Preguntar al usuario: "Que estilo visual te gusta?" con opciones
+  concretas (dark minimal, warm editorial, playful, premium). Crear un .pen con
+  el moodboard.
+- **[2d]** Paleta de colores. Definir:
+  - Color primario (brand/CTA)
+  - Color secundario (accent)
+  - Backgrounds (surface, elevated, marketing)
+  - Texto (primary, secondary, tertiary, muted)
+  - Status (success, warning, error, info)
+  - Borders y shadows Crear .pen con swatches de color. Registrar con
+    `apex_add_decision(category="design", decision="Paleta: primary=#X...")`.
+    Guardar en wiki: `apex_wiki_add(slug="concepts/design-system")`.
+- **[2e]** Tipografia. Definir:
+  - Font family principal (headings) + fallbacks
+  - Font family secundaria (body) + fallbacks
+  - Font monospace (code/data)
+  - Escala tipografica: display, h1, h2, h3, body, small, caption
+  - Pesos: regular, medium, semibold, bold
+  - Letter-spacing por tamano Registrar en wiki design-system.
+- **[2f]** Espaciado y radios. Definir:
+  - Base unit (4px u 8px)
+  - Escala de spacing: xs, sm, md, lg, xl, 2xl
+  - Border radius: sm, md, lg, pill
+  - Breakpoints responsive
+- **[2g]** Iconografia. Decidir paquete de iconos: Lucide, Phosphor, Heroicons,
+  o SVG custom. NUNCA emojis. Registrar decision.
+
+#### Bloque C: UX y Pantallas
+
+- **[2h]** Wireframes principales con Pencil MCP. Crear un .pen por pantalla.
+  Minimo: pantalla principal, flujo critico, configuracion. Usar la paleta y
+  tipografia definidas en el bloque B.
+- **[2i]** Flujo de pantallas con Pencil MCP. Mapa de navegacion: TODAS las
+  pantallas conectadas con flechas. Cada boton/link indica pantalla destino. Un
+  .pen con el mapa completo.
+- **[2j]** User flows. Documentar flujos principales paso a paso: Accion ->
+  Pantalla -> Resultado -> Siguiente accion. Minimo 3 flujos: flujo principal,
+  flujo secundario, flujo de error.
+- **[2k]** Registrar TODOS los componentes detectados con `apex_add_component`
+- **[2l]** Guardar design system completo en wiki:
+  `apex_wiki_add(slug="concepts/design-system", content="paleta+typo+spacing")`
+- **[2m]** `apex_set_phase(phase_number=2, status="completed")`
 
 ---
 
