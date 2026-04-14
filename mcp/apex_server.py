@@ -62,6 +62,55 @@ async def _debug_log(tool: str, arguments: dict, result: str, duration_ms: int =
     except Exception:
         pass  # Monitor no está corriendo, no pasa nada
 
+# --- Obsidian Vault sync (escribe notas automáticamente) ---
+
+_OBSIDIAN_VAULT = Path.home() / "Documents" / "ApexVault"
+
+
+def _sync_to_obsidian(event_type: str, data: dict) -> None:
+    """Escribe una nota en el vault de Obsidian cada vez que el MCP registra algo.
+    No falla si el vault no existe."""
+    try:
+        if not _OBSIDIAN_VAULT.exists():
+            return
+
+        project_name = data.get("project", "unknown")
+        project_dir = _OBSIDIAN_VAULT / "projects"
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+        if event_type == "decision":
+            # Append to project activity log
+            log_file = project_dir / f"{project_name}-log.md"
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"- **{now}** — Decisión [{data.get('category', '')}]: {data.get('decision', '')[:100]}\n")
+
+        elif event_type == "error":
+            log_file = project_dir / f"{project_name}-log.md"
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"- **{now}** — Error [{data.get('source', '')}]: {data.get('description', '')[:100]}\n")
+
+        elif event_type == "phase":
+            log_file = project_dir / f"{project_name}-log.md"
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"- **{now}** — Fase {data.get('phase', '?')} → {data.get('status', '?')}\n")
+
+        elif event_type == "component":
+            log_file = project_dir / f"{project_name}-log.md"
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"- **{now}** — Componente: {data.get('name', '')} ({data.get('type', '')})\n")
+
+        elif event_type == "session":
+            log_file = project_dir / f"{project_name}-log.md"
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"- **{now}** — Sesión: {data.get('summary', '')[:100]}\n")
+
+    except Exception:
+        pass  # Obsidian sync es best-effort, nunca rompe el flujo
+
+
 # --- Detectar directorio del proyecto ---
 
 def _find_project_root() -> Path:
@@ -306,12 +355,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "apex_set_phase":
             await db.set_phase(arguments["phase_number"], arguments["status"], arguments.get("notes", ""))
+            _project = await db.get_meta("nombre") or "unknown"
+            _sync_to_obsidian("phase", {"project": _project, "phase": arguments["phase_number"], "status": arguments["status"], "notes": arguments.get("notes", "")})
             result = [TextContent(type="text", text=f"Fase {arguments['phase_number']} → {arguments['status']}")]
 
         elif name == "apex_add_decision":
             did = await db.add_decision(
                 arguments["category"], arguments["decision"], arguments["reasoning"],
                 phase=arguments.get("phase"), alternatives=arguments.get("alternatives", ""))
+            _project = await db.get_meta("nombre") or "unknown"
+            _sync_to_obsidian("decision", {"project": _project, "category": arguments["category"], "decision": arguments["decision"]})
             result = [TextContent(type="text", text=f"Decisión #{did} registrada: {arguments['decision'][:80]}")]
 
         elif name == "apex_invalidate_decision":
@@ -322,6 +375,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             eid = await db.add_error(
                 arguments["source"], arguments["description"], arguments["lesson"],
                 phase=arguments.get("phase"), severity=arguments.get("severity", "medium"))
+            _project = await db.get_meta("nombre") or "unknown"
+            _sync_to_obsidian("error", {"project": _project, "source": arguments["source"], "description": arguments["description"]})
             result = [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}")]
 
         elif name == "apex_add_component":
@@ -331,6 +386,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 files=arguments.get("files"))
             if arguments.get("status") and arguments["status"] != "planned":
                 await db.update_component_status(arguments["id"], arguments["status"])
+            _project = await db.get_meta("nombre") or "unknown"
+            _sync_to_obsidian("component", {"project": _project, "name": arguments["name"], "type": arguments["type"]})
             result = [TextContent(type="text", text=f"Componente '{arguments['name']}' registrado como {arguments.get('status', 'planned')}")]
 
         elif name == "apex_update_component":
@@ -361,6 +418,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             await db.log_session(
                 arguments["summary"], key_outcomes=arguments.get("key_outcomes", ""),
                 phase=arguments.get("phase"))
+            _project = await db.get_meta("nombre") or "unknown"
+            _sync_to_obsidian("session", {"project": _project, "summary": arguments["summary"]})
             result = [TextContent(type="text", text=f"Sesión registrada: {arguments['summary'][:80]}")]
 
         elif name == "apex_wiki_add":
