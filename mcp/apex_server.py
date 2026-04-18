@@ -45,22 +45,126 @@ from wiki_scaffold import create_wiki, append_log, update_index
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
-_DEBUG_MONITOR_URL = "http://localhost:8099/event"
+_HUB_PORT_FILE = Path.home() / ".apex" / "hub-port"
+_HUB_DIR = Path.home() / "RoadToDevOps" / "apex-hub"
+_HUB_LOG = Path.home() / ".apex" / "hub.log"
+_FALLBACK_MONITOR_URL = "http://localhost:8099/event"
+
+
+def _hub_is_running() -> bool:
+    """Comprueba si el hub responde en el puerto indicado por hub-port."""
+    import socket as _socket
+    if not _HUB_PORT_FILE.exists():
+        return False
+    try:
+        port = int(_HUB_PORT_FILE.read_text().strip())
+    except (ValueError, OSError):
+        return False
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        try:
+            s.connect(("127.0.0.1", port))
+            return True
+        except (ConnectionRefusedError, OSError):
+            # Puerto en el archivo pero nadie escuchando → archivo stale
+            try:
+                _HUB_PORT_FILE.unlink()
+            except FileNotFoundError:
+                pass
+            return False
+
+
+def _open_browser(url: str) -> None:
+    """Abre la URL en el navegador del usuario."""
+    import shutil, subprocess
+    for opener in ("xdg-open", "open", "gio", "sensible-browser"):
+        if shutil.which(opener):
+            try:
+                if opener == "gio":
+                    subprocess.Popen([opener, "open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    subprocess.Popen([opener, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            except Exception:
+                continue
+
+
+def _launch_hub_if_needed() -> None:
+    """Si el Hub no está corriendo: lo arranca en background y abre el navegador."""
+    already_running = _hub_is_running()
+
+    if not already_running:
+        if not _HUB_DIR.exists():
+            return
+
+        import subprocess
+        venv_python = _HUB_DIR / ".venv" / "bin" / "python"
+        python = str(venv_python) if venv_python.exists() else "python3"
+
+        _HUB_LOG.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with open(_HUB_LOG, "ab") as log:
+                subprocess.Popen(
+                    [python, "-m", "backend"],
+                    cwd=str(_HUB_DIR),
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+        except Exception:
+            return
+
+        # Esperar a que el hub escriba el archivo del puerto (máx 6s)
+        import time
+        for _ in range(30):
+            if _HUB_PORT_FILE.exists() and _hub_is_running():
+                break
+            time.sleep(0.2)
+
+    # Abrir navegador (esté ya corriendo o recién arrancado)
+    try:
+        if _HUB_PORT_FILE.exists():
+            port = _HUB_PORT_FILE.read_text().strip()
+            if port.isdigit() and not already_running:
+                # Solo abrir navegador si acabamos de lanzarlo (no cada vez que se usa /apex)
+                _open_browser(f"http://localhost:{port}")
+    except Exception:
+        pass
+
+
+def _hub_urls() -> list[str]:
+    """Detecta dinámicamente el puerto del APEX Hub leyendo ~/.apex/hub-port."""
+    urls = []
+    try:
+        if _HUB_PORT_FILE.exists():
+            port = _HUB_PORT_FILE.read_text().strip()
+            if port.isdigit():
+                urls.append(f"http://localhost:{port}/api/live/event")
+    except Exception:
+        pass
+    urls.append(_FALLBACK_MONITOR_URL)
+    return urls
 
 
 async def _debug_log(tool: str, arguments: dict, result: str, duration_ms: int = 0) -> None:
-    """Envía evento al debug monitor si está corriendo. No falla si no está."""
+    """Envía evento al APEX Hub (puerto auto-detectado) y/o debug monitor. No falla si ninguno está."""
+    payload = {
+        "tool": tool,
+        "arguments": arguments,
+        "result": result[:500],
+        "duration_ms": duration_ms,
+    }
     try:
         import httpx
         async with httpx.AsyncClient(timeout=1.0) as client:
-            await client.post(_DEBUG_MONITOR_URL, json={
-                "tool": tool,
-                "arguments": arguments,
-                "result": result[:500],
-                "duration_ms": duration_ms,
-            })
+            for url in _hub_urls():
+                try:
+                    await client.post(url, json=payload)
+                except Exception:
+                    pass
     except Exception:
-        pass  # Monitor no está corriendo, no pasa nada
+        pass
 
 # --- Obsidian Vault sync (escribe notas automáticamente) ---
 
@@ -460,6 +564,9 @@ async def _db_exists(db: ApexContextDB) -> bool:
 # --- Entry point ---
 
 async def main():
+    # Auto-lanzar APEX Hub si no está corriendo
+    _launch_hub_if_needed()
+
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
