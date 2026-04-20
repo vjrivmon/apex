@@ -64,17 +64,41 @@ Ir directamente a **Fase 0**: leer `commands/phases/00-socratic.md`.
 
 ### Caso B — Proyecto existente SIN `.apex/` (tiene codigo/git pero no APEX)
 
-Antes de hacer nada, invocar skill `onboard-existing` y analizar lo que ya
-existe:
+Decision branch segun tamaño del repositorio:
+
+```bash
+FILES=$(git ls-files 2>/dev/null | wc -l)
+if [ "$FILES" -gt 50 ]; then
+  echo "LARGE_PROJECT — usar /apex:reverse"
+else
+  echo "SMALL_PROJECT — onboarding superficial"
+fi
+```
+
+#### B.1 — Proyecto grande (>50 archivos tracked): `/apex:reverse`
+
+REGLA ABSOLUTA: el CODIGO manda sobre README/CLAUDE.md. Esos archivos
+suelen estar desactualizados.
+
+Leer `commands/apex-reverse.md` y seguir el flujo completo:
+SCAN → REVIEW → BRAINSTORM → ASK → PLAN → APPROVE → APPLY → ITERATE.
+
+El scanner `apex_reverse_scan` escanea el codigo real con git+glob+grep,
+NO los docs, y emite findings retroactivos mapeados a cada una de las
+14 fases + gate 10.5.
+
+#### B.2 — Proyecto pequeño (<50 archivos): onboarding superficial
+
+Invocar skill `onboard-existing`. Pasos breves:
 
 1. Ejecutar:
    ```bash
    git log --oneline -20 2>/dev/null
    ls -la
-   cat package.json 2>/dev/null || cat requirements.txt 2>/dev/null || cat pyproject.toml 2>/dev/null
+   cat package.json 2>/dev/null || cat pyproject.toml 2>/dev/null || cat requirements.txt 2>/dev/null
    ls -la tests/ test/ __tests__/ spec/ 2>/dev/null
    ```
-2. Detectar automaticamente que fases ya estan hechas:
+2. Detectar fases ya hechas:
    - Entidades de dominio / modelos → Fase 6 parcial o completa
    - Tests → Fase 9 parcial
    - Dockerfile / CI → Fase 11 parcial
@@ -100,7 +124,11 @@ existe:
 
 ---
 
-## Las 15 fases (indice)
+## Las 14 fases + gate 10.5 (indice)
+
+14 fases secuenciales (0→14) con un gate obligatorio 10.5 entre las fases
+10 y 11 que bloquea el deploy si la auditoria AgentArmor no esta passed.
+El gate NO es una fase nueva, es un checkpoint entre fases 10 y 11.
 
 | Fase | Archivo                              | Resumen                                                              |
 | ---- | ------------------------------------ | -------------------------------------------------------------------- |

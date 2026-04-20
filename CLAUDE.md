@@ -59,7 +59,7 @@ en `~/RoadToDevOps/apex-hub/`).
   - Templates L1-L8 con checklist específico
 
 - [x] **Comando /apex** (`commands/apex.md`)
-  - 14 fases guiadas (0-socrático a 14-mantenimiento)
+  - 14 fases guiadas (0-socrático a 14-mantenimiento) + gate 10.5 AgentArmor
   - Detecta proyecto nuevo vs existente
   - 11 errores documentados a evitar
 
@@ -71,7 +71,7 @@ en `~/RoadToDevOps/apex-hub/`).
   - Segundo cerebro: `second-brain`
   - Seguridad: `security-audit` (con AgentArmor)
   - Revisión: `code-review`
-  - `flow-guardian/SKILL.md` — Vigilante de 14 fases con criterios
+  - `flow-guardian/SKILL.md` — Vigilante de 14 fases + gate 10.5 con criterios
   - `iterate/SKILL.md` — Guía para fases 12-14
 
 - [x] **Backend web** (modo producción con Ollama)

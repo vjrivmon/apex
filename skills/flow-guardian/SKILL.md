@@ -6,7 +6,8 @@ SIEMPRE. Se consulta antes de ejecutar cualquier acción en un proyecto APEX.
 
 ## Objetivo
 
-Garantizar que se siguen las 14 fases en orden. Bloquear avance si la fase
+Garantizar que se siguen las 14 fases en orden (con el gate obligatorio
+10.5 entre fase 10 y 11). Bloquear avance si la fase
 anterior no está completa. Proponer la acción correcta según la fase actual.
 
 ## Regla cross-project (OBLIGATORIA)
@@ -26,7 +27,7 @@ Si la tool devuelve "hub.db no disponible", se puede continuar, pero avisa al
 usuario que el segundo cerebro está offline y registra un error para que se
 lance `apex-hub` antes de seguir.
 
-## Las 14 fases y sus criterios de completitud
+## Las 14 fases + gate 10.5 y sus criterios de completitud
 
 ### Fase 0: Socrático
 

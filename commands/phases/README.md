@@ -5,6 +5,10 @@ carga la fase actual mediante Read cuando Claude Code la necesita. Esto
 evita inflar el contexto con 600+ lineas innecesarias y respeta el patron
 Anthropic de progressive disclosure.
 
+APEX tiene **14 fases secuenciales (0→14)** con un **gate obligatorio
+10.5 (AgentArmor)** entre las fases 10 y 11 que bloquea el deploy si la
+auditoria de seguridad no esta passed.
+
 ## Indice
 
 | Fase | Archivo                              | Resumen                                                              |

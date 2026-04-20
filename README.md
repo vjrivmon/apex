@@ -2,7 +2,7 @@
 
 > Sistema de skills para Claude Code que guía el ciclo completo de desarrollo de
 > software: desde la idea hasta el mantenimiento. Con persistencia de contexto
-> entre sesiones, tutor socrático, y 14 fases de desarrollo.
+> entre sesiones, tutor socrático, y 14 fases de desarrollo con gate 10.5 de seguridad.
 
 ## El Problema
 
@@ -29,7 +29,7 @@ sepa:
 | Característica             | Descripción                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------ |
 | **Tutor Socrático**        | Cuestiona tus ideas antes de diseñar. Filtra las débiles, fortalece las buenas |
-| **14 Fases Guiadas**       | Desde el socrático hasta el mantenimiento — no solo las primeras fases         |
+| **14 Fases Guiadas + Gate 10.5** | Desde el socrático hasta el mantenimiento. Gate AgentArmor bloquea deploy. |
 | **Context DB**             | SQLite con temporal facts, progressive disclosure, FTS5, y error memory        |
 | **Temporal Facts**         | Las decisiones tienen `valid_from`/`invalid_from` (patrón Graphiti)            |
 | **Progressive Disclosure** | 3 niveles de contexto: compact (~200tk), timeline (~800tk), full (~2000tk)     |
@@ -39,7 +39,7 @@ sepa:
 | **SolutionTypeAdvisor**    | Propone CLI/bot/MCP/app según el problema — no todo es dashboard               |
 | **IterationGuide**         | Guía para fases 12-14 donde MVP-Mode fallaba                                   |
 
-## Las 14 Fases
+## Las 14 Fases + Gate 10.5
 
 ```
  0. Socrático      → Cuestiona, filtra, refina la idea
