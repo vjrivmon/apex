@@ -50,3 +50,6 @@ apex-fix-*.png
 .apex/wiki/lint-report-*.md
 .apex/wiki/brand/design-inspiration-*.md
 .apex/security/audit-report-*.md
+
+# Auto-generated session handoffs
+thoughts/
