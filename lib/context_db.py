@@ -25,10 +25,19 @@ Uso:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
+
+
+_WORD_RE = re.compile(r"[A-Za-zÁÉÍÓÚáéíóúñÑ0-9]+", re.UNICODE)
+
+
+def _tokenize(text: str) -> list[str]:
+    """Split `text` into lowercase word tokens (unicode-aware)."""
+    return [m.group(0).lower() for m in _WORD_RE.finditer(text or "")]
 
 _SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -443,6 +452,104 @@ class ApexContextDB:
                 "SELECT content, source, source_id FROM context_fts "
                 "WHERE context_fts MATCH ? LIMIT ?", (query, limit))
         return [{"content": r[0], "source": r[1], "source_id": r[2]} for r in rows]
+
+    async def search_hybrid(self, query: str, limit: int = 10,
+                             fts_weight: float = 0.7,
+                             kw_weight: float = 0.3) -> list[dict]:
+        """Búsqueda híbrida: 70% FTS5 BM25 + 30% keyword overlap.
+
+        Motivación: FTS5 solo no encuentra queries con typos o términos
+        inflectados ("lecciones" no matchea "lección"). Combinar con
+        keyword LIKE amplía el recall sin perder precision — el ranking
+        final pondera ambas fuentes con `fts_weight` y `kw_weight`.
+
+        Estrategia:
+        1. FTS5 devuelve candidatos con su rank (negativo; menor = mejor).
+        2. Por cada token del query (len ≥ 3), añadir candidatos adicionales
+           con LIKE. Cada fila gana un punto por token matched.
+        3. Normalizar ambos scores a [0, 1] y combinar.
+        4. Ordenar descendente por hybrid_score.
+        """
+        if not query.strip():
+            return []
+
+        tokens = [t for t in _tokenize(query) if len(t) >= 3]
+        if not tokens:
+            return await self.search(query, limit=limit)
+
+        # --- 1. FTS5 candidatos ---
+        try:
+            async with self._conn() as db:
+                fts_rows = await db.execute_fetchall(
+                    "SELECT content, source, source_id, rank FROM context_fts "
+                    "WHERE context_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (query, max(limit * 3, 20)),
+                )
+        except Exception:
+            fts_rows = []
+
+        # --- 2. Keyword candidatos (LIKE) ---
+        kw_candidates: dict[tuple, dict] = {}
+        async with self._conn() as db:
+            for token in tokens:
+                pattern = f"%{token}%"
+                rows = await db.execute_fetchall(
+                    "SELECT content, source, source_id FROM context_fts "
+                    "WHERE content LIKE ? LIMIT ?",
+                    (pattern, max(limit * 2, 20)),
+                )
+                for content, source, source_id in rows:
+                    key = (source, source_id)
+                    entry = kw_candidates.setdefault(key, {
+                        "content": content, "source": source,
+                        "source_id": source_id, "kw_matches": 0,
+                    })
+                    entry["kw_matches"] += 1
+
+        # --- 3. Merge + scoring ---
+        merged: dict[tuple, dict] = {}
+        fts_ranks = [r[3] for r in fts_rows if r[3] is not None]
+        # Normalizar FTS: rank es negativo (BM25), más bajo = mejor
+        if fts_ranks:
+            min_r, max_r = min(fts_ranks), max(fts_ranks)
+            span = max_r - min_r or 1.0
+        else:
+            min_r = max_r = 0
+            span = 1.0
+
+        for content, source, source_id, rank in fts_rows:
+            key = (source, source_id)
+            fts_norm = 0.0
+            if rank is not None:
+                # rank más bajo → fts_norm más alto
+                fts_norm = (max_r - rank) / span
+            merged[key] = {
+                "content": content, "source": source, "source_id": source_id,
+                "fts_score": fts_norm, "kw_matches": 0,
+            }
+
+        for key, kw in kw_candidates.items():
+            if key in merged:
+                merged[key]["kw_matches"] = kw["kw_matches"]
+            else:
+                merged[key] = {
+                    "content": kw["content"], "source": kw["source"],
+                    "source_id": kw["source_id"],
+                    "fts_score": 0.0, "kw_matches": kw["kw_matches"],
+                }
+
+        if not merged:
+            return []
+
+        max_kw = max(m["kw_matches"] for m in merged.values()) or 1
+        results = []
+        for m in merged.values():
+            kw_norm = m["kw_matches"] / max_kw
+            m["hybrid_score"] = fts_weight * m["fts_score"] + kw_weight * kw_norm
+            results.append(m)
+
+        results.sort(key=lambda r: r["hybrid_score"], reverse=True)
+        return results[:limit]
 
     # ── Progressive Disclosure (3 niveles) ──
 

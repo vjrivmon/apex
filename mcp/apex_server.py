@@ -44,6 +44,9 @@ from mcp.types import TextContent, Tool
 from context_db import ApexContextDB
 from wiki_scaffold import create_wiki, append_log, update_index
 from portfolio_publish import generate as _portfolio_generate, DEFAULT_OUT_DIR as _PORTFOLIO_OUT_DIR
+from ingest import ingest as _ingest_source, ingest_dir as _ingest_dir
+from lint import run_lint as _run_lint, write_report as _write_lint_report, _render_report as _render_lint_report
+from synthesis import synthesize as _synthesize
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
@@ -522,12 +525,17 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="apex_search",
-            description="Búsqueda full-text (FTS5) en todo el contexto del proyecto: decisiones, errores, componentes, wiki.",
+            description=(
+                "Búsqueda en todo el contexto del proyecto. mode='hybrid' (default) "
+                "combina FTS5 BM25 70% + keyword overlap 30% — mejor recall con "
+                "inflexiones, typos y términos compuestos. mode='fts' usa solo FTS5."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Texto a buscar"},
                     "limit": {"type": "integer", "default": 10},
+                    "mode": {"type": "string", "enum": ["hybrid", "fts"], "default": "hybrid"},
                 },
                 "required": ["query"],
             },
@@ -569,6 +577,57 @@ async def list_tools() -> list[Tool]:
                     "out_dir": {"type": "string", "description": "Directorio destino (default: ~/RoadToDevOps/vr-web/content/cases)"},
                 },
                 "required": ["slug"],
+            },
+        ),
+        Tool(
+            name="apex_ingest_source",
+            description=(
+                "Procesa UN archivo de .apex/raw/ (md/txt/json) con el pipeline "
+                "QUERY→INGEST: resuelve URLs, extrae signals (headings/listas/citas/code), "
+                "clasifica (entity/concept/comparison/query/raw), genera página wiki con "
+                "frontmatter YAML + wikilinks cross-wiki + bias flags. Si path es un "
+                "directorio, procesa todos los archivos recursivamente."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Archivo o dir dentro de .apex/raw/ (absoluto o relativo)"},
+                    "auto_wiki": {"type": "boolean", "default": True, "description": "Escribir páginas wiki (default true)"},
+                    "recursive": {"type": "boolean", "default": True, "description": "Si path es dir, recorrer subdirectorios"},
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="apex_lint_second_brain",
+            description=(
+                "Ejecuta la batería de lint: contradicciones entre decisiones activas, "
+                "errores recurrentes sin decisión, componentes huérfanos, wiki stale, "
+                "pages sin wikilinks, next_steps bloqueados por pasos completados. "
+                "Output: .apex/wiki/lint-report-YYYY-MM-DD.md. Con apply=True aplica "
+                "auto-fixes triviales (NS-001 unblock)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "apply": {"type": "boolean", "default": False},
+                    "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+                },
+            },
+        ),
+        Tool(
+            name="apex_synthesize",
+            description=(
+                "Dispara dream_deep cuando la densidad reciente supera umbrales (nuevas "
+                "decisiones/errores/wiki 7d, o >14d sin síntesis). trigger='force' la "
+                "fuerza. Promueve señales scored >=min_score a wiki/synthesis/YYYY-MM-DD.md."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "trigger": {"type": "string", "enum": ["auto", "force"], "default": "auto"},
+                    "min_score": {"type": "number", "default": 0.6, "minimum": 0, "maximum": 1},
+                },
             },
         ),
         Tool(
@@ -709,14 +768,82 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = [TextContent(type="text", text=f"Paso #{arguments['step_id']} completado")]
 
         elif name == "apex_search":
-            results = await db.search(arguments["query"], limit=arguments.get("limit", 10))
-            if not results:
-                result = [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}'")]
+            mode = arguments.get("mode", "hybrid")
+            limit = arguments.get("limit", 10)
+            if mode == "fts":
+                results = await db.search(arguments["query"], limit=limit)
+                formatter = lambda r: f"- [{r['source']}] {r['content'][:150]}"
             else:
-                lines = [f"Resultados para '{arguments['query']}':"]
+                results = await db.search_hybrid(arguments["query"], limit=limit)
+                formatter = lambda r: (
+                    f"- [{r['source']} · score={r['hybrid_score']:.2f}] {r['content'][:150]}"
+                )
+            if not results:
+                result = [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}' (mode={mode})")]
+            else:
+                lines = [f"Resultados para '{arguments['query']}' (mode={mode}):"]
                 for r in results:
-                    lines.append(f"- [{r['source']}] {r['content'][:150]}")
+                    lines.append(formatter(r))
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_ingest_source":
+            src_path = Path(arguments["path"])
+            if not src_path.is_absolute():
+                src_path = _find_project_root() / src_path
+            if not src_path.exists():
+                result = [TextContent(type="text", text=f"Path no existe: {src_path}")]
+            else:
+                auto_wiki = arguments.get("auto_wiki", True)
+                recursive = arguments.get("recursive", True)
+                project_root = _find_project_root()
+                if src_path.is_dir():
+                    results_list = _ingest_dir(
+                        src_path, project_root=project_root,
+                        recursive=recursive, write_wiki=auto_wiki, write_db=True,
+                    )
+                    lines = [f"Ingestados {len(results_list)} archivos desde {src_path}:"]
+                    for r in results_list:
+                        lines.append(
+                            f"- {r.source.name} → {r.page_type}/{r.slug} "
+                            f"(signals={r.signals_count}, urls={len(r.urls)}, "
+                            f"links={len(r.wikilinks)}, bias={len(r.bias_flags)})"
+                        )
+                else:
+                    r = _ingest_source(
+                        src_path, project_root=project_root,
+                        write_wiki=auto_wiki, write_db=True,
+                    )
+                    lines = [
+                        f"Ingestado {r.source.name} → {r.page_type}/{r.slug}",
+                        f"- signals: {r.signals_count}",
+                        f"- urls: {len(r.urls)} ({', '.join(u['source_type'] for u in r.urls[:5])})",
+                        f"- wikilinks: {len(r.wikilinks)}",
+                        f"- bias flags: {len(r.bias_flags)}",
+                    ]
+                    if r.wiki_page_path:
+                        lines.append(f"- wiki page: {r.wiki_page_path}")
+                result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_lint_second_brain":
+            root = _find_project_root()
+            apply = bool(arguments.get("apply", False))
+            severity = arguments.get("severity")
+            report = _run_lint(root, apply_fixes=apply)
+            if severity:
+                order = ("critical", "high", "medium", "low")
+                idx = order.index(severity)
+                report.findings = [f for f in report.findings if order.index(f.severity) <= idx]
+            report_path = _write_lint_report(report)
+            md = _render_lint_report(report)
+            result = [TextContent(type="text", text=f"{md}\n\n(Report: {report_path})")]
+
+        elif name == "apex_synthesize":
+            root = _find_project_root()
+            trigger = arguments.get("trigger", "auto")
+            min_score = float(arguments.get("min_score", 0.6))
+            res = _synthesize(root, force=(trigger == "force"), min_score=min_score)
+            import json as _json
+            result = [TextContent(type="text", text=_json.dumps(res, ensure_ascii=False, indent=2, default=str))]
 
         elif name == "apex_set_portfolio_meta":
             fields = arguments["fields"] or {}
