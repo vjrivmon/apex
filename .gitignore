@@ -40,3 +40,7 @@ logs/
 
 # Docker
 .docker/
+
+# Playwright screenshots (artefactos de verificación)
+.playwright-mcp/
+apex-fix-*.png

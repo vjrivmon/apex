@@ -13,6 +13,19 @@ Revisar codigo como un staff engineer: encontrar bugs reales, violaciones
 arquitectonicas, problemas de rendimiento y gaps de testing. Auto-corregir lo
 trivial, explicar lo complejo. Evitar bikeshedding sobre estilo.
 
+## Regla cross-project (OBLIGATORIA)
+
+Antes de emitir un finding, ejecutar `apex_search_cross_project(query)` con
+los términos del archivo/componente/error que se está revisando. Si hay
+errores o decisiones previas cross-project:
+
+- Eleva la severidad del finding si el mismo patrón ya falló en otro proyecto
+  (refleja la `recurrence_count` del hub).
+- Cita explícitamente el proyecto origen de la lección: `"ya ocurrió en
+  <proyecto>, x<N> veces"`.
+- Si un patrón fue corregido con una decisión vigente en otro proyecto,
+  recomiéndala aquí en vez de reinventar el fix.
+
 ## Proceso
 
 ### Paso 1: Scope del review

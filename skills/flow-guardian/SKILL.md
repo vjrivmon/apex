@@ -9,6 +9,23 @@ SIEMPRE. Se consulta antes de ejecutar cualquier acción en un proyecto APEX.
 Garantizar que se siguen las 14 fases en orden. Bloquear avance si la fase
 anterior no está completa. Proponer la acción correcta según la fase actual.
 
+## Regla cross-project (OBLIGATORIA)
+
+Antes de proponer una decisión de stack, arquitectura, diseño visual, UX,
+scraping, auth, deploy o cualquier elección que ya se haya enfrentado en otro
+proyecto, ejecutar `apex_search_cross_project(query)` con los términos
+relevantes. Si la tool devuelve errores o decisiones previas:
+
+- **Errores**: NO los repitas. Explica al usuario qué error ocurrió en qué
+  proyecto y por qué no vamos a repetirlo.
+- **Decisiones vigentes**: propónlas como primera opción a menos que el
+  contexto lo impida.
+- **Decisiones invalidadas**: explícitamente evita el camino invalidado.
+
+Si la tool devuelve "hub.db no disponible", se puede continuar, pero avisa al
+usuario que el segundo cerebro está offline y registra un error para que se
+lance `apex-hub` antes de seguir.
+
 ## Las 14 fases y sus criterios de completitud
 
 ### Fase 0: Socrático

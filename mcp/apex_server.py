@@ -8,9 +8,10 @@ Herramientas disponibles:
   - apex_add_component(...)    → Registrar componente del proyecto
   - apex_add_next_step(...)    → Añadir siguiente paso
   - apex_complete_step(id)     → Marcar paso como completado
-  - apex_search(query)         → Búsqueda FTS5 en todo el contexto
-  - apex_init_project(name)    → Inicializar .apex/ en el proyecto actual
-  - apex_log_session(summary)  → Registrar resumen de sesión
+  - apex_search(query)                 → Búsqueda FTS5 en el proyecto actual
+  - apex_search_cross_project(query)   → Retrieval FTS5 en TODOS los proyectos (hub.db)
+  - apex_init_project(name)            → Inicializar .apex/ en el proyecto actual
+  - apex_log_session(summary)          → Registrar resumen de sesión
 
 Configuración en .claude/settings.json:
   {
@@ -237,6 +238,138 @@ def _get_db() -> ApexContextDB:
     return ApexContextDB(str(db_path))
 
 
+# --- Cross-project retrieval (lectura de apex-hub/data/hub.db) ---
+
+_HUB_DB = _HUB_DIR / "data" / "hub.db"
+
+
+def _search_cross_project(query: str, limit: int = 8, exclude_project: str | None = None) -> dict:
+    """Consulta hub.db (agregada por apex-hub) para encontrar errores, decisiones y
+    componentes de OTROS proyectos similares al query. Best-effort: si hub.db no
+    existe, devuelve dict vacío sin fallar.
+
+    Returns:
+      {
+        "errors": [{project_id, description, lesson, severity, recurrence_count}],
+        "decisions": [{project_id, category, decision, reasoning}],
+        "components": [{project_id, name, type, description}],
+        "hub_available": bool,
+      }
+    """
+    import sqlite3
+
+    empty = {"errors": [], "decisions": [], "components": [], "hub_available": False}
+
+    if not _HUB_DB.exists():
+        return empty
+
+    try:
+        conn = sqlite3.connect(f"file:{_HUB_DB}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.OperationalError:
+        return empty
+
+    try:
+        fts_q = query.strip()
+        if not fts_q:
+            return {**empty, "hub_available": True}
+
+        # FTS5 sobre hub_search: source_type ∈ {error, decision, component, wiki, session}
+        # Nota: no usamos alias (`hs.`) porque FTS5 rechaza referencias a columnas
+        # UNINDEXED a través de alias de tabla.
+        sql = (
+            "SELECT project_id, source_type, source_id, "
+            "snippet(hub_search, 3, '[', ']', '...', 24) AS snip, rank "
+            "FROM hub_search WHERE hub_search MATCH ?"
+        )
+        params: list = [fts_q]
+        if exclude_project:
+            sql += " AND project_id != ?"
+            params.append(exclude_project)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit * 3)
+
+        try:
+            rows = [dict(r) for r in conn.execute(sql, params)]
+        except sqlite3.OperationalError:
+            # Sintaxis FTS5 inválida → reintento como frase
+            try:
+                rows = [dict(r) for r in conn.execute(sql, [f'"{fts_q}"', *params[1:]])]
+            except sqlite3.OperationalError:
+                return {**empty, "hub_available": True}
+
+        errors, decisions, components = [], [], []
+
+        for row in rows:
+            src_type = row["source_type"]
+            src_id = row["source_id"]
+            pid = row["project_id"]
+            # source_id apunta al PK de hub.db (id para decisions/errors/wiki,
+            # rowid para components) — no al original_id del context.db local.
+            if src_type == "error" and len(errors) < limit:
+                r = conn.execute(
+                    "SELECT description, lesson, severity, recurrence_count, phase "
+                    "FROM errors WHERE id = ?",
+                    (src_id,),
+                ).fetchone()
+                if r:
+                    errors.append({"project_id": pid, **dict(r)})
+            elif src_type == "decision" and len(decisions) < limit:
+                r = conn.execute(
+                    "SELECT category, decision, reasoning, phase, invalid_from "
+                    "FROM decisions WHERE id = ?",
+                    (src_id,),
+                ).fetchone()
+                if r:
+                    decisions.append({"project_id": pid, **dict(r)})
+            elif src_type == "component" and len(components) < limit:
+                r = conn.execute(
+                    "SELECT component_id, name, type, description, status "
+                    "FROM components WHERE rowid = ?",
+                    (src_id,),
+                ).fetchone()
+                if r:
+                    components.append({"project_id": pid, **dict(r)})
+        return {
+            "errors": errors,
+            "decisions": decisions,
+            "components": components,
+            "hub_available": True,
+        }
+    finally:
+        conn.close()
+
+
+def _recurrent_errors_cross_project(limit: int = 5, exclude_project: str | None = None) -> list[dict]:
+    """Devuelve los errores cross-project con mayor recurrence_count (lecciones
+    universales). Usado por el hook SessionStart."""
+    import sqlite3
+
+    if not _HUB_DB.exists():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{_HUB_DB}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.OperationalError:
+        return []
+    try:
+        sql = (
+            "SELECT project_id, description, lesson, severity, recurrence_count, phase "
+            "FROM errors"
+        )
+        params: list = []
+        if exclude_project:
+            sql += " WHERE project_id != ?"
+            params.append(exclude_project)
+        sql += " ORDER BY recurrence_count DESC, "
+        sql += "CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END "
+        sql += "LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in conn.execute(sql, params)]
+    finally:
+        conn.close()
+
+
 # --- MCP Server ---
 
 server = Server("apex")
@@ -399,6 +532,33 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_search_cross_project",
+            description=(
+                "OBLIGATORIO antes de decisiones de diseño/arquitectura/stack. "
+                "Consulta hub.db (agregada por apex-hub) para encontrar errores, "
+                "decisiones y componentes de OTROS proyectos similares. Úsalo SIEMPRE "
+                "antes de: elegir ancho de layout, proponer stack, elegir librería de "
+                "iconos, diseñar componente, o cualquier decisión que ya se haya "
+                "enfrentado en otro proyecto. Evita repetir errores cross-project."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Términos de búsqueda (ej: 'margen ancho layout', 'emoji icono', 'stack scraping')",
+                    },
+                    "limit": {"type": "integer", "default": 8, "minimum": 1, "maximum": 20},
+                    "exclude_current": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Excluir el proyecto actual de los resultados",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
             name="apex_log_session",
             description="Registra un resumen de la sesión actual para persistir entre conversaciones.",
             inputSchema={
@@ -516,6 +676,52 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 lines = [f"Resultados para '{arguments['query']}':"]
                 for r in results:
                     lines.append(f"- [{r['source']}] {r['content'][:150]}")
+                result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_search_cross_project":
+            query = arguments["query"]
+            limit = arguments.get("limit", 8)
+            exclude_current = arguments.get("exclude_current", True)
+            current_project = None
+            if exclude_current:
+                root = _find_project_root()
+                current_project = root.name.lower().replace(" ", "-")
+            hits = _search_cross_project(query, limit=limit, exclude_project=current_project)
+            if not hits["hub_available"]:
+                result = [TextContent(type="text", text=(
+                    f"hub.db no disponible en {_HUB_DB}. Lanza apex-hub (python -m backend en "
+                    "~/RoadToDevOps/apex-hub/) para habilitar retrieval cross-project."
+                ))]
+            elif not (hits["errors"] or hits["decisions"] or hits["components"]):
+                result = [TextContent(type="text", text=(
+                    f"Sin hallazgos cross-project para '{query}'. "
+                    "No hay errores/decisiones previas que aplicar."
+                ))]
+            else:
+                lines = [f"Cross-project retrieval para '{query}':"]
+                if hits["errors"]:
+                    lines.append(f"\n### Errores previos ({len(hits['errors'])})")
+                    for e in hits["errors"]:
+                        rec = e.get("recurrence_count", 1)
+                        sev = e.get("severity", "medium")
+                        lines.append(
+                            f"- [{e['project_id']} · {sev} · x{rec}] {e['description'][:140]}"
+                        )
+                        if e.get("lesson"):
+                            lines.append(f"  → Lección: {e['lesson'][:200]}")
+                if hits["decisions"]:
+                    lines.append(f"\n### Decisiones previas ({len(hits['decisions'])})")
+                    for d in hits["decisions"]:
+                        tag = "INVALIDADA" if d.get("invalid_from") else "vigente"
+                        lines.append(
+                            f"- [{d['project_id']} · {d.get('category','')} · {tag}] {d['decision'][:140]}"
+                        )
+                if hits["components"]:
+                    lines.append(f"\n### Componentes previos ({len(hits['components'])})")
+                    for c in hits["components"]:
+                        lines.append(
+                            f"- [{c['project_id']} · {c.get('type','')}] {c.get('name','')}: {(c.get('description') or '')[:120]}"
+                        )
                 result = [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "apex_log_session":
