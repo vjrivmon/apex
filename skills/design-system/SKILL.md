@@ -1,5 +1,15 @@
 # DesignSystem — Identidad visual profesional y consistente
 
+> **Composición con otras skills**:
+> - Para el **manual de marca completo** (logo system, mockups, variantes):
+>   usar `brand-identity/SKILL.md` — es el skill profundo de identidad.
+> - Para **inspiración y referencias** al inicio: usar `design-research/SKILL.md`
+>   (biblioteca curada + notas semanales automáticas en
+>   `.apex/wiki/brand/`).
+> - Esta skill (`design-system`) cubre los **tokens semánticos, tipografía,
+>   espaciado, iconografía, y protocolo de verificación** una vez la identidad
+>   está acordada.
+
 ## Cuándo activar
 
 - Fase 2 (Identidad Visual) de cualquier proyecto con UI.
@@ -61,6 +71,36 @@ Taxonomía mínima:
 - **Radii**: `--radius-{none,sm,md,lg,xl,full}`
 - **Elevation**: `--shadow-{sm,md,lg,xl}`
 - **Breakpoints**: `--bp-{sm,md,lg,xl,2xl}` (siempre mobile-first)
+
+## Multi-tool obligatorio para propuestas visuales
+
+Nunca decidir un estilo visual con una sola herramienta. Usar en paralelo
+al menos **dos** de estas tools MCP/externas y comparar outputs:
+
+- **Pencil MCP** — wireframes rápidos y layouts
+- **Google Stitch** — componentes y estilo con estética completa
+- **Figma MCP** — manual de identidad + design tokens editables
+- **Excalidraw MCP** — flujos, arquitectura, navegación
+- **Generadores de imagen** (Imagen/SDXL/DALL·E) — mockups en contexto y
+  backgrounds
+
+Why: cada tool sesga el output hacia su estética. Con ≥2 herramientas se
+detecta cuál decisión es propia del proyecto y cuál es "la default" de la
+tool. Documentado como regla tras el caso de FocusNow (se presentaron
+opciones de estilo como ASCII art en vez de mockups reales — el usuario
+no podía decidir sin verlo renderizado).
+
+## Referencias north-star (consultar antes de proponer)
+
+Cuando se aborda diseño premium-first:
+
+- [drapz.design](https://drapz.design) — manual de identidad profesional
+- [rohitg00/awesome-claude-design](https://github.com/rohitg00/awesome-claude-design) —
+  recopilación oficial de Claude Design (principios + patrones)
+- [VoltAgent/awesome-claude-design](https://github.com/VoltAgent/awesome-claude-design) —
+  tokens semánticos + dual-mode + componentes
+- Casos estudiados: Solaris (Buffet + Bitmap), Talo, Delegento (4 variantes),
+  Bloom, Havernex — detallados en `brand-identity/SKILL.md`.
 
 ## Reglas absolutas (violar = falla la fase)
 
