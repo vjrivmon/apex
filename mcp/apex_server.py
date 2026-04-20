@@ -48,6 +48,12 @@ from ingest import ingest as _ingest_source, ingest_dir as _ingest_dir
 from lint import run_lint as _run_lint, write_report as _write_lint_report, _render_report as _render_lint_report
 from synthesis import synthesize as _synthesize
 from scaffold_devops import scaffold as _scaffold_devops, ScaffoldOptions as _ScaffoldOptions
+from security_gate import (
+    check_gate as _check_security_gate,
+    render_report as _render_security_report,
+    write_report as _write_security_report,
+    scaffold_templates as _scaffold_security_templates,
+)
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
@@ -581,6 +587,23 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_security_gate",
+            description=(
+                "Verifica las 8 capas AgentArmor (L1-L8) leyendo "
+                ".apex/security/L*-*.md. Devuelve un reporte markdown y escribe "
+                ".apex/security/audit-report-YYYY-MM-DD.md. Si scaffold=true, "
+                "copia las 8 plantillas al proyecto primero. Fase 11 (Deploy) "
+                "NO debe permitirse si cualquier capa no está passed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scaffold": {"type": "boolean", "default": False,
+                                "description": "Si true, copia templates L1-L8 a .apex/security/ antes de verificar"},
+                },
+            },
+        ),
+        Tool(
             name="apex_scaffold_devops",
             description=(
                 "Copia templates CI/CD + Docker + Monitor al proyecto actual (o al "
@@ -812,6 +835,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 for r in results:
                     lines.append(formatter(r))
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_security_gate":
+            root = _find_project_root()
+            if arguments.get("scaffold"):
+                copied = _scaffold_security_templates(root)
+                scaffold_msg = f"Scaffolded {len(copied)} archivos de templates AgentArmor.\n\n"
+            else:
+                scaffold_msg = ""
+            report = _check_security_gate(root)
+            md = _render_security_report(report)
+            report_path = _write_security_report(report)
+            status = "PASSED ✓" if report.passed else "BLOCKED ✗"
+            result = [TextContent(type="text", text=(
+                f"{scaffold_msg}Security Gate: **{status}**\n\n{md}\n\n(Report: {report_path})"
+            ))]
 
         elif name == "apex_scaffold_devops":
             target = Path(arguments["target"]) if arguments.get("target") else _find_project_root()
