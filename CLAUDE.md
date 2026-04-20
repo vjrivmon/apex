@@ -1,43 +1,76 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-04-07
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-04-20
 
 ## Qué es APEX
 
-Sistema de skills para Claude Code que guía el ciclo completo de desarrollo de
-software. Usa una BD SQLite contextual por proyecto (`.apex/context.db`) para
-que Claude Code nunca pierda el hilo — ni al inicio ni en las fases intermedias.
+Sistema de skills + MCP server para Claude Code que guía el ciclo completo
+de desarrollo de software. Usa una BD SQLite contextual por proyecto
+(`.apex/context.db`) + un segundo cerebro (ingest/lint/synthesis) + un
+dashboard cross-project (`apex-hub`) para que Claude Code nunca pierda el
+hilo — ni al inicio ni en las fases intermedias.
 
-**No es una app web.** Es un sistema de commands + skills + librería Python que
-vive dentro de Claude Code y potencia el flujo de desarrollo.
+**Arquitectura: puro CLI + MCP + skills.** El frontend/backend web legacy
+(commits previos a Sprint 7) vive en rama `archive/legacy-web` y NO se
+carga en el flujo actual. El único frontend es `apex-hub` (repo aparte
+en `~/RoadToDevOps/apex-hub/`).
 
 ---
 
-## Estado Actual
+## Estado Actual (post Sprint 7)
 
 ### Completado
 
-- [x] **Context DB v2** (`lib/context_db.py`)
+- [x] **Context DB v2** (`lib/context_db.py`) con **hybrid retrieval** 70/30
   - Temporal facts (valid_from / invalid_from, patrón Graphiti)
   - Progressive disclosure (compact ~200tk / timeline ~800tk / full ~2000tk)
   - Error memory bidireccional con recurrence_count
   - Wiki pages en SQLite con FTS5
-  - 28 tests pasando en 0.14s
+  - `search_hybrid()` combina BM25 + keyword overlap
+  - 46 tests pasando
 
-- [x] **Wiki Scaffold** (`lib/wiki_scaffold.py`)
-  - Patrón Karpathy: SCHEMA.md + index.md + log.md
-  - 5 directorios: entities, concepts, comparisons, queries, raw
-  - Funciones: create_wiki(), append_log(), update_index()
+- [x] **Wiki Scaffold + segundo cerebro** (`lib/wiki_scaffold.py`)
+  - Karpathy: `wiki/` con SCHEMA, index, log, entities/concepts/
+    comparisons/queries/raw + **synthesis/** nuevo
+  - Segundo cerebro: `.apex/brand/` (identity, design-system, strategy,
+    performance), `.apex/raw/` (research, socratic, papers, decisions-log),
+    `.apex/releases/` (drafts, staging, published)
+
+- [x] **Ingest pipeline** (`lib/ingest.py`) — 8 pasos
+  - Resuelve URLs con source_type, extrae signals, clasifica, genera
+    páginas wiki con frontmatter + cross-links + bias flags
+
+- [x] **Self-heal** (`lib/lint.py`) — 6 reglas
+  - Contradicciones, errores sin decisión, huérfanos, wiki stale, sin
+    wikilinks, next_steps mal bloqueados
+
+- [x] **Synthesis** (`lib/synthesis.py`) — density-triggered dream_deep
+
+- [x] **Portfolio bridge** (`lib/portfolio_publish.py` → vr-web/content/cases/)
+
+- [x] **Scaffold DevOps** (`lib/scaffold_devops.py` + `templates/`)
+  - GH Actions (ci, deploy-staging, deploy-prod, release-please)
+  - Dockerfile multi-stage + docker-compose.prod.yml
+  - Prometheus + Grafana + Loki + alerts
+
+- [x] **Security Gate** (`lib/security_gate.py` + `templates/apex-security/`)
+  - AgentArmor 8 capas mapeadas a fases
+  - Fase 10.5 bloquea fase 11 si alguna capa != passed
+  - Templates L1-L8 con checklist específico
 
 - [x] **Comando /apex** (`commands/apex.md`)
   - 14 fases guiadas (0-socrático a 14-mantenimiento)
   - Detecta proyecto nuevo vs existente
   - 11 errores documentados a evitar
-  - Reglas absolutas (Pencil MCP, backend-first, AskUserQuestion)
 
-- [x] **4 Skills core**
-  - `socratic/SKILL.md` — Tutor socrático (3-5 rondas)
-  - `architect/SKILL.md` — SolutionTypeAdvisor (CLI/bot/MCP/app)
+- [x] **12 Skills**
+  - Core: `socratic`, `architect`, `flow-guardian`, `iterate`,
+    `onboard-existing`, `tools-integration`
+  - Diseño: `design-system`, `design-research`, `brand-identity`
+  - Entrega: `portfolio-publisher`, `devops`, `monitor`
+  - Segundo cerebro: `second-brain`
+  - Seguridad: `security-audit` (con AgentArmor)
+  - Revisión: `code-review`
   - `flow-guardian/SKILL.md` — Vigilante de 14 fases con criterios
   - `iterate/SKILL.md` — Guía para fases 12-14
 

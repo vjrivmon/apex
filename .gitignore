@@ -44,3 +44,9 @@ logs/
 # Playwright screenshots (artefactos de verificación)
 .playwright-mcp/
 apex-fix-*.png
+
+# APEX runtime artifacts (generados por ingest/synthesis/lint/etc)
+.apex/wiki/synthesis/
+.apex/wiki/lint-report-*.md
+.apex/wiki/brand/design-inspiration-*.md
+.apex/security/audit-report-*.md
