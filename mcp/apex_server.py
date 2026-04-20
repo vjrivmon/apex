@@ -47,6 +47,7 @@ from portfolio_publish import generate as _portfolio_generate, DEFAULT_OUT_DIR a
 from ingest import ingest as _ingest_source, ingest_dir as _ingest_dir
 from lint import run_lint as _run_lint, write_report as _write_lint_report, _render_report as _render_lint_report
 from synthesis import synthesize as _synthesize
+from scaffold_devops import scaffold as _scaffold_devops, ScaffoldOptions as _ScaffoldOptions
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
@@ -580,6 +581,32 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_scaffold_devops",
+            description=(
+                "Copia templates CI/CD + Docker + Monitor al proyecto actual (o al "
+                "target indicado). Renombra placeholders (PROJECT_NAME, STACK, "
+                "PORT, HEALTH_PATH, DEPLOY_TARGET). No pisa archivos existentes "
+                "salvo overwrite=true. Incluye GitHub Actions (ci, deploy-staging, "
+                "deploy-prod, release-please), Dockerfile multi-stage, "
+                "docker-compose.prod.yml, y stack de monitoring (Prometheus, "
+                "Grafana dashboard, alerts, Loki, health.py)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string", "description": "Directorio destino (default: proyecto actual)"},
+                    "name": {"type": "string", "description": "Nombre del proyecto"},
+                    "stack": {"type": "string", "enum": ["python", "node"], "default": "python"},
+                    "deploy_target": {"type": "string", "enum": ["vercel", "fly", "vps"], "default": "vercel"},
+                    "port": {"type": "integer", "default": 8000},
+                    "health_path": {"type": "string", "default": "/health"},
+                    "with_monitoring": {"type": "boolean", "default": True},
+                    "overwrite": {"type": "boolean", "default": False},
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
             name="apex_ingest_source",
             description=(
                 "Procesa UN archivo de .apex/raw/ (md/txt/json) con el pipeline "
@@ -785,6 +812,29 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 for r in results:
                     lines.append(formatter(r))
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_scaffold_devops":
+            target = Path(arguments["target"]) if arguments.get("target") else _find_project_root()
+            opts = _ScaffoldOptions(
+                target=target,
+                project_name=arguments["name"],
+                stack=arguments.get("stack", "python"),
+                deploy_target=arguments.get("deploy_target", "vercel"),
+                port=int(arguments.get("port", 8000)),
+                health_path=arguments.get("health_path", "/health"),
+                with_monitoring=bool(arguments.get("with_monitoring", True)),
+                overwrite=bool(arguments.get("overwrite", False)),
+            )
+            report = _scaffold_devops(opts)
+            lines = [f"Scaffold DevOps en {target}:"]
+            lines.append(f"- Copiados: {len(report.copied)}")
+            for p in report.copied:
+                lines.append(f"  + {p.relative_to(target)}")
+            if report.skipped:
+                lines.append(f"- Saltados ({len(report.skipped)}, ya existían):")
+                for p in report.skipped:
+                    lines.append(f"  · {p.relative_to(target)}")
+            result = [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "apex_ingest_source":
             src_path = Path(arguments["path"])

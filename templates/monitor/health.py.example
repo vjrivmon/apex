@@ -1,0 +1,89 @@
+"""Endpoint /health extendido para {{PROJECT_NAME}}.
+
+Copia este archivo a `app/health.py` y adapta los checks a tu stack.
+El endpoint devuelve 200 si TODOS los checks pasan, 503 si cualquiera falla.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import shutil
+import socket
+import time
+from typing import Callable, Awaitable
+
+from fastapi import APIRouter, Response
+
+router = APIRouter()
+
+START_TIME = time.monotonic()
+VERSION = os.getenv("APP_VERSION", "dev")
+
+# ---- Checks ---------------------------------------------------------------
+
+
+async def _check_db() -> dict:
+    """Reemplaza con tu driver real (asyncpg / aiosqlite / etc)."""
+    try:
+        # Ejemplo aiosqlite:
+        # import aiosqlite
+        # async with aiosqlite.connect(os.environ["DB_PATH"]) as db:
+        #     await db.execute("SELECT 1")
+        await asyncio.sleep(0)  # placeholder
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
+async def _check_external(url: str, name: str) -> dict:
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3.0) as c:
+            r = await c.head(url)
+            return {"ok": r.status_code < 500, "status": r.status_code}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
+def _check_disk(path: str = "/", threshold: float = 0.8) -> dict:
+    try:
+        total, used, _ = shutil.disk_usage(path)
+        ratio = used / total
+        return {"ok": ratio < threshold, "used_ratio": round(ratio, 3)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
+EXTERNALS: list[tuple[str, str]] = [
+    # ("ollama", "http://localhost:11434/"),
+    # ("openai", "https://api.openai.com/"),
+]
+
+
+# ---- Endpoint -------------------------------------------------------------
+
+
+@router.get("/health")
+async def health(response: Response) -> dict:
+    checks: dict[str, dict] = {}
+
+    checks["db"] = await _check_db()
+    checks["disk"] = _check_disk()
+    checks["hostname"] = {"ok": True, "value": socket.gethostname()}
+
+    ext_tasks = [_check_external(url, name) for name, url in EXTERNALS]
+    if ext_tasks:
+        ext_results = await asyncio.gather(*ext_tasks)
+        for (name, _), result in zip(EXTERNALS, ext_results):
+            checks[name] = result
+
+    all_ok = all(c.get("ok", False) for c in checks.values())
+    status_code = 200 if all_ok else 503
+    response.status_code = status_code
+
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "version": VERSION,
+        "uptime_seconds": round(time.monotonic() - START_TIME, 1),
+        "checks": checks,
+    }

@@ -1,0 +1,51 @@
+name: Deploy → Production
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is signed
+        run: |
+          git verify-tag ${{ github.ref_name }} || {
+            echo "Tag ${{ github.ref_name }} no está firmado. Abortando."
+            exit 1
+          }
+
+      - name: Deploy to prod ({{DEPLOY_TARGET}})
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN_PROD }}
+        run: |
+          echo "Desplegando {{PROJECT_NAME}} ${{ github.ref_name }} a producción..."
+
+      - name: Healthcheck + smoke
+        run: |
+          sleep 15
+          curl -fsSL https://{{PROJECT_NAME}}.example.com{{HEALTH_PATH}} \
+            | tee /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN_PROD }}
+        run: |
+          echo "Deploy prod falló. Revertiendo al tag anterior..."
+          PREV_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
+          echo "Rollback a $PREV_TAG"
+          # Re-deploy del tag anterior
+          # Fly.io: flyctl deploy --image {{PROJECT_NAME}}:$PREV_TAG
+          # VPS:    ssh deploy@prod "cd /srv/{{PROJECT_NAME}} && ./rollback.sh $PREV_TAG"

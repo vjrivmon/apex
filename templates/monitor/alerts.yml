@@ -1,0 +1,60 @@
+groups:
+  - name: {{PROJECT_NAME}}.critical
+    interval: 30s
+    rules:
+      - alert: HealthcheckFailing
+        expr: up{job="{{PROJECT_NAME}}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{PROJECT_NAME}}: /health devuelve fail o instancia caída"
+          runbook: "runbooks/healthcheck-failing.md"
+
+      - alert: ErrorRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5..",job="{{PROJECT_NAME}}"}[5m]))
+            /
+            sum(rate(http_requests_total{job="{{PROJECT_NAME}}"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{PROJECT_NAME}}: error rate > 5% durante 5 min"
+          runbook: "runbooks/error-rate.md"
+
+      - alert: LatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="{{PROJECT_NAME}}"}[5m])) by (le)
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{PROJECT_NAME}}: p95 latency > 300ms durante 10 min"
+          runbook: "runbooks/latency.md"
+
+  - name: {{PROJECT_NAME}}.infra
+    interval: 1m
+    rules:
+      - alert: DiskAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk < 20% libre en host"
+          runbook: "runbooks/disk.md"
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres no responde"
+          runbook: "runbooks/db-down.md"

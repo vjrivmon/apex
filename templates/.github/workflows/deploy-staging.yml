@@ -1,0 +1,39 @@
+name: Deploy → Staging
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to {{DEPLOY_TARGET}}
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN_STAGING }}
+        run: |
+          echo "Desplegando {{PROJECT_NAME}} a staging..."
+          # Vercel: vercel pull --environment=preview --token $DEPLOY_TOKEN && vercel deploy --prebuilt --token $DEPLOY_TOKEN
+          # Fly.io: flyctl deploy --app {{PROJECT_NAME}}-staging
+          # VPS:    ssh deploy@staging.example.com "cd /srv/{{PROJECT_NAME}} && ./deploy.sh"
+
+      - name: Healthcheck
+        run: |
+          sleep 10
+          curl -fsSL https://staging.{{PROJECT_NAME}}.example.com{{HEALTH_PATH}} \
+            | tee /tmp/health.json
+          # Falla el job si status != "ok"
+          grep -q '"status":"ok"' /tmp/health.json
+
+      - name: Notify
+        if: always()
+        run: |
+          echo "Deploy staging de ${{ github.sha }}: ${{ job.status }}"

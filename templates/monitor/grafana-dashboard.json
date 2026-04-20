@@ -1,0 +1,42 @@
+{
+  "title": "{{PROJECT_NAME}} · core",
+  "description": "USE-method: utilisation, saturation, errors, latencia. Un vistazo = estado real.",
+  "tags": ["{{PROJECT_NAME}}", "apex"],
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Requests / sec",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum by (status) (rate(http_requests_total{job=\"{{PROJECT_NAME}}\"}[1m]))" }
+      ]
+    },
+    {
+      "title": "Latency (p50 · p95 · p99)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(http_request_duration_seconds_bucket{job=\"{{PROJECT_NAME}}\"}[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"{{PROJECT_NAME}}\"}[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"{{PROJECT_NAME}}\"}[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "title": "Error rate (5xx %)",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{status=~\"5..\",job=\"{{PROJECT_NAME}}\"}[5m])) / sum(rate(http_requests_total{job=\"{{PROJECT_NAME}}\"}[5m])) * 100" }
+      ]
+    },
+    {
+      "title": "CPU / RAM / Disk",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(process_cpu_seconds_total{job=\"{{PROJECT_NAME}}\"}[1m])", "legendFormat": "CPU" },
+        { "expr": "process_resident_memory_bytes{job=\"{{PROJECT_NAME}}\"} / 1024 / 1024", "legendFormat": "RAM (MB)" },
+        { "expr": "(node_filesystem_size_bytes - node_filesystem_avail_bytes) / node_filesystem_size_bytes * 100", "legendFormat": "Disk %" }
+      ]
+    }
+  ]
+}
