@@ -43,6 +43,7 @@ from mcp.types import TextContent, Tool
 
 from context_db import ApexContextDB
 from wiki_scaffold import create_wiki, append_log, update_index
+from portfolio_publish import generate as _portfolio_generate, DEFAULT_OUT_DIR as _PORTFOLIO_OUT_DIR
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
@@ -532,6 +533,45 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_set_portfolio_meta",
+            description=(
+                "Guarda campos portfolio_* en project_meta para alimentar el "
+                "publisher de vr-web. Usar durante la fase 14 o cuando el "
+                "usuario pida publicar el caso. Llaves esperadas sin prefijo "
+                "(ej. 'title', 'headline', 'problem', 'results', 'learnings', "
+                "'tags', 'repo_url', 'related_pack'...). El prefijo 'portfolio_' "
+                "se añade automáticamente. Listas/dicts se serializan como JSON."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "fields": {
+                        "type": "object",
+                        "description": "Diccionario {nombre_campo: valor}. Strings se guardan directo; listas/dicts como JSON.",
+                    },
+                },
+                "required": ["fields"],
+            },
+        ),
+        Tool(
+            name="apex_portfolio_draft",
+            description=(
+                "Genera (o actualiza) un archivo MDX de caso para vr-web/content/cases/ "
+                "a partir de project_meta. Por defecto escribe <slug>.mdx.draft para "
+                "que el usuario revise. Cuando el usuario apruebe, llamar con apply=True "
+                "para escribir el <slug>.mdx final (conservando campos manuales si ya existe)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string", "description": "Identificador del caso (ej. 'apex', 'dni')"},
+                    "apply": {"type": "boolean", "default": False, "description": "Si true, escribe el .mdx final. Si false, .mdx.draft para revisión."},
+                    "out_dir": {"type": "string", "description": "Directorio destino (default: ~/RoadToDevOps/vr-web/content/cases)"},
+                },
+                "required": ["slug"],
+            },
+        ),
+        Tool(
             name="apex_search_cross_project",
             description=(
                 "OBLIGATORIO antes de decisiones de diseño/arquitectura/stack. "
@@ -677,6 +717,55 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 for r in results:
                     lines.append(f"- [{r['source']}] {r['content'][:150]}")
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_set_portfolio_meta":
+            fields = arguments["fields"] or {}
+            if not isinstance(fields, dict):
+                result = [TextContent(type="text", text="fields debe ser un objeto {key: value}")]
+            else:
+                import json as _json
+                saved = []
+                for k, v in fields.items():
+                    key = k if k.startswith("portfolio_") else f"portfolio_{k}"
+                    if isinstance(v, (list, dict)):
+                        value = _json.dumps(v, ensure_ascii=False)
+                    elif isinstance(v, bool):
+                        value = "true" if v else "false"
+                    else:
+                        value = str(v) if v is not None else ""
+                    await db.set_meta(key, value)
+                    saved.append(key)
+                result = [TextContent(type="text", text=(
+                    f"Guardados {len(saved)} campos en project_meta: {', '.join(saved)}. "
+                    "Ejecuta apex_portfolio_draft para generar el MDX."
+                ))]
+
+        elif name == "apex_portfolio_draft":
+            slug = arguments["slug"]
+            apply = bool(arguments.get("apply", False))
+            out_dir = Path(arguments["out_dir"]) if arguments.get("out_dir") else _PORTFOLIO_OUT_DIR
+            root = _find_project_root()
+            ctx_db = root / ".apex" / "context.db"
+            if not ctx_db.exists():
+                result = [TextContent(type="text", text=(
+                    f"No se encontró {ctx_db}. Inicia el proyecto con apex_init_project primero."
+                ))]
+            else:
+                try:
+                    path = _portfolio_generate(slug, ctx_db, out_dir, apply=apply)
+                    content = path.read_text(encoding="utf-8")
+                    action = "Aplicado" if apply else "Draft generado"
+                    hint = (
+                        "\n\nRevisa el contenido y, si está bien, llama de nuevo con apply=true. "
+                        "Tras aplicar, commitear en vr-web y hacer push para que Vercel redeploy."
+                        if not apply else
+                        "\n\nAhora commitear en vr-web:\n"
+                        f"  cd ~/RoadToDevOps/vr-web && git add content/cases/{slug}.mdx && "
+                        f"git commit -m 'feat(cases): publica {slug} desde APEX' && git push"
+                    )
+                    result = [TextContent(type="text", text=f"{action}: {path}\n\n{content}{hint}")]
+                except FileNotFoundError as e:
+                    result = [TextContent(type="text", text=f"Error: {e}")]
 
         elif name == "apex_search_cross_project":
             query = arguments["query"]
