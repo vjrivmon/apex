@@ -434,3 +434,345 @@ def test_short_summary_with_findings() -> None:
     assert "1 propuesta" in s
     assert "stale_handoff" in s
     assert "0007.md" in s
+
+
+# ── Sprint 13.8 — Hub bridge: project_id, hub conn, schema ─────────────────
+
+import json as _json  # noqa: E402
+
+
+@pytest.fixture
+def hub_db(tmp_path: Path) -> Path:
+    """Crea hub.db vacío en una ruta temp y aplica el schema."""
+    p = tmp_path / "hub.db"
+    conn = sqlite3.connect(str(p))
+    conn.executescript(d._HUB_SCHEMA)
+    conn.commit()
+    conn.close()
+    return p
+
+
+def _insert_hub_verdict(hub_db: Path, *, project_id: str, original_id: int,
+                        phase: int, issues: list[str], status: str = "blocked",
+                        created_at: str = "2026-05-03T10:00:00") -> None:
+    conn = sqlite3.connect(str(hub_db))
+    try:
+        conn.execute(
+            "INSERT INTO grader_verdicts (project_id, original_id, phase, "
+            "question_index, status, issues_json, suggestion, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (project_id, original_id, phase, phase, status,
+             _json.dumps(issues), "test suggestion", created_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_project_id_from_root_lowercases(tmp_path: Path) -> None:
+    p = tmp_path / "MyProject"
+    p.mkdir()
+    assert d._project_id_from_root(p) == "myproject"
+
+
+def test_project_id_from_root_handles_kebab() -> None:
+    p = Path("/home/x/RoadToDevOps/TFG-Tutor-Virtual")
+    # No resuelve fs, sólo nombre
+    assert d._project_id_from_root(p) == "tfg-tutor-virtual"
+
+
+def test_resolve_hub_db_explicit_arg_wins(tmp_path: Path,
+                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    real = tmp_path / "real.db"
+    real.touch()
+    monkeypatch.setenv("APEX_HUB_DB_PATH", "/no/existe.db")
+    assert d._resolve_hub_db(real) == real
+
+
+def test_resolve_hub_db_env_overrides_default(tmp_path: Path,
+                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    custom = tmp_path / "custom.db"
+    custom.touch()
+    monkeypatch.setenv("APEX_HUB_DB_PATH", str(custom))
+    assert d._resolve_hub_db(None) == custom
+
+
+def test_resolve_hub_db_returns_none_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APEX_HUB_DB_PATH", "/path/that/never/exists.db")
+    assert d._resolve_hub_db(None) is None
+
+
+def test_hub_conn_returns_none_for_missing() -> None:
+    assert d._hub_conn(None) is None
+    assert d._hub_conn(Path("/no/existe.db")) is None
+
+
+def test_ensure_hub_schema_creates_tables(tmp_path: Path) -> None:
+    p = tmp_path / "fresh.db"
+    conn = sqlite3.connect(str(p))
+    assert d._ensure_hub_schema(conn) is True
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    conn.close()
+    assert {"doctor_tickets", "grader_verdicts"} <= tables
+
+
+# ── Sprint 13.8.B — sync_local_verdicts_to_hub ─────────────────────────────
+
+def test_sync_no_op_when_hub_missing(db_path: Path) -> None:
+    _insert_grader_verdict(db_path, phase=5, issues=["mock_data"])
+    assert d.sync_local_verdicts_to_hub(db_path, None, "apex") == 0
+    assert d.sync_local_verdicts_to_hub(db_path, Path("/no/x.db"), "apex") == 0
+
+
+def test_sync_copies_local_verdicts_to_hub(db_path: Path, hub_db: Path) -> None:
+    _insert_grader_verdict(db_path, phase=5, issues=["mock_data"],
+                           reasoning="usa datos hardcodeados")
+    n = d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    assert n == 1
+
+    conn = sqlite3.connect(str(hub_db))
+    rows = conn.execute(
+        "SELECT project_id, original_id, phase, status, issues_json, suggestion "
+        "FROM grader_verdicts"
+    ).fetchall()
+    conn.close()
+    assert len(rows) == 1
+    project_id, original_id, phase, status, issues_json, suggestion = rows[0]
+    assert project_id == "apex"
+    assert original_id == 1
+    assert phase == 5
+    assert status == "blocked"
+    assert _json.loads(issues_json) == ["mock_data"]
+    assert "usa datos hardcodeados" in suggestion
+
+
+def test_sync_maps_should_block_zero_to_ok(db_path: Path, hub_db: Path) -> None:
+    _insert_grader_verdict(db_path, phase=3, issues=[],
+                           should_block=0, reasoning="ok")
+    d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    conn = sqlite3.connect(str(hub_db))
+    status = conn.execute("SELECT status FROM grader_verdicts").fetchone()[0]
+    conn.close()
+    assert status == "ok"
+
+
+def test_sync_idempotent_on_repeated_runs(db_path: Path, hub_db: Path) -> None:
+    _insert_grader_verdict(db_path, phase=5, issues=["x"])
+    n1 = d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    n2 = d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    assert n1 == 1
+    assert n2 == 0
+    conn = sqlite3.connect(str(hub_db))
+    total = conn.execute("SELECT COUNT(*) FROM grader_verdicts").fetchone()[0]
+    conn.close()
+    assert total == 1
+
+
+def test_sync_separates_by_project_id(db_path: Path, hub_db: Path) -> None:
+    _insert_grader_verdict(db_path, phase=5, issues=["x"])
+    # Mismo original_id pero distinto project_id → debe coexistir
+    d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    d.sync_local_verdicts_to_hub(db_path, hub_db, "focusnow")
+    conn = sqlite3.connect(str(hub_db))
+    n = conn.execute("SELECT COUNT(*) FROM grader_verdicts").fetchone()[0]
+    conn.close()
+    assert n == 2
+
+
+def test_sync_creates_hub_schema_if_missing(db_path: Path, tmp_path: Path) -> None:
+    """Sync sobre hub.db existente pero sin tablas debe crearlas."""
+    bare = tmp_path / "bare.db"
+    sqlite3.connect(str(bare)).close()  # crea fichero sin schema
+    _insert_grader_verdict(db_path, phase=5, issues=["x"])
+    n = d.sync_local_verdicts_to_hub(db_path, bare, "apex")
+    assert n == 1
+
+
+# ── Sprint 13.8.C — A4 cross_project_patterns ─────────────────────────────
+
+def test_a4_no_op_when_hub_missing() -> None:
+    assert d.analyze_cross_project_patterns(None, "apex") == []
+    assert d.analyze_cross_project_patterns(Path("/no/x.db"), "apex") == []
+
+
+def test_a4_returns_empty_for_single_project(hub_db: Path) -> None:
+    _insert_hub_verdict(hub_db, project_id="apex", original_id=1, phase=5,
+                        issues=["mock_data"])
+    _insert_hub_verdict(hub_db, project_id="apex", original_id=2, phase=6,
+                        issues=["mock_data"])
+    assert d.analyze_cross_project_patterns(hub_db, "apex") == []
+
+
+def test_a4_detects_issue_in_two_projects(hub_db: Path) -> None:
+    _insert_hub_verdict(hub_db, project_id="focusnow", original_id=1,
+                        phase=5, issues=["mock_data"])
+    _insert_hub_verdict(hub_db, project_id="tfg-tutor-virtual",
+                        original_id=2, phase=4, issues=["mock_data"])
+    props = d.analyze_cross_project_patterns(hub_db, "apex")
+    assert len(props) == 1
+    p = props[0]
+    assert p.kind == "cross_project_pattern"
+    assert p.signature == "cross_project_pattern:mock_data"
+    assert p.evidence["projects"] == ["focusnow", "tfg-tutor-virtual"]
+    assert p.evidence["current_project"] == "apex"
+    assert "mock_data" in p.title
+
+
+def test_a4_ignores_non_blocked_status(hub_db: Path) -> None:
+    _insert_hub_verdict(hub_db, project_id="focusnow", original_id=1,
+                        phase=5, issues=["x"], status="ok")
+    _insert_hub_verdict(hub_db, project_id="apex", original_id=2,
+                        phase=5, issues=["x"], status="ok")
+    assert d.analyze_cross_project_patterns(hub_db, "apex") == []
+
+
+def test_a4_handles_malformed_issues_json(hub_db: Path) -> None:
+    conn = sqlite3.connect(str(hub_db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (project_id, original_id, phase, "
+        "status, issues_json, created_at) VALUES (?,?,?,?,?,?)",
+        ("focusnow", 1, 5, "blocked", "not-json{{", "2026-05-03"),
+    )
+    conn.commit()
+    conn.close()
+    # No debe crashear; sólo ignora la fila malformada
+    assert d.analyze_cross_project_patterns(hub_db, "apex") == []
+
+
+def test_a4_signature_stable_across_runs(hub_db: Path) -> None:
+    _insert_hub_verdict(hub_db, project_id="focusnow", original_id=1,
+                        phase=5, issues=["mock_data"])
+    _insert_hub_verdict(hub_db, project_id="apex", original_id=2,
+                        phase=5, issues=["mock_data"])
+    p1 = d.analyze_cross_project_patterns(hub_db, "apex")[0]
+    p2 = d.analyze_cross_project_patterns(hub_db, "apex")[0]
+    assert p1.signature_hash() == p2.signature_hash()
+
+
+# ── Sprint 13.8.D — post_ticket_to_hub ─────────────────────────────────────
+
+def _make_cp_proposal() -> "d.DoctorProposal":
+    return d.DoctorProposal(
+        kind="cross_project_pattern",
+        signature="cross_project_pattern:mock_data",
+        title="Issue mock_data en 2 proyectos",
+        body="## Patrón\n\nbody",
+        evidence={"issue": "mock_data",
+                  "projects": ["focusnow", "tfg-tutor-virtual"],
+                  "current_project": "apex"},
+    )
+
+
+def test_post_ticket_no_op_when_hub_missing() -> None:
+    p = _make_cp_proposal()
+    assert d.post_ticket_to_hub(p, None) is False
+    assert d.post_ticket_to_hub(p, Path("/no/x.db")) is False
+
+
+def test_post_ticket_inserts_first_time(hub_db: Path) -> None:
+    p = _make_cp_proposal()
+    assert d.post_ticket_to_hub(p, hub_db) is True
+    conn = sqlite3.connect(str(hub_db))
+    rows = conn.execute(
+        "SELECT kind, signature, source_projects_json, status FROM doctor_tickets"
+    ).fetchall()
+    conn.close()
+    assert len(rows) == 1
+    kind, sig, src_json, status = rows[0]
+    assert kind == "cross_project_pattern"
+    assert sig == "cross_project_pattern:mock_data"
+    assert _json.loads(src_json) == ["focusnow", "tfg-tutor-virtual"]
+    assert status == "open"
+
+
+def test_post_ticket_dedup_on_signature(hub_db: Path) -> None:
+    p = _make_cp_proposal()
+    assert d.post_ticket_to_hub(p, hub_db) is True
+    assert d.post_ticket_to_hub(p, hub_db) is False
+    conn = sqlite3.connect(str(hub_db))
+    n = conn.execute("SELECT COUNT(*) FROM doctor_tickets").fetchone()[0]
+    conn.close()
+    assert n == 1
+
+
+# ── Sprint 13.8.E — run_doctor con hub_db ──────────────────────────────────
+
+def test_run_doctor_backward_compat_no_hub(project_root: Path,
+                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sin hub_db arg y env apuntando a path inexistente: A1-A3 corren,
+    A4 devuelve [], no crashea."""
+    monkeypatch.setenv("APEX_HUB_DB_PATH", "/tmp/no-existe-hub-doctor.db")
+    run = d.run_doctor(project_root, trigger="manual", force=True)
+    assert run.status == "done"
+    # Cero propuestas en BD limpia
+    assert run.proposals_count == 0
+
+
+def test_run_doctor_with_hub_runs_a4_and_sync(project_root: Path,
+                                              db_path: Path,
+                                              hub_db: Path) -> None:
+    """Verdict local se sincroniza, A4 detecta cross-project, ticket posteado."""
+    # Local verdict en este proyecto
+    _insert_grader_verdict(db_path, phase=5, issues=["mock_data"])
+    # Verdicts del hub en otro proyecto (mismo issue)
+    _insert_hub_verdict(hub_db, project_id="focusnow", original_id=99,
+                        phase=5, issues=["mock_data"])
+
+    run = d.run_doctor(project_root, trigger="manual", force=True,
+                        hub_db=hub_db)
+    assert run.status == "done"
+
+    # Sync: el verdict local debería estar ahora en hub.grader_verdicts
+    project_id = d._project_id_from_root(project_root)
+    conn = sqlite3.connect(str(hub_db))
+    n_synced = conn.execute(
+        "SELECT COUNT(*) FROM grader_verdicts WHERE project_id=?",
+        (project_id,),
+    ).fetchone()[0]
+    # A4: debió detectar 'mock_data' en focusnow + project_id (este)
+    cp_props = [p for p in run.proposals if p.kind == "cross_project_pattern"]
+    # Ticket: posteado al hub
+    n_tickets = conn.execute(
+        "SELECT COUNT(*) FROM doctor_tickets WHERE kind='cross_project_pattern'"
+    ).fetchone()[0]
+    conn.close()
+
+    assert n_synced == 1
+    assert len(cp_props) == 1
+    assert n_tickets == 1
+
+
+def test_run_doctor_cp_proposal_only_posts_once(project_root: Path,
+                                                db_path: Path,
+                                                hub_db: Path) -> None:
+    """Re-ejecutar run_doctor con misma evidencia no duplica tickets."""
+    _insert_grader_verdict(db_path, phase=5, issues=["x"])
+    _insert_hub_verdict(hub_db, project_id="focusnow", original_id=1,
+                        phase=5, issues=["x"])
+    d.run_doctor(project_root, trigger="manual", force=True, hub_db=hub_db)
+    d.run_doctor(project_root, trigger="manual", force=True, hub_db=hub_db)
+    conn = sqlite3.connect(str(hub_db))
+    n = conn.execute(
+        "SELECT COUNT(*) FROM doctor_tickets"
+    ).fetchone()[0]
+    conn.close()
+    assert n == 1
+
+
+# ── render_run_md con cross_project_pattern ────────────────────────────────
+
+def test_render_run_md_cross_project_kind_title(project_root: Path) -> None:
+    p = d.DoctorProposal(
+        kind="cross_project_pattern",
+        signature="cross_project_pattern:x",
+        title="Issue x cross",
+        body="body",
+        evidence={"projects": ["a", "b"]},
+    )
+    run = d.DoctorRun(run_id=1, started_at="x", finished_at="y",
+                      proposals=[p], trigger="manual", status="done")
+    md = d.render_run_md(run, project_root)
+    assert "## Patrones cross-project (1)" in md
+    assert "Issue x cross" in md

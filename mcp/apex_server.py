@@ -1239,13 +1239,16 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="apex_doctor_run",
             description=(
-                "Sprint 13 — Apex-doctor: corre los 3 analizadores "
-                "(override_clusters, grader_block_patterns, stale_handoffs) "
-                "sobre context.db + .apex/handoff/ y escribe propuestas nuevas "
-                "en .apex/doctor/<run_id>.md. Idempotente vía signature UNIQUE. "
-                "Throttle de 1h entre runs (saltar con force=true). "
-                "Trigger normal: hook end-of-day-doctor.py al detectar frase "
-                "de cierre o sesión >3.5h."
+                "Sprint 13 — Apex-doctor: corre los 4 analizadores "
+                "(override_clusters, grader_block_patterns, stale_handoffs, "
+                "cross_project_patterns) sobre context.db + .apex/handoff/ + "
+                "hub.db y escribe propuestas nuevas en .apex/doctor/<run_id>.md. "
+                "Idempotente vía signature UNIQUE. Throttle de 1h entre runs "
+                "(saltar con force=true). Trigger normal: hook "
+                "end-of-day-doctor.py al detectar frase de cierre o "
+                "sesión >3.5h. A4 sincroniza grader_verdicts locales a "
+                "hub.grader_verdicts y postea cross_project_patterns como "
+                "tickets en hub.doctor_tickets."
             ),
             inputSchema={
                 "type": "object",
@@ -2236,6 +2239,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 project_root,
                 trigger=arguments.get("trigger", "manual"),
                 force=bool(arguments.get("force", False)),
+                hub_db=_HUB_DB if _HUB_DB.exists() else None,
             )
             lines = [_doctor.short_summary(run)]
             if run.status == "throttled":
