@@ -208,6 +208,22 @@ CREATE TABLE IF NOT EXISTS library_imports (
 
 CREATE INDEX IF NOT EXISTS idx_library_imports_source
     ON library_imports(source, imported_at DESC);
+
+-- Sprint 12: registro de invocaciones a roles especializados
+CREATE TABLE IF NOT EXISTS role_invocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    role TEXT NOT NULL,                  -- apex-architect | apex-implementer | ...
+    phase INTEGER,                       -- fase asociada (NULL si ad-hoc)
+    fired_at TEXT DEFAULT (datetime('now')),
+    context_summary TEXT DEFAULT '',
+    status TEXT DEFAULT 'invoked'        -- invoked | completed | failed
+);
+
+CREATE INDEX IF NOT EXISTS idx_role_invocations_phase
+    ON role_invocations(phase, fired_at DESC);
+CREATE INDEX IF NOT EXISTS idx_role_invocations_role
+    ON role_invocations(role, fired_at DESC);
 """
 
 PHASES = [

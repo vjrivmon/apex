@@ -53,6 +53,9 @@ Las herramientas se llaman `mcp__apex__apex_*`. Lista completa:
 | `mcp__apex__apex_design_md_init`         | **(Sprint 10.1)** Crea DESIGN.md estándar Google Labs |
 | `mcp__apex__apex_design_md_validate`     | **(Sprint 10.1)** Valida estructura + WCAG del DESIGN.md |
 | `mcp__apex__apex_research_competitor`    | **(Sprint 10.2)** Fetch + extract de competidor (chromium dump-dom) |
+| `mcp__apex__apex_install_roles`          | **(Sprint 12)** Instala 5 agentes en `~/.claude/agents/` |
+| `mcp__apex__apex_recommend_role`         | **(Sprint 12)** Rol especializado recomendado para una fase |
+| `mcp__apex__apex_invoke_role`            | **(Sprint 12)** Construye prompt + subagent_type para `Task` |
 | `mcp__apex__apex_security_gate`          | Gate AgentArmor 8-capas (fase 10.5)      |
 
 **Si `ToolSearch` no devuelve herramientas apex, avisa al usuario de que
@@ -165,6 +168,37 @@ El gate NO es una fase nueva, es un checkpoint entre fases 10 y 11.
 Cada fase tiene sub-pasos SECUENCIALES y OBLIGATORIOS ejecutados EN ORDEN.
 Nunca declarar una fase como `completed` sin TODOS sus sub-pasos
 verificados.
+
+---
+
+## Roles especializados (Sprint 12 — Virtual office)
+
+APEX expone 5 roles agente que viven como subagents nativos de Claude
+Code (`~/.claude/agents/apex-<role>.md`). El orquestador (Claude Code
+main) los dispara con el `Task` tool al entrar en cada fase.
+
+| Fase   | Rol               | Foco                                    |
+| ------ | ----------------- | --------------------------------------- |
+| 2-3    | `apex-architect`  | Decisiones de stack, design system, spec |
+| 4      | `apex-qa`         | Edge cases ANTES del código             |
+| 5-7    | `apex-implementer`| Scaffold + core + infraestructura       |
+| 8      | `apex-reviewer`   | Audit de integración (findings)         |
+| 9      | `apex-qa`         | Tests + cobertura + E2E Playwright      |
+| 10     | `apex-reviewer`   | Lint OWASP/STRIDE                        |
+| 11     | `apex-devops`     | Deploy + observabilidad + rollback       |
+
+Flujo de invocación:
+
+1. **Una vez por máquina**: `apex_install_roles()` escribe los 5 archivos
+   en `~/.claude/agents/`.
+2. **Al entrar en una fase**: `apex_recommend_role(phase=N)` devuelve el
+   rol asociado (None para fases 0, 1, 10.5, 12).
+3. **Para invocar**: `apex_invoke_role(role=..., phase=N,
+   context_summary=...)` devuelve `{subagent_type, description, prompt}`.
+   El orquestador llama a `Task` con esos parámetros.
+
+El hook `phase-gate.py` recuerda al orquestador la sugerencia cuando el
+`apex_set_phase` cambia a `in_progress` en una fase con rol asociado.
 
 ---
 

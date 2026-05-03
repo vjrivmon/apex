@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.3)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 12)
 
 ## Qué es APEX
 
@@ -89,7 +89,45 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 38 tools (Sprints 8-11 cierran esta deuda)
+- [x] **MCP server** completo con 41 tools (Sprints 8-12 cierran esta deuda)
+
+- [x] **Sprint 12 — Virtual office (5 roles agentes)** (2026-05-03)
+  - `lib/roles.py` (~430L): registry `ROLES` con 5 specs (`apex-architect`,
+    `apex-implementer`, `apex-reviewer`, `apex-qa`, `apex-devops`). Cada
+    spec lleva nombre, descripción con `<example>` (consumido por Claude
+    Code para decidir cuándo invocar), whitelist de tools (incluye
+    `mcp__apex__*`), modelo (`sonnet`), color y system prompt extenso con
+    reglas absolutas alineadas a APEX (anti-emojis, español con tildes,
+    `wiki/decisions/` antes de proponer stack, no datos mock, etc.).
+  - **Mapping fase → rol**: 2-3 architect · 4 qa · 5-7 implementer · 8
+    reviewer · 9 qa · 10 reviewer · 11 devops. Fases 0-1, 10.5, 12 sin
+    rol (las maneja el orquestador main).
+  - **Subagents nativos**: los archivos `.md` se instalan en
+    `~/.claude/agents/apex-<role>.md` con frontmatter YAML (name, csv de
+    tools, model, color, description-one-line). Claude Code los lee al
+    arrancar y los expone vía `Task(subagent_type="apex-...")`. APEX no
+    ejecuta el subagent — sólo prepara el prompt; quien dispara el `Task`
+    es Claude Code main. Sin coste API: todo bajo suscripción MAX.
+  - **Telemetría**: tabla nueva `role_invocations(id, session_id, role,
+    phase, fired_at, context_summary, status)` con auto-migración via
+    `_ensure_db_schema`. Helpers `record_invocation`,
+    `update_invocation_status`, `get_invocations`.
+  - 3 tools MCP nuevas (total: **41**):
+    - `apex_install_roles(force, agents_root)` — escribe los 5 archivos.
+      Idempotente.
+    - `apex_recommend_role(phase)` — devuelve rol + razón + flag
+      `installed`.
+    - `apex_invoke_role(role, phase, context_summary,
+      extra_instructions, session_id)` — construye `{subagent_type,
+      description, prompt}` listos para `Task` y registra la invocación.
+  - **Hook `phase-gate.py` extendido**: tras pasar el grader, si la
+    transición es a `in_progress` y la fase tiene rol asociado, imprime
+    a stderr (no bloqueante) la recomendación de invocar el rol. Tabla
+    `_PHASE_ROLE_MAP` duplicada en el hook para evitar import circular.
+  - 45 tests nuevos (`tests/test_roles.py`): registry, frontmatter YAML,
+    install/idempotencia/force, mapping fase→rol, build_invocation con
+    todos los placeholders, CRUD de telemetría, schema migration en BD
+    limpia. Total: **278 verde** en 4.4s.
 
 - [x] **Sprint 11.3 — Library Ingest (skills externas)** (2026-05-03)
   - `lib/library_ingest.py` (~700L): pipeline fetch → validate → propose para
@@ -219,7 +257,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 ### NO Completado (Sprints 11-13 del roadmap aprobado)
 
 - [x] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, ~~11.3 library_ingest~~ ✓)
-- [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
+- [x] **Sprint 12 — Virtual office** ✓ (5 roles: architect, implementer, reviewer, qa, devops como subagents nativos)
 - [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
 - [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
@@ -231,10 +269,11 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports | Verificado |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 38 tools      |
+| MCP server    | Python + mcp.server                | 41 tools      |
+| Roles (Sprint 12) | lib/roles.py (5 subagents)     | 45 tests      |
 | Hooks         | Python scripts                     | 6 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch) |
 | Library Ingest| lib/library_ingest.py (Sprint 11.3)| 35 tests, GitHub + library-skills CLI |
 | Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
@@ -246,7 +285,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 233 pasando   |
+| Tests totales | pytest                             | 278 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

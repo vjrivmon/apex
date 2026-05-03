@@ -28,6 +28,39 @@ TARGET_TOOLS = {
 }
 
 
+_PHASE_ROLE_MAP = {
+    2: "apex-architect", 3: "apex-architect",
+    4: "apex-qa",
+    5: "apex-implementer", 6: "apex-implementer", 7: "apex-implementer",
+    8: "apex-reviewer",
+    9: "apex-qa",
+    10: "apex-reviewer",
+    11: "apex-devops",
+}
+
+
+def _suggest_role_for_phase(phase: int) -> None:
+    """Imprime sugerencia a stderr si la fase tiene rol asociado.
+
+    No bloquea (exit 0 lo controla el caller). Falla silenciosa si stderr
+    no está disponible.
+    """
+    role = _PHASE_ROLE_MAP.get(phase)
+    if not role:
+        return
+    try:
+        print(
+            f"[phase-gate] Fase {phase} recomienda invocar el rol {role}.\n"
+            f"  → apex_invoke_role(role='{role}', phase={phase}, "
+            "context_summary='...')\n"
+            "  → Después: dispara `Task` con el subagent_type devuelto.\n"
+            "  Si los agentes no están instalados: apex_install_roles().",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass
+
+
 def _find_context_db(start: Path) -> Path | None:
     """Busca .apex/context.db hacia arriba."""
     for parent in [start, *start.parents]:
@@ -97,6 +130,10 @@ def main() -> int:
 
     verdict = _get_latest_verdict(db_path, blocking_phase)
     if not verdict or not verdict["should_block"]:
+        # Sprint 12: si la transición es a in_progress y la nueva fase
+        # tiene rol asociado, sugiere invocarlo (no bloqueante).
+        if new_status == "in_progress":
+            _suggest_role_for_phase(int(phase_number))
         return 0
 
     # Bloqueo: stderr → usuario, exit 2 → tool no se ejecuta
