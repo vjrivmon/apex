@@ -44,6 +44,7 @@ import token_filter as _tf  # noqa: E402
 import design_md as _design  # noqa: E402
 import research as _research  # noqa: E402
 import browser_trace as _browser  # noqa: E402
+import skill_forge as _forge  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -1099,6 +1100,60 @@ async def list_tools() -> list[Tool]:
                 "required": ["action"],
             },
         ),
+        Tool(
+            name="apex_skill_forge_scan",
+            description=(
+                "Sprint 11.2 — Skill Forge: corre los 3 detectores (grader_block, "
+                "tool_call, cross_project) sobre context.db + hub.db y escribe "
+                "propuestas nuevas en .apex/skill-proposals/<slug>.md. Devuelve "
+                "lista de slugs nuevos, ya propuestos y rechazados. Idempotente: "
+                "no duplica propuestas ni propone slugs rechazados."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include_cross_project": {
+                        "type": "boolean", "default": True,
+                        "description": "Si False, omite el detector D3 (cross-project).",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="apex_skill_forge_approve",
+            description=(
+                "Sprint 11.2 — Aprueba una propuesta de Skill Forge: extrae el "
+                "draft de SKILL.md y lo mueve a ~/.claude/skills/<slug>/SKILL.md. "
+                "Borra la propuesta original."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string", "description": "Slug de la propuesta"},
+                    "skills_root": {
+                        "type": "string", "default": "~/.claude/skills",
+                        "description": "Directorio raíz donde instalar la skill",
+                    },
+                },
+                "required": ["slug"],
+            },
+        ),
+        Tool(
+            name="apex_skill_forge_reject",
+            description=(
+                "Sprint 11.2 — Rechaza una propuesta de Skill Forge: registra el "
+                "slug en skill_forge_rejections para que no vuelva a proponerse "
+                "y borra la propuesta original."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string"},
+                    "reason": {"type": "string", "description": "Motivo del rechazo"},
+                },
+                "required": ["slug", "reason"],
+            },
+        ),
     ]
 
 
@@ -1869,6 +1924,60 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result = [TextContent(type="text", text=state.to_json())]
             else:
                 result = [TextContent(type="text", text=f"action desconocida: {action}")]
+
+        elif name == "apex_skill_forge_scan":
+            project_root = _find_project_root()
+            include_cp = bool(arguments.get("include_cross_project", True))
+            hub_path = _HUB_DB if include_cp else None
+            project_id = project_root.name
+            patterns = _forge.scan_all(project_root, hub_db_path=hub_path,
+                                        project_id=project_id)
+            written: list[str] = []
+            existing: list[str] = []
+            rejected: list[str] = []
+            db_path = _forge.context_db_path(project_root)
+            for pat in patterns:
+                slug = pat.slug()
+                if _forge.is_rejected(db_path, slug):
+                    rejected.append(slug)
+                    continue
+                prop_path = _forge.proposals_dir(project_root) / f"{slug}.md"
+                if prop_path.exists():
+                    existing.append(slug)
+                    continue
+                _forge.write_proposal(_forge.propose(pat), project_root)
+                written.append(slug)
+            lines = [f"Skill Forge scan — {len(patterns)} patrón(es) detectado(s)"]
+            if written:
+                lines.append(f"  ○ propuestas nuevas ({len(written)}):")
+                lines += [f"    - {s}" for s in written]
+            if existing:
+                lines.append(f"  · ya propuestos ({len(existing)}):")
+                lines += [f"    - {s}" for s in existing]
+            if rejected:
+                lines.append(f"  ✗ rechazados previamente ({len(rejected)}):")
+                lines += [f"    - {s}" for s in rejected]
+            if not (written or existing or rejected):
+                lines.append("  (sin patrones recurrentes detectados)")
+            result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_skill_forge_approve":
+            project_root = _find_project_root()
+            slug = arguments["slug"]
+            skills_root = arguments.get("skills_root", "~/.claude/skills")
+            target = _forge.approve(slug, project_root, skills_root=skills_root)
+            result = [TextContent(type="text", text=(
+                f"○ Skill aprobado: {slug}\n  → {target}"
+            ))]
+
+        elif name == "apex_skill_forge_reject":
+            project_root = _find_project_root()
+            slug = arguments["slug"]
+            reason = arguments["reason"]
+            _forge.reject(slug, reason, project_root)
+            result = [TextContent(type="text", text=(
+                f"✗ Skill rechazado: {slug}\n  motivo: {reason}"
+            ))]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]

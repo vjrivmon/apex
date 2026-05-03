@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.1)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.2)
 
 ## Qué es APEX
 
@@ -91,6 +91,28 @@ en `~/RoadToDevOps/apex-hub/`).
 
 - [x] **MCP server** completo con 34 tools (Sprints 8-11 cierran esta deuda)
 
+- [x] **Sprint 11.2 — Skill Forge auto-detector** (2026-05-03)
+  - `lib/skill_forge.py` (~440L): tres detectores `scan_grader_blocks` (D1
+    >=3 fases con mismo issue bloqueante), `scan_tool_call_patterns` (D2
+    secuencias de 3 tools repetidas >=5 veces) y `scan_cross_project_repeats`
+    (D3 decisiones que aparecen en >=2 proyectos via `hub.db`).
+  - Builders de propuesta deterministas (slug = sha1(signature)[:8]),
+    output a `.apex/skill-proposals/<slug>.md`. Aprobación con
+    `apex_skill_forge_approve(slug)` que mueve a `~/.claude/skills/<slug>/`;
+    rechazo con `apex_skill_forge_reject(slug, reason)` que registra en
+    `skill_forge_rejections` para no proponer lo mismo.
+  - Schema: tablas `tool_call_log` (alimenta D2) y `skill_forge_rejections`
+    (auto-migración via `_ensure_db_schema`).
+  - Hook `.claude/hooks/skill-forge-watch.py` (PostToolUse): inserta una
+    fila en `tool_call_log` por cada call no-skip y dispara `scan_and_write`
+    cuando el tool es trigger (`apex_set_phase`/`apex_grader_evaluate`/
+    `apex_add_decision`/`apex_complete_step`) o cuando han pasado >=25 calls
+    desde el último scan (high-water mark en `project_meta.forge_last_scan_id`).
+    Timeout wall-clock 2s, NO bloquea, sólo stderr `[skill-forge] N propuesta(s) nueva(s): ...`.
+  - 3 tools MCP nuevas: `apex_skill_forge_scan`, `apex_skill_forge_approve`,
+    `apex_skill_forge_reject`. Total tools: **37**.
+  - 27 tests nuevos. Total: **198 verde** en 2.8s.
+
 - [x] **Sprint 11.1 — Browser trace CDP nativo** (2026-05-03)
   - `lib/browser_trace.py` (~520L): launch_chrome con
     `--remote-debugging-port`, `_CDPSession` send/fire/drain sobre
@@ -156,7 +178,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 ### NO Completado (Sprints 11-13 del roadmap aprobado)
 
-- [ ] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, 11.2 skill_forge auto-creation, 11.3 ingest library-skills.io)
+- [ ] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, 11.3 ingest library-skills.io)
 - [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
 - [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
@@ -169,11 +191,12 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive | Verificado |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 34 tools      |
-| Hooks         | Python scripts                     | 5 (session, design-lint, phase-gate, context-watch, post-tool-archive) |
+| MCP server    | Python + mcp.server                | 37 tools      |
+| Hooks         | Python scripts                     | 6 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch) |
+| Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
 | Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
 | Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
 | /goal loop    | lib/goal_loop.py (Sprint 8.2)      | 18 tests      |
@@ -182,7 +205,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 171 pasando   |
+| Tests totales | pytest                             | 198 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

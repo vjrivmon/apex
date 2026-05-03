@@ -178,6 +178,22 @@ CREATE TABLE IF NOT EXISTS tool_output_archive (
 
 CREATE INDEX IF NOT EXISTS idx_archive_created ON tool_output_archive(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_archive_tool ON tool_output_archive(tool, created_at DESC);
+
+-- Skill Forge (Sprint 11.2): log de tool calls para detector D2 + rechazos
+CREATE TABLE IF NOT EXISTS tool_call_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool TEXT NOT NULL,
+    args_summary TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_call_created ON tool_call_log(id DESC);
+
+CREATE TABLE IF NOT EXISTS skill_forge_rejections (
+    slug TEXT PRIMARY KEY,
+    reason TEXT NOT NULL,
+    rejected_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 PHASES = [
