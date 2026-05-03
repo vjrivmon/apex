@@ -63,7 +63,7 @@ en `~/RoadToDevOps/apex-hub/`).
   - Detecta proyecto nuevo vs existente
   - 11 errores documentados a evitar
 
-- [x] **19 Skills** (post Sprint 8)
+- [x] **23 Skills** (19 post Sprint 8 + 4 del Sprint 14: grill-with-docs, tdd, diagnose, improve-architecture)
   - Core flow: `socratic`, `architect`, `flow-guardian` (v2 outcome-based),
     `iterate`, `onboard-existing`, `reverse-engineer`, `tools-integration`
   - Diseño: `design-system`, `design-research`, `brand-identity`
@@ -90,6 +90,48 @@ en `~/RoadToDevOps/apex-hub/`).
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
 - [x] **MCP server** completo con 42 tools (Sprints 8-13 cierran esta deuda)
+
+- [x] **Sprint 14 — Skills For Real Engineers (port Matt Pocock)** (2026-05-03)
+  - 4 skills nuevas adaptadas del repo `mattpocock/skills` (49k⭐, MIT) que
+    fijan las cuatro formas en que falla un agente de codificación: **plan
+    confuso**, **verbosidad innecesaria**, **código que parece terminado
+    pero rompe**, **entropía arquitectónica progresiva**.
+  - **`skills/grill-with-docs/`** (3 archivos, 223L): SKILL.md +
+    CONTEXT-FORMAT.md + ADR-FORMAT.md. Sesión de interrogatorio que
+    confronta el plan contra el modelo de dominio y actualiza
+    `CONTEXT.md` y ADRs inline. **Puente APEX**: prefiere
+    `wiki/decisions/` (formato `YYYY-MM-DD-slug.md`) sobre `docs/adr/`
+    cuando existe. Crea archivos perezosamente.
+  - **`skills/tdd/`** (6 archivos, 305L): SKILL.md + tests.md + mocking.md
+    + deep-modules.md + interface-design.md + refactoring.md. Bucle
+    red-green-refactor estricto, una rebanada vertical cada vez. Anti-
+    patrón explícito: rebanado horizontal (todos los tests primero, todo
+    el código después) produce tests basura insensibles a cambios reales.
+    Apoya el vocabulario en `wiki/entities/concepts/` y respeta
+    `wiki/decisions/`.
+  - **`skills/diagnose/`** (2 archivos, 162L): SKILL.md +
+    `scripts/hitl-loop.template.sh`. Bucle de diagnóstico de 6 fases:
+    feedback loop → reproduce → hipotetiza (3-5 ranqueadas y falsables) →
+    instrumenta (logs `[DEBUG-...]` etiquetados, una variable a la vez)
+    → fix + test de regresión → cleanup + post-mortem. **Puente APEX**:
+    al cerrar, llama a `apex_add_error` para que A1 `override_clusters`
+    detecte recurrencia.
+  - **`skills/improve-architecture/`** (4 archivos, 207L): SKILL.md +
+    LANGUAGE.md + DEEPENING.md + INTERFACE-DESIGN.md. Vocabulario
+    canónico (module, interface, depth, seam, adapter, leverage,
+    locality), test de borrado, regla "un adapter = seam hipotético, dos
+    = seam real". Pattern `Design It Twice` con 3+ sub-agentes paralelos.
+    **Puente APEX**: usa `wiki/decisions/` como ADRs y vocabulario de
+    `wiki/entities/concepts/` para nombrar módulos profundizados.
+  - **Adaptaciones**: prosa en español (estilo APEX), terminología técnica
+    en inglés (estándar de la industria), descripciones bilingües ES/EN
+    en frontmatter para maximizar triggers, sin emojis, todos los puentes
+    a `wiki/decisions/` documentados.
+  - **Total skills**: **23** (eran 19; +4 de Sprint 14). Sin migración de
+    schema, sin tools MCP nuevas, sin hooks nuevos. Documentación pura.
+  - **Sin tests nuevos**: skills son markdown estáticos consumidos por
+    Claude Code; no hay código Python que validar. Suite completa corre
+    en **399 verde** en 5.88s tras el sprint.
 
 - [x] **Sprint 13.9 — usage_data_signals (cruce con `/insights`)** (2026-05-03)
   - `lib/usage_data_reader.py` (~165L): reader puro de
@@ -380,7 +422,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | Usage data reader (Sprint 13.9) | lib/usage_data_reader.py — `~/.claude/usage-data/` cruce con grader vía heurística temporal | 8 tests |
 | Apex-doctor A5+A6 (Sprint 13.9) | grader_false_positives + friction_recurrence | 12 tests |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
-| Skills        | Markdown (SKILL.md)                | 19 skills     |
+| Skills        | Markdown (SKILL.md)                | 23 skills (incl. 4 port Matt Pocock S14: grill-with-docs, tdd, diagnose, improve-architecture) |
 | MCP server    | Python + mcp.server                | 42 tools      |
 | Apex-doctor (Sprint 13) | lib/apex_doctor.py + lib/wrapup_phrases.py | 72 tests, 3 analizadores |
 | Roles (Sprint 12) | lib/roles.py (5 subagents)     | 45 tests      |
