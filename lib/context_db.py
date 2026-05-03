@@ -224,6 +224,38 @@ CREATE INDEX IF NOT EXISTS idx_role_invocations_phase
     ON role_invocations(phase, fired_at DESC);
 CREATE INDEX IF NOT EXISTS idx_role_invocations_role
     ON role_invocations(role, fired_at DESC);
+
+-- Sprint 13 — Apex-doctor: loop de auto-mejora periódico
+CREATE TABLE IF NOT EXISTS doctor_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT DEFAULT (datetime('now')),
+    finished_at TEXT,
+    proposals_count INTEGER DEFAULT 0,
+    trigger TEXT DEFAULT 'manual',
+    status TEXT DEFAULT 'running'
+);
+
+CREATE INDEX IF NOT EXISTS idx_doctor_runs_started
+    ON doctor_runs(started_at DESC);
+
+CREATE TABLE IF NOT EXISTS doctor_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER REFERENCES doctor_runs(id),
+    kind TEXT NOT NULL,
+    signature TEXT NOT NULL UNIQUE,
+    title TEXT DEFAULT '',
+    body TEXT NOT NULL,
+    status TEXT DEFAULT 'open',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_doctor_proposals_kind
+    ON doctor_proposals(kind, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS session_starts (
+    session_id TEXT PRIMARY KEY,
+    started_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 PHASES = [

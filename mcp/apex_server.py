@@ -47,6 +47,7 @@ import browser_trace as _browser  # noqa: E402
 import skill_forge as _forge  # noqa: E402
 import library_ingest as _library  # noqa: E402
 import roles as _roles  # noqa: E402
+import apex_doctor as _doctor  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -1236,6 +1237,33 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_doctor_run",
+            description=(
+                "Sprint 13 — Apex-doctor: corre los 3 analizadores "
+                "(override_clusters, grader_block_patterns, stale_handoffs) "
+                "sobre context.db + .apex/handoff/ y escribe propuestas nuevas "
+                "en .apex/doctor/<run_id>.md. Idempotente vía signature UNIQUE. "
+                "Throttle de 1h entre runs (saltar con force=true). "
+                "Trigger normal: hook end-of-day-doctor.py al detectar frase "
+                "de cierre o sesión >3.5h."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "force": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Salta el throttle de 1h.",
+                    },
+                    "trigger": {
+                        "type": "string",
+                        "default": "manual",
+                        "description": "Etiqueta del trigger (manual|wrapup_phrase|session_age|cron).",
+                    },
+                },
+            },
+        ),
+        Tool(
             name="apex_ingest_library_skills",
             description=(
                 "Sprint 11.3 — Descubre e ingiere skills externas desde dos "
@@ -2201,6 +2229,33 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         "apex_install_roles()."
                     )
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_doctor_run":
+            project_root = _find_project_root()
+            run = _doctor.run_doctor(
+                project_root,
+                trigger=arguments.get("trigger", "manual"),
+                force=bool(arguments.get("force", False)),
+            )
+            lines = [_doctor.short_summary(run)]
+            if run.status == "throttled":
+                lines.append(f"  motivo: {run.skipped_reason}")
+                lines.append("  fuerza con: apex_doctor_run(force=True)")
+            elif run.status == "done":
+                lines.append(
+                    f"  inicio: {run.started_at} | fin: {run.finished_at}"
+                )
+                if run.proposals_count > 0:
+                    rel = (
+                        Path(".apex") / "doctor" / f"{run.run_id:04d}.md"
+                    )
+                    lines.append(f"  report: {rel}")
+                    by_kind: dict[str, int] = {}
+                    for p in run.proposals:
+                        by_kind[p.kind] = by_kind.get(p.kind, 0) + 1
+                    for kind, count in by_kind.items():
+                        lines.append(f"    - {kind}: {count}")
+            result = [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "apex_ingest_library_skills":
             project_root = _find_project_root()

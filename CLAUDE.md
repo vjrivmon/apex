@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 12)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 13)
 
 ## Qué es APEX
 
@@ -89,7 +89,55 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 41 tools (Sprints 8-12 cierran esta deuda)
+- [x] **MCP server** completo con 42 tools (Sprints 8-13 cierran esta deuda)
+
+- [x] **Sprint 13 — Apex-doctor (auto-mejora dirigida por intención)** (2026-05-03)
+  - `lib/apex_doctor.py` (~530L): tres analizadores síncronos sobre
+    `context.db` + `.apex/handoff/`. **A1 override_clusters** detecta
+    errores con `recurrence_count>=3` o severidad `critical|high` (1
+    propuesta por error, no agrupado, para que la signature sea estable).
+    **A2 grader_block_patterns** agrupa issues bloqueantes que aparecen
+    en >=2 fases distintas (umbral más bajo que el D1 del skill_forge:
+    aquí la propuesta es afinar la regla del grader, no crear skill).
+    **A3 stale_handoffs** marca handoffs en `.apex/handoff/` con mtime
+    >7 días.
+  - **Idempotencia**: cada `DoctorProposal` lleva una `signature` canónica;
+    `doctor_proposals.signature UNIQUE` rechaza duplicados silenciosamente
+    vía `INSERT OR IGNORE`. Re-ejecutar el doctor sobre la misma evidencia
+    devuelve `proposals_count=0` sin tocar nada.
+  - **Throttle**: `MIN_RUN_GAP_SECONDS=3600` (1h) entre runs;
+    `is_throttled()` consulta `last_run_at()` y devuelve un `DoctorRun`
+    con `status='throttled'` + `skipped_reason` cuando aplica. `force=True`
+    lo salta.
+  - **Trigger semántico (no cron)**: hook nuevo
+    `.claude/hooks/end-of-day-doctor.py` (UserPromptSubmit). Dos
+    disparadores: (a) frase de cierre detectada vía
+    `lib/wrapup_phrases.py` (lista cerrada de 25 frases ES con normalización
+    NFD para acentos y matching case-insensitive con límites de palabra),
+    (b) edad de sesión >`APEX_DOCTOR_SESSION_AGE_HOURS` (default 3.5h)
+    medida desde `session_starts.started_at`. Ambos triggers etiquetan el
+    run en `doctor_runs.trigger`.
+  - **Acción del hook**: corre `apex_doctor.run_doctor()` con timeout
+    wall-clock 8s, escribe handoff via `lib/handoff.serialize_handoff()`,
+    e inyecta a stdout (additionalContext) un bloque con resumen + ruta del
+    MD + instrucción explícita de mencionar hallazgos al usuario. NO
+    bloquea: si falla, sólo emite aviso y deja seguir.
+  - **Schema nuevo**: tablas `doctor_runs(id, started_at, finished_at,
+    proposals_count, trigger, status)`, `doctor_proposals(id, run_id,
+    kind, signature UNIQUE, title, body, status, created_at)`,
+    `session_starts(session_id PK, started_at)`. Auto-migración via el
+    `_SCHEMA` constant + `_ensure_db_schema` ya existente.
+  - **MD report**: `render_run_md` separa propuestas por kind; con 0
+    hallazgos imprime "Sin hallazgos. APEX está limpio en estos
+    analizadores." (decisión de diseño: silencio total no, mensaje
+    explícito sí — petición Vicente).
+  - 1 tool MCP nueva: `apex_doctor_run(force=False, trigger='manual')`.
+    Total tools: **42**.
+  - 72 tests nuevos (`tests/test_apex_doctor.py` 38 + `test_wrapup_phrases.py`
+    34): schema migration, los 3 analizadores con datos sintéticos,
+    idempotencia, throttle 1h, session_starts CRUD + age, render MD vacío
+    vs con propuestas, lista cerrada normalizada, matching ES con
+    acentos/mayúsculas. Total: **350 verde** en 5.6s.
 
 - [x] **Sprint 12 — Virtual office (5 roles agentes)** (2026-05-03)
   - `lib/roles.py` (~430L): registry `ROLES` con 5 specs (`apex-architect`,
@@ -258,7 +306,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 - [x] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, ~~11.3 library_ingest~~ ✓)
 - [x] **Sprint 12 — Virtual office** ✓ (5 roles: architect, implementer, reviewer, qa, devops como subagents nativos)
-- [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
+- [x] **Sprint 13 — Apex-doctor** ✓ (auto-mejora dirigida por intención: hook UserPromptSubmit con triggers semánticos + edad de sesión, 3 analizadores)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
 - [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
 - [ ] **Integración Pencil MCP** — Diseños automáticos en fase 2
@@ -269,12 +317,13 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations | Verificado |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations + doctor_runs + doctor_proposals + session_starts | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 41 tools      |
+| MCP server    | Python + mcp.server                | 42 tools      |
+| Apex-doctor (Sprint 13) | lib/apex_doctor.py + lib/wrapup_phrases.py | 72 tests, 3 analizadores |
 | Roles (Sprint 12) | lib/roles.py (5 subagents)     | 45 tests      |
-| Hooks         | Python scripts                     | 6 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch) |
+| Hooks         | Python scripts                     | 7 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch, end-of-day-doctor) |
 | Library Ingest| lib/library_ingest.py (Sprint 11.3)| 35 tests, GitHub + library-skills CLI |
 | Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
 | Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
@@ -285,7 +334,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 278 pasando   |
+| Tests totales | pytest                             | 350 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

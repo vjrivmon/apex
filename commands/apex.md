@@ -56,6 +56,7 @@ Las herramientas se llaman `mcp__apex__apex_*`. Lista completa:
 | `mcp__apex__apex_install_roles`          | **(Sprint 12)** Instala 5 agentes en `~/.claude/agents/` |
 | `mcp__apex__apex_recommend_role`         | **(Sprint 12)** Rol especializado recomendado para una fase |
 | `mcp__apex__apex_invoke_role`            | **(Sprint 12)** Construye prompt + subagent_type para `Task` |
+| `mcp__apex__apex_doctor_run`             | **(Sprint 13)** Apex-doctor: 3 analizadores + propuestas |
 | `mcp__apex__apex_security_gate`          | Gate AgentArmor 8-capas (fase 10.5)      |
 
 **Si `ToolSearch` no devuelve herramientas apex, avisa al usuario de que
@@ -199,6 +200,34 @@ Flujo de invocación:
 
 El hook `phase-gate.py` recuerda al orquestador la sugerencia cuando el
 `apex_set_phase` cambia a `in_progress` en una fase con rol asociado.
+
+---
+
+## Apex-doctor (Sprint 13 — auto-mejora)
+
+APEX corre un loop de auto-mejora cuando detecta cierre de día. No es un
+cron: el hook `end-of-day-doctor.py` (UserPromptSubmit) dispara dos
+triggers:
+
+- **Frase de cierre**: `lib/wrapup_phrases.py` lista frases ES como
+  "he acabado por hoy", "lo dejo aquí", "hasta mañana", "me desconecto".
+- **Edad de sesión**: si han pasado >3.5h desde el primer prompt de la
+  sesión (anticipa el límite ~5h de Claude Code MAX).
+
+Cuando dispara, el hook ejecuta:
+
+1. `apex_doctor_run(trigger=...)` con throttle 1h (saltable con `force=True`).
+   Tres analizadores: **A1 override_clusters** (errores con
+   `recurrence_count>=3` o severidad `critical|high`), **A2
+   grader_block_patterns** (issues bloqueantes en >=2 fases), **A3
+   stale_handoffs** (handoffs con mtime >7 días).
+2. Escribe propuestas nuevas en `.apex/doctor/<run_id>.md` (idempotente
+   vía `signature UNIQUE` en `doctor_proposals`).
+3. Serializa el handoff de la sesión a `.apex/handoff/<session_id>.md`.
+4. Inyecta resumen al agente vía stdout con instrucción: *menciona los
+   hallazgos a Vicente antes de cerrar*.
+
+Para correr manualmente: `apex_doctor_run(force=True)`.
 
 ---
 
