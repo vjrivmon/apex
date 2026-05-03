@@ -146,6 +146,23 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Grader verdicts: evaluación outcome-based al cerrar una fase (Sprint 8)
+CREATE TABLE IF NOT EXISTS grader_verdicts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phase INTEGER NOT NULL,
+    quality INTEGER NOT NULL,  -- 1=poor, 2=acceptable, 3=good, 4=excellent
+    category TEXT,             -- coding, design, integration, deploy, ...
+    issues TEXT DEFAULT '[]',  -- JSON array: ["mock_data", "no_git_init", ...]
+    should_block INTEGER DEFAULT 0,  -- 1 = bloquea apex_set_phase
+    reasoning TEXT NOT NULL,
+    evidence_hash TEXT,        -- sha1 del evidence usado (idempotencia)
+    deterministic_checks TEXT DEFAULT '{}',  -- JSON con {check_name: pass|fail}
+    llm_judged INTEGER DEFAULT 0,  -- 1 si hubo evaluación LLM además de determinista
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_grader_phase ON grader_verdicts(phase, created_at DESC);
 """
 
 PHASES = [
@@ -947,6 +964,66 @@ class ApexContextDB:
             await db.commit()
         except Exception:
             pass
+
+    # ── Grader verdicts (Sprint 8) ──
+
+    async def add_verdict(
+        self,
+        phase: int,
+        quality: int,
+        reasoning: str,
+        category: str | None = None,
+        issues: list[str] | None = None,
+        should_block: bool = False,
+        evidence_hash: str | None = None,
+        deterministic_checks: dict | None = None,
+        llm_judged: bool = False,
+    ) -> int:
+        import json as _json
+        async with self._conn() as db:
+            cur = await db.execute(
+                "INSERT INTO grader_verdicts (phase, quality, category, issues, "
+                "should_block, reasoning, evidence_hash, deterministic_checks, llm_judged) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (phase, quality, category, _json.dumps(issues or []),
+                 1 if should_block else 0, reasoning, evidence_hash,
+                 _json.dumps(deterministic_checks or {}), 1 if llm_judged else 0))
+            await db.commit()
+            return cur.lastrowid
+
+    async def get_latest_verdict(self, phase: int) -> dict | None:
+        import json as _json
+        async with self._conn() as db:
+            rows = await db.execute_fetchall(
+                "SELECT id, phase, quality, category, issues, should_block, "
+                "reasoning, evidence_hash, deterministic_checks, llm_judged, created_at "
+                "FROM grader_verdicts WHERE phase=? ORDER BY created_at DESC LIMIT 1",
+                (phase,))
+        if not rows:
+            return None
+        r = rows[0]
+        return {
+            "id": r[0], "phase": r[1], "quality": r[2], "category": r[3],
+            "issues": _json.loads(r[4] or "[]"),
+            "should_block": bool(r[5]), "reasoning": r[6],
+            "evidence_hash": r[7],
+            "deterministic_checks": _json.loads(r[8] or "{}"),
+            "llm_judged": bool(r[9]), "created_at": r[10],
+        }
+
+    async def list_verdicts(self, limit: int = 20) -> list[dict]:
+        import json as _json
+        async with self._conn() as db:
+            rows = await db.execute_fetchall(
+                "SELECT id, phase, quality, category, issues, should_block, "
+                "reasoning, llm_judged, created_at FROM grader_verdicts "
+                "ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [{
+            "id": r[0], "phase": r[1], "quality": r[2], "category": r[3],
+            "issues": _json.loads(r[4] or "[]"),
+            "should_block": bool(r[5]), "reasoning": r[6],
+            "llm_judged": bool(r[7]), "created_at": r[8],
+        } for r in rows]
 
     # ── Convenience: get_full_context alias ──
 
