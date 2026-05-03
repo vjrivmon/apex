@@ -14,9 +14,16 @@ Analizadores:
   o crear una skill que lo evite.
 - **A3 stale_handoffs** — handoffs en `.apex/handoff/` con mtime >7 días que
   no fueron rehidratados. Marca para limpieza.
+- **A4 cross_project_patterns** (Sprint 13.8) — errores o issues del grader
+  agregados en `hub.db` que aparecen en >=2 proyectos APEX distintos.
+  Genera propuestas para promoverlos a guideline cross-project. Antes de
+  correr, sincroniza los verdicts locales a `hub.db` para que estén
+  disponibles. Best-effort: si `hub.db` no existe, A4 se salta sin crashear.
 
 Idempotencia: cada propuesta lleva una `signature` canónica. Si ya existe en
 `doctor_proposals` con esa signature, no se duplica (UNIQUE constraint).
+Las propuestas `cross_project_pattern` se postean además a
+`doctor_tickets` en `hub.db` (también UNIQUE por signature).
 
 Throttle: `MIN_RUN_GAP_SECONDS` (default 3600s = 1h) entre ejecuciones para
 evitar doble-disparo. `force=True` lo salta.
@@ -43,6 +50,40 @@ A1_HIGH_SEVERITIES = {"critical", "high"}
 A2_MIN_PHASES = 2                   # issue del grader en >=2 fases
 A3_STALE_DAYS = 7                   # handoff sin tocar >7 días = stale
 A2_LOOKBACK = 100                   # últimos N verdicts del grader
+A4_MIN_PROJECTS = 2                 # cross-project pattern: issue en >=2 proyectos
+A4_LOOKBACK = 500                   # últimos N verdicts del hub al cruzar
+
+HUB_DB_DEFAULT = Path.home() / "RoadToDevOps" / "apex-hub" / "data" / "hub.db"
+
+_HUB_SCHEMA = """
+CREATE TABLE IF NOT EXISTS doctor_tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    signature TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    source_projects_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_doctor_tickets_kind
+    ON doctor_tickets(kind, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS grader_verdicts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    original_id INTEGER NOT NULL,
+    phase INTEGER,
+    question_index INTEGER,
+    status TEXT,
+    issues_json TEXT NOT NULL DEFAULT '[]',
+    suggestion TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(project_id, original_id)
+);
+CREATE INDEX IF NOT EXISTS idx_grader_verdicts_project
+    ON grader_verdicts(project_id, created_at DESC);
+"""
 
 
 # ── Dataclasses ───────────────────────────────────────────────────────────
@@ -294,6 +335,209 @@ def analyze_stale_handoffs(project_root: Path) -> list[DoctorProposal]:
     return proposals
 
 
+# ── Hub bridge: schema, sync verdicts, post tickets ──────────────────────
+
+def _project_id_from_root(project_root: Path) -> str:
+    """Convención hub.db `projects.id`: nombre del directorio raíz en
+    lowercase. Ejemplos: 'apex', 'tfg-tutor-virtual', 'focusnow'."""
+    return project_root.resolve().name.lower()
+
+
+def _hub_conn(hub_db: Path | None) -> sqlite3.Connection | None:
+    """Conexión RW a hub.db. Devuelve None si la ruta no existe o falla."""
+    if hub_db is None or not Path(hub_db).exists():
+        return None
+    try:
+        return sqlite3.connect(str(hub_db), timeout=5.0)
+    except sqlite3.Error:
+        return None
+
+
+def _ensure_hub_schema(conn: sqlite3.Connection) -> bool:
+    """Crea tablas `doctor_tickets` y `grader_verdicts` (IF NOT EXISTS).
+    Best-effort: True si el schema queda listo, False si falla."""
+    try:
+        conn.executescript(_HUB_SCHEMA)
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def sync_local_verdicts_to_hub(
+    local_db: Path,
+    hub_db: Path | None,
+    project_id: str,
+) -> int:
+    """Copia `grader_verdicts` locales nuevos a `hub.grader_verdicts`.
+
+    Mapping:
+      - local.id          → hub.original_id
+      - hub.project_id    = `project_id`
+      - local.phase       → hub.phase  (también copiado a hub.question_index
+                            como proxy: local no tiene índice de pregunta)
+      - local.should_block→ hub.status ('blocked' si 1, 'ok' si 0)
+      - local.issues      → hub.issues_json
+      - local.category +
+        local.reasoning   → hub.suggestion (concatenados, máx 500 chars)
+      - local.created_at  → hub.created_at
+
+    Dedup: `INSERT OR IGNORE` sobre UNIQUE(project_id, original_id). Devuelve
+    nº de filas insertadas. Best-effort: 0 si hub_db no existe o falla."""
+    hub = _hub_conn(hub_db)
+    if hub is None:
+        return 0
+    try:
+        if not _ensure_hub_schema(hub):
+            return 0
+        local = _ro_conn(local_db)
+        if local is None:
+            return 0
+        try:
+            rows = local.execute(
+                "SELECT id, phase, category, issues, should_block, "
+                "reasoning, created_at FROM grader_verdicts ORDER BY id"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return 0
+        finally:
+            local.close()
+
+        inserted = 0
+        for row in rows:
+            local_id, phase, category, issues_json, should_block, reasoning, created_at = row
+            status = "blocked" if should_block else "ok"
+            suggestion = (f"[{category or 'general'}] {reasoning or ''}").strip()[:500]
+            try:
+                cur = hub.execute(
+                    "INSERT OR IGNORE INTO grader_verdicts "
+                    "(project_id, original_id, phase, question_index, status, "
+                    " issues_json, suggestion, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (project_id, int(local_id), int(phase) if phase is not None else None,
+                     int(phase) if phase is not None else None, status,
+                     issues_json or "[]", suggestion, created_at or ""),
+                )
+                if cur.rowcount > 0:
+                    inserted += 1
+            except sqlite3.Error:
+                continue
+        hub.commit()
+        return inserted
+    finally:
+        hub.close()
+
+
+def post_ticket_to_hub(
+    proposal: DoctorProposal,
+    hub_db: Path | None,
+) -> bool:
+    """Escribe la propuesta como fila en `hub.doctor_tickets` con
+    `INSERT OR IGNORE` sobre `signature UNIQUE`. Devuelve True si insertó
+    una fila nueva, False si dedup o si hub_db ausente."""
+    hub = _hub_conn(hub_db)
+    if hub is None:
+        return False
+    try:
+        if not _ensure_hub_schema(hub):
+            return False
+        source_projects = proposal.evidence.get("projects", [])
+        try:
+            cur = hub.execute(
+                "INSERT OR IGNORE INTO doctor_tickets "
+                "(kind, signature, title, body, source_projects_json, status) "
+                "VALUES (?,?,?,?,?,?)",
+                (proposal.kind, proposal.signature, proposal.title,
+                 proposal.body, json.dumps(source_projects, ensure_ascii=False),
+                 "open"),
+            )
+            hub.commit()
+            return cur.rowcount > 0
+        except sqlite3.Error:
+            return False
+    finally:
+        hub.close()
+
+
+# ── A4: Cross-project patterns ───────────────────────────────────────────
+
+def analyze_cross_project_patterns(
+    hub_db: Path | None,
+    current_project_id: str,
+) -> list[DoctorProposal]:
+    """Issues del grader que aparecen en >=A4_MIN_PROJECTS proyectos distintos
+    en `hub.grader_verdicts`. Genera propuesta para promover a guideline
+    cross-project. Best-effort: si hub.db no existe, devuelve []."""
+    hub = _hub_conn(hub_db)
+    if hub is None:
+        return []
+    try:
+        if not _ensure_hub_schema(hub):
+            return []
+        try:
+            rows = hub.execute(
+                "SELECT project_id, issues_json FROM grader_verdicts "
+                "WHERE status='blocked' ORDER BY id DESC LIMIT ?",
+                (A4_LOOKBACK,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+
+        issue_to_projects: dict[str, set[str]] = {}
+        for project_id, issues_json in rows:
+            try:
+                issues = json.loads(issues_json or "[]")
+            except (TypeError, json.JSONDecodeError):
+                continue
+            for iss in issues:
+                if not isinstance(iss, str):
+                    continue
+                issue_to_projects.setdefault(iss, set()).add(project_id)
+
+        proposals: list[DoctorProposal] = []
+        for issue, projects in issue_to_projects.items():
+            if len(projects) < A4_MIN_PROJECTS:
+                continue
+            sorted_projects = sorted(projects)
+            sig = f"cross_project_pattern:{issue}"
+            others = [p for p in sorted_projects if p != current_project_id]
+            title = (
+                f"Issue '{issue}' bloqueando en {len(projects)} proyectos "
+                f"({', '.join(sorted_projects)})"
+            )
+            body = (
+                f"## Patrón cross-project\n\n"
+                f"- **Issue**: `{issue}`\n"
+                f"- **Proyectos afectados**: {', '.join(sorted_projects)}\n"
+                f"- **Otros proyectos** (excluyendo este): "
+                f"{', '.join(others) if others else '_(sólo este)_'}\n\n"
+                f"## Acción sugerida\n\n"
+                f"Este issue del grader bloquea en varios proyectos. Considerar:\n\n"
+                f"1. Promover la regla a una **lección cross-project** "
+                f"(`apex_search_cross_project` la inyectará en SessionStart "
+                f"de futuros proyectos).\n"
+                f"2. Crear una skill preventiva con "
+                f"`apex_skill_forge_scan(force=True)` que fire en patrones "
+                f"que llevan a este issue.\n"
+                f"3. Si la regla del grader es ruidosa en multiproyecto, "
+                f"ajustarla en `lib/grader.py` y registrar la decisión.\n"
+            )
+            proposals.append(DoctorProposal(
+                kind="cross_project_pattern",
+                signature=sig,
+                title=title,
+                body=body,
+                evidence={
+                    "issue": issue,
+                    "projects": sorted_projects,
+                    "current_project": current_project_id,
+                },
+            ))
+        return proposals
+    finally:
+        hub.close()
+
+
 # ── Persistencia: runs y proposals ───────────────────────────────────────
 
 def last_run_at(db_path: Path) -> datetime | None:
@@ -507,6 +751,7 @@ def render_run_md(run: DoctorRun, project_root: Path) -> str:
         "override_cluster": "Errores recurrentes / críticos",
         "grader_block_pattern": "Patrones del grader bloqueando",
         "stale_handoff": "Handoffs obsoletos",
+        "cross_project_pattern": "Patrones cross-project",
     }
     for kind, items in by_kind.items():
         lines.append(f"## {kind_titles.get(kind, kind)} ({len(items)})")
@@ -531,18 +776,38 @@ def write_run_md(run: DoctorRun, project_root: Path | str) -> Path:
 
 # ── Orquestador ──────────────────────────────────────────────────────────
 
+def _resolve_hub_db(hub_db: Path | str | None) -> Path | None:
+    """Resuelve hub_db: arg explícito > env APEX_HUB_DB_PATH > HUB_DB_DEFAULT.
+    Devuelve None si la ruta no existe (best-effort: A4 se salta sin error)."""
+    import os
+    if hub_db is not None:
+        p = Path(hub_db)
+    else:
+        env = os.environ.get("APEX_HUB_DB_PATH")
+        p = Path(env) if env else HUB_DB_DEFAULT
+    return p if p.exists() else None
+
+
 def run_doctor(
     project_root: Path | str,
     trigger: str = "manual",
     force: bool = False,
+    hub_db: Path | str | None = None,
 ) -> DoctorRun:
-    """Ejecuta los 3 analizadores y persiste resultados.
+    """Ejecuta los 4 analizadores (A1-A4) y persiste resultados.
 
     Si está throttled (<MIN_RUN_GAP_SECONDS desde último run) y `force=False`,
     devuelve un DoctorRun con status='throttled'.
+
+    `hub_db` opcional: si None, resuelve por env `APEX_HUB_DB_PATH` o cae al
+    default `~/RoadToDevOps/apex-hub/data/hub.db`. Si la BD no existe, A4
+    devuelve [] sin error (backward-compatible: callers sin hub_db siguen
+    funcionando como Sprint 13.0).
     """
     project_root = Path(project_root)
     db = context_db_path(project_root)
+    project_id = _project_id_from_root(project_root)
+    resolved_hub = _resolve_hub_db(hub_db)
 
     if not force and is_throttled(db):
         last = last_run_at(db)
@@ -563,12 +828,19 @@ def run_doctor(
     run_id = _start_run(db, trigger=trigger)
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+    # Sync local→hub ANTES de A4. Wrapped aparte: si falla, A1-A3 + A4 siguen.
+    try:
+        sync_local_verdicts_to_hub(db, resolved_hub, project_id)
+    except Exception:
+        pass
+
     # Recoger todas las propuestas, persistir las nuevas (UNIQUE skip duplicados)
     all_props: list[DoctorProposal] = []
     try:
         all_props += analyze_override_clusters(db)
         all_props += analyze_grader_block_patterns(db)
         all_props += analyze_stale_handoffs(project_root)
+        all_props += analyze_cross_project_patterns(resolved_hub, project_id)
     except Exception:
         _finish_run(db, run_id, 0, status="failed")
         return DoctorRun(
@@ -581,6 +853,12 @@ def run_doctor(
     for p in all_props:
         if record_proposal(db, run_id, p) is not None:
             new_proposals.append(p)
+            # Cross-project patterns también se postean al hub como tickets
+            if p.kind == "cross_project_pattern":
+                try:
+                    post_ticket_to_hub(p, resolved_hub)
+                except Exception:
+                    pass
 
     finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     _finish_run(db, run_id, len(new_proposals), status="done")
