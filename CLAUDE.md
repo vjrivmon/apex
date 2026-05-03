@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 10)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.1)
 
 ## Qué es APEX
 
@@ -89,7 +89,24 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 33 tools (Sprints 8-10 cierran esta deuda)
+- [x] **MCP server** completo con 34 tools (Sprints 8-11 cierran esta deuda)
+
+- [x] **Sprint 11.1 — Browser trace CDP nativo** (2026-05-03)
+  - `lib/browser_trace.py` (~520L): launch_chrome con
+    `--remote-debugging-port`, `_CDPSession` send/fire/drain sobre
+    websockets nativo, captura de DOM final + network log + console +
+    lifecycle. Patrón send+recv-loop sin reader-task (más robusto frente
+    a quirks de Chrome 147 con `Page.navigate`).
+  - Fallback automático a Playwright si CDP falla (lanza `Trace`
+    con `error` en vez de raise).
+  - Helpers `trace_to_markdown`, `trace_to_jsonl`, `third_party_domains`.
+  - Tool MCP nueva: `apex_browser_trace` (capture_dom, save_jsonl,
+    use_fallback, include_dom_in_output).
+  - 17 tests: puros (modelos/serialización) + integración real contra
+    HTTP server local (1.5s con Chrome). Total: **171 verde**.
+  - Lección: Chrome 147 emite eventos network sólo si la red llega al
+    target — sin internet la pestaña queda en about:blank pese a que la
+    URL del target cambia. Tests usan loopback local, no `example.com`.
 
 - [x] **Sprint 10 — Phase 1-3 v2** (2026-05-03)
   - `lib/design_md.py` (220L): scaffold DESIGN.md estándar Google Labs
@@ -139,7 +156,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 ### NO Completado (Sprints 11-13 del roadmap aprobado)
 
-- [ ] **Sprint 11 — Living ecosystem** (browser-trace con Chrome real, skill_forge auto-creation, library-skills.io)
+- [ ] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, 11.2 skill_forge auto-creation, 11.3 ingest library-skills.io)
 - [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
 - [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
@@ -155,8 +172,9 @@ a la rama `archive/legacy-web` en un chore futuro.
 | Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 33 tools      |
+| MCP server    | Python + mcp.server                | 34 tools      |
 | Hooks         | Python scripts                     | 5 (session, design-lint, phase-gate, context-watch, post-tool-archive) |
+| Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
 | Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
 | /goal loop    | lib/goal_loop.py (Sprint 8.2)      | 18 tests      |
 | Handoff       | lib/handoff.py (Sprint 9.1)        | 14 tests      |
@@ -164,7 +182,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 154 pasando   |
+| Tests totales | pytest                             | 171 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

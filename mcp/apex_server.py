@@ -43,6 +43,7 @@ import handoff as _handoff  # noqa: E402
 import token_filter as _tf  # noqa: E402
 import design_md as _design  # noqa: E402
 import research as _research  # noqa: E402
+import browser_trace as _browser  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -943,6 +944,56 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_browser_trace",
+            description=(
+                "Sprint 11.1 — Captura una sesión real de navegación con Chrome "
+                "via DevTools Protocol nativo (websockets). Devuelve title, "
+                "final URL, lifecycle, network log (status/duration por request), "
+                "consola (errores JS), tamaño de DOM y dominios externos. "
+                "Útil para fase 02 (research profundo: qué APIs llama un "
+                "competidor, qué tracking carga), fase 11 (smoke-test post-deploy) "
+                "y fase 13 (replicar bugs). Si CDP falla y use_fallback=True, "
+                "intenta con Playwright."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "nav_timeout_s": {
+                        "type": "number",
+                        "default": 25,
+                        "description": "Timeout total de navegación + load + idle",
+                    },
+                    "settle_ms": {
+                        "type": "integer",
+                        "default": 1500,
+                        "description": "Espera extra tras load para CSS-in-JS / network tail",
+                    },
+                    "capture_dom": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Si True, incluye outerHTML del documento final",
+                    },
+                    "save_jsonl": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Si True, guarda en .apex/browser-traces/<slug>.json",
+                    },
+                    "use_fallback": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Si CDP falla, intentar con Playwright",
+                    },
+                    "include_dom_in_output": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Si True, devuelve también el outerHTML completo",
+                    },
+                },
+                "required": ["url"],
+            },
+        ),
+        Tool(
             name="apex_archive_output",
             description=(
                 "Sprint 9.2 — Archiva un output largo de herramienta en "
@@ -1640,6 +1691,52 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             signals = _research.summarize_competitor(url, prefer_spa=prefer_spa)
             md = _research.signals_to_markdown(signals)
             result = [TextContent(type="text", text=md)]
+
+        elif name == "apex_browser_trace":
+            url = arguments["url"]
+            nav_timeout = float(arguments.get("nav_timeout_s", 25))
+            settle_ms = int(arguments.get("settle_ms", 1500))
+            capture_dom = bool(arguments.get("capture_dom", True))
+            save_jsonl = bool(arguments.get("save_jsonl", False))
+            use_fallback = bool(arguments.get("use_fallback", True))
+            include_dom = bool(arguments.get("include_dom_in_output", False))
+
+            trace = await asyncio.to_thread(
+                _browser.trace_url,
+                url,
+                nav_timeout_s=nav_timeout,
+                settle_ms=settle_ms,
+                capture_dom=capture_dom,
+                use_fallback=use_fallback,
+            )
+
+            md = _browser.trace_to_markdown(trace)
+            saved_path: Path | None = None
+            if save_jsonl:
+                project_root = _find_project_root()
+                slug = (
+                    "".join(c if c.isalnum() else "-" for c in url)
+                    .strip("-")[:60]
+                    or "trace"
+                )
+                stamp = trace.started_at or 0
+                saved_path = _browser.trace_to_jsonl(
+                    trace,
+                    project_root / ".apex" / "browser-traces" / f"{slug}-{int(stamp)}.json",
+                    include_dom=True,
+                )
+
+            sections = [md]
+            third = _browser.third_party_domains(trace)
+            if third:
+                sections.append(
+                    "## Dominios externos\n" + "\n".join(f"- {d}" for d in third[:25])
+                )
+            if saved_path:
+                sections.append(f"\n_Trace guardado en {saved_path}_")
+            if include_dom and trace.dom_html:
+                sections.append("## DOM (outerHTML)\n```html\n" + trace.dom_html[:200_000] + "\n```")
+            result = [TextContent(type="text", text="\n\n".join(sections))]
 
         elif name == "apex_archive_output":
             tool_name = arguments["tool"]
