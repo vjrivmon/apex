@@ -91,6 +91,65 @@ en `~/RoadToDevOps/apex-hub/`).
 
 - [x] **MCP server** completo con 42 tools (Sprints 8-13 cierran esta deuda)
 
+- [x] **Sprint 13.9 — usage_data_signals (cruce con `/insights`)** (2026-05-03)
+  - `lib/usage_data_reader.py` (~165L): reader puro de
+    `~/.claude/usage-data/{facets,session-meta}/`. Dataclasses `UsageMeta`
+    (project_path, start_time, duration, tool_counts, tool_errors,
+    tool_error_categories, lines_added/removed) y `UsageFacets` (outcome,
+    claude_helpfulness, primary_success, friction_counts, friction_detail,
+    user_satisfaction_counts, brief_summary). Iteradores `iter_meta` con
+    filtro por `project_path`, `iter_facets` con filtro por `session_ids`.
+    Helper `find_session_for_timestamp(ts, project_path, slack_minutes=5)`
+    para asociar verdicts del grader con sesiones de Claude Code sin migrar
+    schema (`UsageMeta.contains_timestamp` cruza ts contra
+    `[start, start + duration + slack]`). Env `APEX_USAGE_DATA_ROOT` para
+    tests. Best-effort: si el dir no existe, devuelve `[]`.
+  - **A5 grader_false_positives** (`lib/apex_doctor.py`): cruza
+    `grader_verdicts` locales con `should_block=0` contra facets del
+    observer ajeno. Si el observer dice `outcome in {not_achieved,
+    partially_achieved}` O `claude_helpfulness in {unhelpful,
+    slightly_helpful}` O `user_satisfaction in {dissatisfied, frustrated}`,
+    el grader pasó algo que no debería. Asociación verdict↔sesión vía
+    heurística temporal (`created_at` del verdict vs `start_time + duration`
+    de session-meta) — evita migración invasiva. >=2 falsos positivos en
+    misma fase para emitir propuesta. Signature por fase
+    (`grader_false_positive:phase=N`).
+  - **A6 friction_recurrence** (`lib/apex_doctor.py`): agrega
+    `friction_counts` del observer cross-sesión filtradas a `project_path`.
+    Si una key (`buggy_code`, `wrong_approach`, `misunderstood_request`,
+    `excessive_changes`, ...) aparece total >=3 veces en >=2 sesiones
+    distintas del proyecto, propone afinarlo con
+    `apex_skill_forge_scan(force=True)` o reforzar la fase relevante.
+    Signature por friction key (`friction_recurrence:<key>`).
+  - **Constantes nuevas**: `A5_MIN_FALSE_POSITIVES=2`,
+    `A5_OUTCOMES_BAD={not_achieved, partially_achieved}`,
+    `A5_HELP_BAD={unhelpful, slightly_helpful}`,
+    `A5_SAT_BAD={dissatisfied, frustrated}`, `A5_LOOKBACK=200`,
+    `A6_MIN_FRICTION_OCCURRENCES=3`, `A6_MIN_FRICTION_SESSIONS=2`.
+  - **Idempotencia**: signatures canónicas, mismo `INSERT OR IGNORE` que
+    A1-A4 vía `record_proposal`. Re-correr el doctor sobre los mismos
+    datos no duplica propuestas.
+  - **Sin tool MCP nueva**: `apex_doctor_run` ya invoca `run_doctor()`,
+    que ahora incluye A5+A6 en el `all_props +=` chain. Total tools
+    sigue en **42**.
+  - **No migración de schema**: `grader_verdicts` no necesita columna
+    `session_id` porque la heurística temporal cubre el cruce. Trade-off:
+    si dos sesiones del usuario solapan en tiempo (raro, Claude Code
+    serializa una activa), podría asociar mal — aceptable para detección
+    de patrones agregados.
+  - **No requiere `/insights`**: A5/A6 son best-effort sobre archivos que
+    Claude Code ya escribe a `~/.claude/usage-data/` por su cuenta. Si
+    el usuario nunca corre `/insights`, los archivos pueden estar pero
+    no ser frescos — A5/A6 simplemente no fire.
+  - 20 tests nuevos (`tests/test_apex_doctor_usage.py`): reader (8 tests
+    cubriendo dir missing, project_path filter, JSON corrupto,
+    session_ids filter, timestamp matching dentro/fuera de rango y
+    cross-project), A5 (6 tests cubriendo BD limpia, threshold,
+    signature por fase, outcome unclear no cuenta, blocked verdicts
+    excluidos), A6 (4 tests: vacío, project_path filter, threshold,
+    threshold de sesiones únicas), integración con `run_doctor` y render
+    de markdown (2 tests). Total: **396 verde** en 6.2s.
+
 - [x] **Sprint 13 — Apex-doctor (auto-mejora dirigida por intención)** (2026-05-03)
   - `lib/apex_doctor.py` (~530L): tres analizadores síncronos sobre
     `context.db` + `.apex/handoff/`. **A1 override_clusters** detecta
@@ -318,6 +377,8 @@ a la rama `archive/legacy-web` en un chore futuro.
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
 | Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations + doctor_runs + doctor_proposals + session_starts | Verificado |
+| Usage data reader (Sprint 13.9) | lib/usage_data_reader.py — `~/.claude/usage-data/` cruce con grader vía heurística temporal | 8 tests |
+| Apex-doctor A5+A6 (Sprint 13.9) | grader_false_positives + friction_recurrence | 12 tests |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
 | MCP server    | Python + mcp.server                | 42 tools      |
@@ -334,7 +395,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 350 pasando   |
+| Tests totales | pytest                             | 396 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

@@ -19,6 +19,22 @@ Analizadores:
   Genera propuestas para promoverlos a guideline cross-project. Antes de
   correr, sincroniza los verdicts locales a `hub.db` para que estén
   disponibles. Best-effort: si `hub.db` no existe, A4 se salta sin crashear.
+- **A5 grader_false_positives** (Sprint 13.9) — cruza `grader_verdicts`
+  locales con `should_block=0` (sesión cerrada OK) contra
+  `~/.claude/usage-data/facets/{sid}.json`. Si el observer ajeno marca la
+  sesión como `outcome in {not_achieved, partially_achieved}` o
+  `claude_helpfulness in {unhelpful, slightly_helpful}` o
+  `user_satisfaction in {dissatisfied, frustrated}`, el grader pasó algo
+  que no debería. >=2 falsos positivos en la misma fase → propuesta para
+  endurecer el grader. Asociación verdict↔sesión vía heurística temporal
+  (`created_at` del verdict dentro del rango `[start_time, start_time +
+  duration]` de session-meta), evita migrar el schema. Best-effort: si
+  `~/.claude/usage-data/` no existe, A5 devuelve `[]`.
+- **A6 friction_recurrence** (Sprint 13.9) — agrega `friction_counts` del
+  observer cross-sesión filtradas por `project_path`. Si una key
+  (`buggy_code`, `wrong_approach`, `misunderstood_request`, `excessive_changes`,
+  ...) aparece total >=3 veces en >=2 sesiones distintas del proyecto,
+  propone afinarlo (skill preventiva o ajuste de fase relevante).
 
 Idempotencia: cada propuesta lleva una `signature` canónica. Si ya existe en
 `doctor_proposals` con esa signature, no se duplica (UNIQUE constraint).
@@ -52,6 +68,13 @@ A3_STALE_DAYS = 7                   # handoff sin tocar >7 días = stale
 A2_LOOKBACK = 100                   # últimos N verdicts del grader
 A4_MIN_PROJECTS = 2                 # cross-project pattern: issue en >=2 proyectos
 A4_LOOKBACK = 500                   # últimos N verdicts del hub al cruzar
+A5_MIN_FALSE_POSITIVES = 2          # >=2 falsos positivos del grader en misma fase
+A5_OUTCOMES_BAD = frozenset({"not_achieved", "partially_achieved"})
+A5_HELP_BAD = frozenset({"unhelpful", "slightly_helpful"})
+A5_SAT_BAD = frozenset({"dissatisfied", "frustrated"})
+A6_MIN_FRICTION_OCCURRENCES = 3     # mismo friction_key con count_total >=3
+A6_MIN_FRICTION_SESSIONS = 2        # en >=2 sesiones distintas
+A5_LOOKBACK = 200                   # últimos N grader_verdicts a cruzar
 
 HUB_DB_DEFAULT = Path.home() / "RoadToDevOps" / "apex-hub" / "data" / "hub.db"
 
@@ -538,6 +561,216 @@ def analyze_cross_project_patterns(
         hub.close()
 
 
+# ── A5: Grader false positives (cruce con usage-data) ────────────────────
+
+def _facet_is_bad(fct: Any) -> bool:
+    """Un facet del observer marca la sesión como 'mal' si: outcome bad O
+    helpfulness bad O alguna user_satisfaction key en {dissatisfied, frustrated}."""
+    if fct.outcome in A5_OUTCOMES_BAD:
+        return True
+    if fct.claude_helpfulness in A5_HELP_BAD:
+        return True
+    sat = fct.user_satisfaction_counts or {}
+    return any(k in A5_SAT_BAD for k in sat.keys())
+
+
+def analyze_grader_false_positives(
+    db_path: Path,
+    project_root: Path,
+    usage_root: Path | None = None,
+) -> list[DoctorProposal]:
+    """A5 — verdicts del grader con `should_block=0` cuya sesión asociada
+    (heurística temporal) tiene facets bad. >=A5_MIN_FALSE_POSITIVES por
+    fase para emitir propuesta. Best-effort: si `usage-data/` no existe o
+    el reader no carga, devuelve []."""
+    try:
+        from usage_data_reader import find_session_for_timestamp, iter_facets
+    except ImportError:
+        return []
+
+    conn = _ro_conn(db_path)
+    if conn is None:
+        return []
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT phase, reasoning, created_at FROM grader_verdicts "
+                "WHERE should_block=0 ORDER BY id DESC LIMIT ?",
+                (A5_LOOKBACK,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    finally:
+        conn.close()
+    if not rows:
+        return []
+
+    project_path_str = str(project_root.resolve())
+    sid_to_phase: dict[str, list[tuple[int, str]]] = {}
+    for phase, reasoning, created_at in rows:
+        if not created_at:
+            continue
+        try:
+            ts = datetime.fromisoformat(created_at.replace(" ", "T"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        sid = find_session_for_timestamp(ts, project_path_str, root=usage_root)
+        if not sid:
+            continue
+        sid_to_phase.setdefault(sid, []).append(
+            (int(phase) if phase is not None else -1, (reasoning or "")[:200])
+        )
+
+    if not sid_to_phase:
+        return []
+
+    bad_per_phase: dict[int, list[dict[str, Any]]] = {}
+    for fct in iter_facets(session_ids=set(sid_to_phase.keys()), root=usage_root):
+        if not _facet_is_bad(fct):
+            continue
+        for phase, reasoning in sid_to_phase.get(fct.session_id, []):
+            bad_per_phase.setdefault(phase, []).append({
+                "session_id": fct.session_id,
+                "outcome": fct.outcome,
+                "helpfulness": fct.claude_helpfulness,
+                "satisfaction_keys": sorted(fct.user_satisfaction_counts.keys()),
+                "friction_detail": fct.friction_detail[:160],
+                "summary": fct.brief_summary[:200],
+                "grader_reasoning": reasoning,
+            })
+
+    proposals: list[DoctorProposal] = []
+    for phase, occurrences in sorted(bad_per_phase.items()):
+        if len(occurrences) < A5_MIN_FALSE_POSITIVES:
+            continue
+        sig = f"grader_false_positive:phase={phase}"
+        title = (
+            f"Grader laxo en fase {phase}: {len(occurrences)} sesión(es) "
+            f"que el observer marcó como mal cerradas"
+        )
+        listing = "\n".join(
+            f"- `{o['session_id'][:12]}` outcome=`{o['outcome']}` "
+            f"helpfulness=`{o['helpfulness']}` — {o['summary'][:120]}"
+            for o in occurrences[:6]
+        )
+        body = (
+            f"## Grader laxo (cruce con `~/.claude/usage-data/facets/`)\n\n"
+            f"- **Fase**: {phase}\n"
+            f"- **Falsos positivos**: {len(occurrences)} (grader pasó pero "
+            f"observer dice mal)\n\n"
+            f"### Casos detectados\n\n{listing}\n\n"
+            f"## Acción sugerida\n\n"
+            f"1. Revisar los checks deterministas de fase {phase} en "
+            f"`lib/grader.py` y la rúbrica del LLM judge: ¿están midiendo "
+            f"resultado real o sólo señales superficiales (tests pasan, "
+            f"lint OK, sin emojis)?\n"
+            f"2. Añadir un check específico que cubra los patrones de los "
+            f"casos listados arriba.\n"
+            f"3. Si el patrón es estructural y se repite en otras fases, "
+            f"considerar A2/A4 para cross-fase y cross-project.\n"
+        )
+        proposals.append(DoctorProposal(
+            kind="grader_false_positive",
+            signature=sig,
+            title=title,
+            body=body,
+            evidence={
+                "phase": phase,
+                "false_positive_count": len(occurrences),
+                "sample_session_ids": [o["session_id"] for o in occurrences[:6]],
+            },
+        ))
+    return proposals
+
+
+# ── A6: Friction recurrence (observer Claude Code) ───────────────────────
+
+def analyze_friction_recurrence(
+    project_root: Path,
+    usage_root: Path | None = None,
+) -> list[DoctorProposal]:
+    """A6 — agrega `friction_counts` del observer cross-sesión filtradas a
+    `project_path`. Si una key tiene count_total >= A6_MIN_FRICTION_OCCURRENCES
+    en >= A6_MIN_FRICTION_SESSIONS sesiones distintas, emite propuesta."""
+    try:
+        from usage_data_reader import iter_meta, iter_facets
+    except ImportError:
+        return []
+
+    project_path_str = str(project_root.resolve())
+    project_sids = {
+        m.session_id
+        for m in iter_meta(project_path=project_path_str, root=usage_root)
+    }
+    if not project_sids:
+        return []
+
+    key_count: dict[str, int] = {}
+    key_sessions: dict[str, set[str]] = {}
+    key_details: dict[str, list[str]] = {}
+
+    for fct in iter_facets(session_ids=project_sids, root=usage_root):
+        for key, count in (fct.friction_counts or {}).items():
+            if not isinstance(key, str):
+                continue
+            try:
+                c = int(count)
+            except (TypeError, ValueError):
+                continue
+            if c <= 0:
+                continue
+            key_count[key] = key_count.get(key, 0) + c
+            key_sessions.setdefault(key, set()).add(fct.session_id)
+            if fct.friction_detail:
+                key_details.setdefault(key, []).append(fct.friction_detail[:160])
+
+    proposals: list[DoctorProposal] = []
+    for key in sorted(key_count.keys()):
+        total = key_count[key]
+        sessions = key_sessions.get(key, set())
+        if total < A6_MIN_FRICTION_OCCURRENCES:
+            continue
+        if len(sessions) < A6_MIN_FRICTION_SESSIONS:
+            continue
+        details = key_details.get(key, [])
+        sample = "\n".join(f"  - {d}" for d in details[:5]) or "  _(sin detalle)_"
+        sig = f"friction_recurrence:{key}"
+        title = (
+            f"Friction `{key}` recurrente: {total} ocurrencia(s) en "
+            f"{len(sessions)} sesión(es)"
+        )
+        body = (
+            f"## Friction recurrente (observer Claude Code)\n\n"
+            f"- **Key**: `{key}`\n"
+            f"- **Ocurrencias totales**: {total}\n"
+            f"- **Sesiones afectadas**: {len(sessions)}\n\n"
+            f"### Detalles vistos\n\n{sample}\n\n"
+            f"## Acción sugerida\n\n"
+            f"1. Si `{key}` apunta a un patrón concreto (ej. `wrong_approach`, "
+            f"`misunderstood_request`, `excessive_changes`), correr "
+            f"`apex_skill_forge_scan(force=True)` para que D1/D2 propongan "
+            f"una skill preventiva específica.\n"
+            f"2. Si la friction es típica de una fase concreta, reforzar el "
+            f"prompt de esa fase en `commands/apex.md`.\n"
+            f"3. Si es ruido del observer (false signal), anotarlo y dejar "
+            f"pasar — el threshold ya filtra cosas únicas.\n"
+        )
+        proposals.append(DoctorProposal(
+            kind="friction_recurrence",
+            signature=sig,
+            title=title,
+            body=body,
+            evidence={
+                "friction_key": key,
+                "total_occurrences": total,
+                "affected_sessions": len(sessions),
+            },
+        ))
+    return proposals
+
+
 # ── Persistencia: runs y proposals ───────────────────────────────────────
 
 def last_run_at(db_path: Path) -> datetime | None:
@@ -752,6 +985,8 @@ def render_run_md(run: DoctorRun, project_root: Path) -> str:
         "grader_block_pattern": "Patrones del grader bloqueando",
         "stale_handoff": "Handoffs obsoletos",
         "cross_project_pattern": "Patrones cross-project",
+        "grader_false_positive": "Grader laxo (cruce con observer Claude Code)",
+        "friction_recurrence": "Friction recurrente del observer",
     }
     for kind, items in by_kind.items():
         lines.append(f"## {kind_titles.get(kind, kind)} ({len(items)})")
@@ -794,7 +1029,7 @@ def run_doctor(
     force: bool = False,
     hub_db: Path | str | None = None,
 ) -> DoctorRun:
-    """Ejecuta los 4 analizadores (A1-A4) y persiste resultados.
+    """Ejecuta los 6 analizadores (A1-A6) y persiste resultados.
 
     Si está throttled (<MIN_RUN_GAP_SECONDS desde último run) y `force=False`,
     devuelve un DoctorRun con status='throttled'.
@@ -803,6 +1038,10 @@ def run_doctor(
     default `~/RoadToDevOps/apex-hub/data/hub.db`. Si la BD no existe, A4
     devuelve [] sin error (backward-compatible: callers sin hub_db siguen
     funcionando como Sprint 13.0).
+
+    A5 y A6 (Sprint 13.9) leen `~/.claude/usage-data/` (o `APEX_USAGE_DATA_ROOT`
+    si está seteado, útil para tests). Si el directorio no existe, devuelven
+    [] sin error.
     """
     project_root = Path(project_root)
     db = context_db_path(project_root)
@@ -841,6 +1080,8 @@ def run_doctor(
         all_props += analyze_grader_block_patterns(db)
         all_props += analyze_stale_handoffs(project_root)
         all_props += analyze_cross_project_patterns(resolved_hub, project_id)
+        all_props += analyze_grader_false_positives(db, project_root)
+        all_props += analyze_friction_recurrence(project_root)
     except Exception:
         _finish_run(db, run_id, 0, status="failed")
         return DoctorRun(
