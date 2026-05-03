@@ -19,6 +19,9 @@ from pathlib import Path
 
 HUB_DB = Path.home() / "RoadToDevOps" / "apex-hub" / "data" / "hub.db"
 MAX_ERRORS = 5
+INGEST_REMINDER_THRESHOLD = int(
+    os.environ.get("APEX_LIBRARY_INGEST_THRESHOLD", "5")
+)
 
 
 def _current_project_id() -> str | None:
@@ -67,6 +70,65 @@ def _read_top_errors() -> list[dict]:
         conn.close()
 
 
+def _bump_visit_counter(project_id: str) -> int:
+    """Añade el `project_id` actual al set de proyectos visitados desde la
+    última ingesta de skills externas. Devuelve len(set) tras añadir.
+
+    Persiste en `hub.db` tabla `global_meta` (creada on-demand). Best-effort:
+    si hub.db no existe o falla, devuelve 0 (no dispara recordatorio).
+    """
+    if not HUB_DB.exists() or not project_id:
+        return 0
+    try:
+        conn = sqlite3.connect(str(HUB_DB))
+    except sqlite3.OperationalError:
+        return 0
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS global_meta ("
+            "key TEXT PRIMARY KEY, value TEXT, "
+            "updated_at TEXT DEFAULT (datetime('now')))"
+        )
+        row = conn.execute(
+            "SELECT value FROM global_meta WHERE key=?",
+            ("library_ingest_visit_set",),
+        ).fetchone()
+        try:
+            visited = set(json.loads(row[0])) if row and row[0] else set()
+        except (TypeError, ValueError, json.JSONDecodeError):
+            visited = set()
+        visited.add(project_id)
+        conn.execute(
+            "INSERT OR REPLACE INTO global_meta (key, value, updated_at) "
+            "VALUES (?, ?, datetime('now'))",
+            ("library_ingest_visit_set", json.dumps(sorted(visited))),
+        )
+        conn.commit()
+        return len(visited)
+    except sqlite3.OperationalError:
+        return 0
+    finally:
+        conn.close()
+
+
+def _ingest_reminder(visit_count: int) -> str:
+    if visit_count < INGEST_REMINDER_THRESHOLD:
+        return ""
+    return (
+        "\n\n## APEX — Recordatorio: ingesta de skills externas\n\n"
+        f"Llevas **{visit_count} proyectos** sin ingerir skills nuevas desde "
+        f"GitHub o `library-skills.io` (umbral={INGEST_REMINDER_THRESHOLD}). "
+        "Si quieres descubrir skills curadas por la comunidad para tener "
+        "más herramientas a mano, corre:\n\n"
+        "```\napex_ingest_library_skills(source=\"both\")\n```\n\n"
+        "Esto descarga candidatas, valida frontmatter y secretos, y deja "
+        "propuestas en `.apex/skill-proposals/import-*.md` para que las "
+        "apruebes una a una con `apex_skill_forge_approve(slug)`.\n\n"
+        "Si prefieres saltar este recordatorio en este proyecto, ignóralo: "
+        "el contador no avanza dos veces para el mismo proyecto."
+    )
+
+
 def _format_context(errors: list[dict]) -> str:
     if not errors:
         return ""
@@ -105,8 +167,18 @@ def main() -> None:
     try:
         errors = _read_top_errors()
         context_md = _format_context(errors)
-        if not context_md:
-            # Sin lecciones que inyectar → salir silencioso (hook no-op).
+
+        # Sprint 11.3: contador cross-project para recordar la ingesta de
+        # skills externas cada N proyectos distintos.
+        try:
+            project_id = _current_project_id() or ""
+            visits = _bump_visit_counter(project_id)
+            reminder = _ingest_reminder(visits)
+        except Exception:
+            reminder = ""
+        context_md = (context_md or "") + reminder
+
+        if not context_md.strip():
             sys.exit(0)
         output = {
             "hookSpecificOutput": {

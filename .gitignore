@@ -50,6 +50,13 @@ apex-fix-*.png
 .apex/wiki/lint-report-*.md
 .apex/wiki/brand/design-inspiration-*.md
 .apex/security/audit-report-*.md
+.apex/context.db-shm
+.apex/context.db-wal
+.apex/handoff/
+.apex/goal/
+.apex/browser-traces/
+.apex/reverse-reports/
+.apex/skill-proposals/
 
 # Auto-generated session handoffs
 thoughts/

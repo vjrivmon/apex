@@ -436,6 +436,12 @@ def log_tool_call(project_root: Path | str, tool: str,
 # ── Aprobar / rechazar ────────────────────────────────────────────────────
 
 def _extract_skill_block(proposal_md: str) -> str | None:
+    # Sprint 11.3: proposals con SKILL.md descargados pueden contener bloques
+    # ``` propios, así que el delimitador externo usa 4 backticks. Se busca
+    # primero y se cae a 3 para mantener compat con proposals del Sprint 11.2.
+    m = re.search(r"````markdown\n(.*?)\n````", proposal_md, re.DOTALL)
+    if m:
+        return m.group(1)
     m = re.search(r"```markdown\n(.*?)\n```", proposal_md, re.DOTALL)
     return m.group(1) if m else None
 

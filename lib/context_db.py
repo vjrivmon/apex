@@ -194,6 +194,20 @@ CREATE TABLE IF NOT EXISTS skill_forge_rejections (
     reason TEXT NOT NULL,
     rejected_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Library Ingest (Sprint 11.3): cache de skills descubiertas para no re-bajar
+-- el mismo SHA dos veces. Status: 'proposed' | 'approved' | 'rejected'.
+CREATE TABLE IF NOT EXISTS library_imports (
+    slug TEXT PRIMARY KEY,
+    source TEXT NOT NULL,         -- 'github' | 'pkg'
+    source_url TEXT NOT NULL,
+    sha TEXT DEFAULT '',          -- blob SHA (gh) o version/lib (pkg)
+    imported_at TEXT DEFAULT (datetime('now')),
+    status TEXT DEFAULT 'proposed'
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_imports_source
+    ON library_imports(source, imported_at DESC);
 """
 
 PHASES = [

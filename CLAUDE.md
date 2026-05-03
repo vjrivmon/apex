@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.2)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 11.3)
 
 ## Qué es APEX
 
@@ -89,7 +89,47 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 34 tools (Sprints 8-11 cierran esta deuda)
+- [x] **MCP server** completo con 38 tools (Sprints 8-11 cierran esta deuda)
+
+- [x] **Sprint 11.3 — Library Ingest (skills externas)** (2026-05-03)
+  - `lib/library_ingest.py` (~700L): pipeline fetch → validate → propose para
+    skills externas. Dos fuentes: (a) **GitHub Search API** (repos populares
+    con `claude-skills` en nombre/topic + awesome-lists curadas, ordenados
+    por estrellas; descarga `SKILL.md` vía `raw.githubusercontent.com`) y
+    (b) **library-skills CLI** de tiangolo (`uvx library-skills --dry-run
+    --claude`) cuando el proyecto tiene `pyproject.toml`/`package.json`.
+  - **Validación determinista** que BLOQUEA antes de escribir ruido a disco:
+    frontmatter YAML obligatorio (`name`, `description`), longitud (max name
+    60 chars, max description 200, body 100B–50KB), y filtro de **secretos**
+    (regex anti-keys: `sk-ant-…`, `ghp_…`, `AKIA…`, `AIza…`, BEGIN PRIVATE
+    KEY, etc.). `validate_skill()` devuelve `(valid, issues)`; si invalid,
+    se acumula en `IngestResult.invalid` y no se propone.
+  - **Persistencia**: tabla `library_imports(slug, source, source_url, sha,
+    imported_at, status)` en `context.db` (auto-migración) para no
+    re-descargar el mismo SHA. Reusa `skill_forge_rejections` (Sprint 11.2)
+    para que no se proponga lo ya rechazado. Reusa `apex_skill_forge_approve`
+    /`apex_skill_forge_reject` (mismo dir `.apex/skill-proposals/`, mismo
+    formato de propuesta con bloque ```` ```markdown ```` de 4 backticks
+    para soportar SKILL.md con triple-backtick interno).
+  - **Counter cross-project**: `session-start.py` cuenta proyectos visitados
+    en `hub.db.global_meta.library_ingest_visit_set` (set JSON). Tras N=5
+    proyectos sin ingerir, inyecta recordatorio sugiriendo
+    `apex_ingest_library_skills(source="both")`. `reset_visit_counter` se
+    llama tras un ingest exitoso.
+  - **HTTP**: stdlib `urllib.request` (sin deps nuevas), timeout 10s wall-
+    clock, max body 50KB. Token GitHub via `GITHUB_TOKEN`/`GH_TOKEN` env.
+  - 1 tool MCP nueva: `apex_ingest_library_skills(source, query, min_stars,
+    limit_repos, max_skills_per_repo)`. Total tools: **38**.
+  - **Patch a skill_forge**: `_extract_skill_block` ahora soporta delimitador
+    de 4 backticks (proposals nuevas) y cae a 3 (compat con Sprint 11.2).
+  - 35 tests nuevos (frontmatter, validación, secretos, dedup, fixtures
+    HTTP locales, fixture CLI dry-run). Total: **233 verde** en 5.3s.
+  - **Fix de hook duplicado**: `apex/.claude/settings.json` registraba
+    `session-start.py` que también está en `~/.claude/settings.json`
+    (path absoluto). Quitado el duplicado del nivel proyecto: ahora la
+    inyección de lecciones cross-project ocurre **una sola vez** por
+    sesión (antes: doble bloque en `additionalContext`, ~2.5K tokens
+    desperdiciados por sesión + counter avanzando dos veces).
 
 - [x] **Sprint 11.2 — Skill Forge auto-detector** (2026-05-03)
   - `lib/skill_forge.py` (~440L): tres detectores `scan_grader_blocks` (D1
@@ -178,7 +218,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 ### NO Completado (Sprints 11-13 del roadmap aprobado)
 
-- [ ] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, 11.3 ingest library-skills.io)
+- [x] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, ~~11.3 library_ingest~~ ✓)
 - [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
 - [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
@@ -191,11 +231,12 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections | Verificado |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 37 tools      |
+| MCP server    | Python + mcp.server                | 38 tools      |
 | Hooks         | Python scripts                     | 6 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch) |
+| Library Ingest| lib/library_ingest.py (Sprint 11.3)| 35 tests, GitHub + library-skills CLI |
 | Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
 | Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
 | Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
@@ -205,7 +246,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 198 pasando   |
+| Tests totales | pytest                             | 233 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

@@ -45,6 +45,7 @@ import design_md as _design  # noqa: E402
 import research as _research  # noqa: E402
 import browser_trace as _browser  # noqa: E402
 import skill_forge as _forge  # noqa: E402
+import library_ingest as _library  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -1154,6 +1155,50 @@ async def list_tools() -> list[Tool]:
                 "required": ["slug", "reason"],
             },
         ),
+        Tool(
+            name="apex_ingest_library_skills",
+            description=(
+                "Sprint 11.3 — Descubre e ingiere skills externas desde dos "
+                "fuentes: (a) GitHub Search (repos populares con 'claude-skills' "
+                "en nombre o topic; awesome-lists curadas) y (b) library-skills "
+                "CLI (uvx library-skills --dry-run --claude) si el proyecto "
+                "tiene pyproject.toml/package.json. Cada SKILL.md descargada "
+                "pasa un filtro determinista (frontmatter, longitud, regex de "
+                "secretos) antes de proponerse en .apex/skill-proposals/ con "
+                "prefijo 'import-'. La aprobación reusa apex_skill_forge_approve."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "enum": ["github", "pkg", "both"],
+                        "default": "both",
+                        "description": "Fuente a consultar.",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Query GitHub custom (opcional). Por defecto usa "
+                            "'awesome-claude-skills in:name', "
+                            "'claude-skills in:name', 'topic:claude-skills'."
+                        ),
+                    },
+                    "min_stars": {
+                        "type": "integer", "default": 50,
+                        "description": "Filtro mínimo de estrellas en GitHub.",
+                    },
+                    "limit_repos": {
+                        "type": "integer", "default": 8,
+                        "description": "Repos top a inspeccionar.",
+                    },
+                    "max_skills_per_repo": {
+                        "type": "integer", "default": 30,
+                        "description": "Skills máximas a descargar por repo.",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -1978,6 +2023,52 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = [TextContent(type="text", text=(
                 f"✗ Skill rechazado: {slug}\n  motivo: {reason}"
             ))]
+
+        elif name == "apex_ingest_library_skills":
+            project_root = _find_project_root()
+            res = _library.ingest(
+                project_root,
+                source=arguments.get("source", "both"),
+                query=arguments.get("query"),
+                min_stars=int(arguments.get("min_stars", _library.GH_MIN_STARS)),
+                limit_repos=int(arguments.get("limit_repos",
+                                              _library.GH_DEFAULT_LIMIT_REPOS)),
+                max_skills_per_repo=int(arguments.get(
+                    "max_skills_per_repo",
+                    _library.GH_MAX_SKILLS_PER_REPO,
+                )),
+            )
+            if res.written and _HUB_DB.exists():
+                try:
+                    _library.reset_visit_counter(_HUB_DB)
+                except Exception:
+                    pass
+            lines = [
+                f"Library Ingest — fuentes: {', '.join(res.sources_used) or '(ninguna)'}",
+                f"  repos GitHub revisados: {res.repos_searched}",
+            ]
+            if res.written:
+                lines.append(f"  ○ propuestas nuevas ({len(res.written)}):")
+                lines += [f"    - {s}" for s in res.written]
+            if res.already_proposed:
+                lines.append(f"  · ya propuestas ({len(res.already_proposed)}):")
+                lines += [f"    - {s}" for s in res.already_proposed[:10]]
+            if res.already_imported:
+                lines.append(f"  · ya importadas, mismo SHA "
+                             f"({len(res.already_imported)})")
+            if res.rejected:
+                lines.append(f"  ✗ rechazadas previamente ({len(res.rejected)})")
+            if res.invalid:
+                lines.append(f"  ⚠ inválidas ({len(res.invalid)}):")
+                for slug, reason in res.invalid[:5]:
+                    lines.append(f"    - {slug}: {reason[:140]}")
+            if not (res.written or res.already_proposed or res.already_imported
+                    or res.rejected or res.invalid):
+                lines.append("  (sin candidatas)")
+            lines.append("")
+            lines.append("Aprobar: apex_skill_forge_approve(slug)")
+            lines.append("Rechazar: apex_skill_forge_reject(slug, reason)")
+            result = [TextContent(type="text", text="\n".join(lines))]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
