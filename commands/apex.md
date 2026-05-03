@@ -46,6 +46,10 @@ Las herramientas se llaman `mcp__apex__apex_*`. Lista completa:
 | `mcp__apex__apex_onboard_apply`          | Aplicar plan retroactivo a `.apex/`      |
 | `mcp__apex__apex_grader_evaluate`        | **(Sprint 8.1)** Grader outcome-based de fase |
 | `mcp__apex__apex_goal_loop`              | **(Sprint 8.2)** /goal turn-budget loop  |
+| `mcp__apex__apex_handoff_write`          | **(Sprint 9.1)** Serializa estado a `.apex/handoff/` |
+| `mcp__apex__apex_resume_session`         | **(Sprint 9.1)** Rehidrata desde un handoff anterior |
+| `mcp__apex__apex_archive_output`         | **(Sprint 9.2)** Archiva output largo, devuelve resumen |
+| `mcp__apex__apex_get_archived`           | **(Sprint 9.2)** Recupera output archivado por id |
 | `mcp__apex__apex_security_gate`          | Gate AgentArmor 8-capas (fase 10.5)      |
 
 **Si `ToolSearch` no devuelve herramientas apex, avisa al usuario de que

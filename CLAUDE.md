@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 8)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 9)
 
 ## Qué es APEX
 
@@ -89,7 +89,28 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 26 tools (Sprint 8 cierra esta deuda)
+- [x] **MCP server** completo con 30 tools (Sprint 8 + 9 cierran esta deuda)
+
+- [x] **Sprint 9 — Context hygiene** (2026-05-03)
+  - `lib/handoff.py` (213L): estimate_tokens_in_transcript (chars/4),
+    serialize_handoff a `.apex/handoff/{session_id}.md` con fase actual,
+    verdicts del grader bloqueando, goals activos, decisiones recientes.
+  - `lib/token_filter.py` (105L): should_archive (chars/líneas/patrones
+    pip/npm/dep-trees), summarize_for_context (head+omitidos+tail).
+  - `.claude/hooks/context-watch.py` (UserPromptSubmit): mide transcript
+    JSONL, si >40% del context limit (env APEX_HANDOFF_THRESHOLD,
+    default 0.40 sobre 200K), inyecta aviso al agente con instrucciones
+    para handoff.
+  - `.claude/hooks/post-tool-archive.py` (PostToolUse): stderr aviso
+    cuando output de Bash/Read/Playwright/GitHub supera 5000 chars
+    (env APEX_ARCHIVE_THRESHOLD_CHARS).
+  - Tabla `tool_output_archive` en context.db con CRUD.
+  - 4 tools MCP nuevas: `apex_handoff_write`, `apex_resume_session`,
+    `apex_archive_output`, `apex_get_archived`.
+  - 28 tests nuevos (14 handoff + 14 token_filter). Total: **126 verde**.
+  - Auto-migración del schema en BDs APEX existentes (commit `0bee3aa`):
+    `_ensure_db_schema` se llama una vez por path en cada vida del
+    proceso MCP. Aplica a las 10 BDs en `~/RoadToDevOps/*/.apex/`.
 
 ### Legacy (rama `archive/legacy-web`, no se usa en CLI)
 
@@ -99,9 +120,8 @@ APEX en producción es puro CLI + MCP + skills + apex-hub. Los directorios
 `backend/` y `frontend/` siguen en main por inercia histórica; se moverán
 a la rama `archive/legacy-web` en un chore futuro.
 
-### NO Completado (Sprints 9-13 del roadmap aprobado)
+### NO Completado (Sprints 10-13 del roadmap aprobado)
 
-- [ ] **Sprint 9 — Context hygiene** (token filter, handoff a 40%, apex_resume_session)
 - [ ] **Sprint 10 — Phase 1-3 v2** (DESIGN.md Google estándar, Scrapling research)
 - [ ] **Sprint 11 — Living ecosystem** (browser-trace con Chrome real, skill_forge auto-creation, library-skills.io)
 - [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
@@ -116,15 +136,17 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts | Verificado    |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive | Verificado |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
 | Skills        | Markdown (SKILL.md)                | 19 skills     |
-| MCP server    | Python + mcp.server                | 26 tools      |
-| Hooks         | Python scripts                     | 3 (session, design-lint, phase-gate) |
+| MCP server    | Python + mcp.server                | 30 tools      |
+| Hooks         | Python scripts                     | 5 (session, design-lint, phase-gate, context-watch, post-tool-archive) |
 | Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
 | /goal loop    | lib/goal_loop.py (Sprint 8.2)      | 18 tests      |
+| Handoff       | lib/handoff.py (Sprint 9.1)        | 14 tests      |
+| Token filter  | lib/token_filter.py (Sprint 9.2)   | 14 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 98 pasando    |
+| Tests totales | pytest                             | 126 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 
