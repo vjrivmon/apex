@@ -20,6 +20,19 @@
   que falta y como next_step con `apex_add_next_step`.
 - **[9g]** `apex_set_phase(phase_number=9, status="completed")`.
 
+## Skills recomendadas
+
+- **`tdd`** (Sprint 14) — usa tests-as-specification. Cada test describe
+  una capacidad ("user can checkout with valid cart"), no un detalle
+  interno ("checkout calls paymentService.process"). Si un test rompe
+  cuando refactorizas sin cambiar comportamiento, esta testando
+  implementacion: borrarlo o reformularlo contra la interface publica.
+- **`diagnose`** (Sprint 14) — comodin para cualquier bug que aparezca
+  durante esta fase. Bucle de 6 fases: feedback loop → reproduce →
+  hipotetiza (3-5 ranqueadas) → instrumenta (logs `[DEBUG-...]`
+  etiquetados) → fix + test de regresion → cleanup. Cierra con
+  `apex_add_error` para que A1 `override_clusters` del doctor lo recoja.
+
 ## Criterio de salida
 
 - Unit + integration + E2E verde.

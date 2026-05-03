@@ -22,6 +22,19 @@ Para features, bugs y mejoras post-deploy.
 - **[12f]** `apex_set_phase(phase_number=12, status="in_progress")` (esta
   fase nunca se "completa" definitivamente).
 
+## Skills recomendadas
+
+- **`diagnose`** (Sprint 14) — para cada bug post-deploy, no improvises:
+  feedback loop primero, hipotesis ranqueadas despues. Cierra con
+  `apex_add_error`.
+- **`improve-architecture`** (Sprint 14) — invocala cada N iteraciones
+  (cada 5-10 entradas en esta fase, o cuando `apex_doctor_run` lance
+  A2 `grader_block_patterns`). Test de borrado sobre modulos sospechosos
+  de ser shallow. Lee `wiki/decisions/` antes de proponer; marca
+  conflictos con ADRs explicitamente.
+- **`grill-with-docs`** (Sprint 14) — para features nuevas significativas,
+  vuelve a esta skill antes de tocar codigo.
+
 ## Regla
 
 Fase 12 es siempre `in_progress`. Es la fase viva del proyecto. Cada

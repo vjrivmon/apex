@@ -42,6 +42,15 @@ más simple.
 5. RAG cuando el conocimiento cambia. Dominio estatico → parametrizar.
    Dinamico → vectorizar.
 
+## Skills recomendadas
+
+- **`tdd`** (Sprint 14) — el bucle red-green-refactor es el "como" de
+  esta fase. Una rebanada vertical cada vez (un test → una
+  implementacion), nunca rebanado horizontal (todos los tests primero).
+  Usa el vocabulario canonico de `wiki/entities/concepts/` para nombrar
+  tests e interfaces. Tests de integracion sobre interfaces publicas,
+  no mocks de internos.
+
 ## Criterio de salida (outcome-based)
 
 - Entidades + ports + use cases + agents implementados.

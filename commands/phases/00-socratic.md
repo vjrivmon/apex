@@ -34,6 +34,15 @@ sin valor real.
   proyectos previos con el mismo dominio o stack.
 - **[0j]** `apex_set_phase(phase_number=0, status="completed")`
 
+## Skills recomendadas
+
+- **`grill-with-docs`** (Sprint 14) — tras las rondas socraticas, si la
+  idea sobrevive, invoca esta skill para estresar el plan contra el
+  lenguaje del dominio. Crea/actualiza vocabulario canonico
+  (CONTEXT.md o `wiki/entities/concepts/`) y registra decisiones cargadas
+  en `wiki/decisions/` con formato `YYYY-MM-DD-slug.md`. Refuerza la
+  fase, no la reemplaza.
+
 ## Criterio de salida
 
 - 4 rondas socraticas registradas.

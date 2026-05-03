@@ -135,6 +135,15 @@ Apuntar al nivel de calidad de: `drapz.design`, Buffet Designs (Solaris),
 Bitmap Studio (Solaris visual identity), Talo, Delegento (4 variantes), Bloom,
 Havernex. Consultar `skills/brand-identity/SKILL.md`.
 
+## Skills recomendadas
+
+- **`grill-with-docs`** (Sprint 14) — antes de cerrar el DESIGN.md,
+  estresa cada decision visual/arquitectonica preguntando una a una.
+  Afilara terminos difusos ("componente" vs "modulo", "servicio" vs
+  "adapter") y registrara las decisiones cargadas como ADR en
+  `wiki/decisions/`. No solapa con `design-research` (esa hace
+  competitor scraping); esta hace stress-test del plan ya formado.
+
 ## Criterio de salida (outcome-based)
 
 - Diagramas C4 (context, container, componentes) generados con Mermaid.

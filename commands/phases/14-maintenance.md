@@ -27,6 +27,17 @@
   apply=false)` genera MDX en vr-web para revision manual.
 - **[14g]** `apex_set_phase(phase_number=14, status="completed")`.
 
+## Skills recomendadas
+
+- **`diagnose`** (Sprint 14) — modo por defecto para bugs reportados.
+  Disciplina ante todo: reproduce con feedback loop antes de hipotetizar,
+  cierra con `apex_add_error` y elimina toda la instrumentacion
+  `[DEBUG-...]` antes de declarar done.
+- **`improve-architecture`** (Sprint 14) — cuando el doctor (A1, A2)
+  reporta clusters de errores recurrentes en la misma area, ese es el
+  trigger para invocar esta skill. La pregunta del post-mortem ("que
+  habria prevenido este bug?") suele apuntar a un seam mal puesto.
+
 ## Criterio de salida
 
 - CI/CD verde con lint+test+build+deploy.

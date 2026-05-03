@@ -27,6 +27,14 @@ validación de UI web** (lección focusnow#3).
 - **[8h]** Si verdict pasa: `apex_set_phase(phase_number=8,
   status="completed")`.
 
+## Skills recomendadas
+
+- **`tdd`** (Sprint 14) — los tests de integracion cross-modulo son la
+  superficie natural del bucle red-green-refactor a este nivel. Aplica
+  la regla de mocking: solo en bordes del sistema (APIs externas, DB,
+  tiempo, fs), nunca colaboradores internos. Si descubres que un modulo
+  necesita ser mockeado para testarlo, es señal de un seam mal puesto.
+
 ## Criterio de salida (outcome-based)
 
 - DI lifecycle configurado y schema contracts en frontera de capa.
