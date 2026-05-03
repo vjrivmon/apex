@@ -43,14 +43,21 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
+# Imports separados: si `context_db` (aiosqlite) falla en el python que
+# ejecuta el hook, el doctor sigue funcionando y solo se degrada el handoff.
+# Antes esto era un único `except` que mataba TODO si fallaba cualquier
+# import → hook silencioso → bug latente del Sprint 13.
 try:
     import apex_doctor as _doc
     import wrapup_phrases as _wp
-    import handoff as _ho
-    from context_db import ApexContextDB
 except Exception:
     _doc = None  # type: ignore
     _wp = None  # type: ignore
+
+try:
+    import handoff as _ho
+    from context_db import ApexContextDB
+except Exception:
     _ho = None  # type: ignore
     ApexContextDB = None  # type: ignore
 
