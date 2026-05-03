@@ -163,6 +163,21 @@ CREATE TABLE IF NOT EXISTS grader_verdicts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_grader_phase ON grader_verdicts(phase, created_at DESC);
+
+-- Tool output archive: outputs largos archivados cooperativamente (Sprint 9.2)
+CREATE TABLE IF NOT EXISTS tool_output_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool TEXT NOT NULL,
+    arguments TEXT DEFAULT '{}',  -- JSON
+    output_full TEXT NOT NULL,    -- contenido completo (puede ser grande)
+    summary TEXT NOT NULL,        -- resumen apto para contexto
+    chars_full INTEGER DEFAULT 0,
+    chars_summary INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_created ON tool_output_archive(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_archive_tool ON tool_output_archive(tool, created_at DESC);
 """
 
 PHASES = [
@@ -1023,6 +1038,56 @@ class ApexContextDB:
             "issues": _json.loads(r[4] or "[]"),
             "should_block": bool(r[5]), "reasoning": r[6],
             "llm_judged": bool(r[7]), "created_at": r[8],
+        } for r in rows]
+
+    # ── Tool output archive (Sprint 9.2) ──
+
+    async def archive_output(
+        self, tool: str, arguments: dict, output: str, summary: str,
+    ) -> int:
+        import json as _json
+        async with self._conn() as db:
+            cur = await db.execute(
+                "INSERT INTO tool_output_archive (tool, arguments, output_full, "
+                "summary, chars_full, chars_summary) VALUES (?, ?, ?, ?, ?, ?)",
+                (tool, _json.dumps(arguments or {}, ensure_ascii=False),
+                 output, summary, len(output), len(summary)))
+            await db.commit()
+            return cur.lastrowid
+
+    async def get_archived(self, archive_id: int) -> dict | None:
+        async with self._conn() as db:
+            rows = await db.execute_fetchall(
+                "SELECT id, tool, arguments, output_full, summary, "
+                "chars_full, chars_summary, created_at "
+                "FROM tool_output_archive WHERE id = ?", (archive_id,))
+        if not rows:
+            return None
+        r = rows[0]
+        import json as _json
+        return {
+            "id": r[0], "tool": r[1], "arguments": _json.loads(r[2] or "{}"),
+            "output_full": r[3], "summary": r[4],
+            "chars_full": r[5], "chars_summary": r[6],
+            "created_at": r[7],
+        }
+
+    async def list_archived(self, limit: int = 20,
+                             tool: str | None = None) -> list[dict]:
+        async with self._conn() as db:
+            if tool:
+                rows = await db.execute_fetchall(
+                    "SELECT id, tool, chars_full, chars_summary, created_at "
+                    "FROM tool_output_archive WHERE tool = ? "
+                    "ORDER BY created_at DESC LIMIT ?", (tool, limit))
+            else:
+                rows = await db.execute_fetchall(
+                    "SELECT id, tool, chars_full, chars_summary, created_at "
+                    "FROM tool_output_archive ORDER BY created_at DESC LIMIT ?",
+                    (limit,))
+        return [{
+            "id": r[0], "tool": r[1], "chars_full": r[2],
+            "chars_summary": r[3], "created_at": r[4],
         } for r in rows]
 
     # ── Convenience: get_full_context alias ──

@@ -40,6 +40,7 @@ sys.path.insert(0, str(_apex_root / "lib"))
 import grader as _grader  # noqa: E402
 import goal_loop as _goal  # noqa: E402
 import handoff as _handoff  # noqa: E402
+import token_filter as _tf  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -887,6 +888,38 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_archive_output",
+            description=(
+                "Sprint 9.2 — Archiva un output largo de herramienta en "
+                "tool_output_archive. Devuelve el id de archivo + un resumen "
+                "apto para contexto. Úsalo cuando post-tool-archive.py avise "
+                "que un output supera el umbral."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tool": {"type": "string"},
+                    "arguments": {"type": "object", "default": {}},
+                    "output": {"type": "string"},
+                },
+                "required": ["tool", "output"],
+            },
+        ),
+        Tool(
+            name="apex_get_archived",
+            description=(
+                "Sprint 9.2 — Recupera un output archivado por id. Sin id, "
+                "lista los últimos 20 archivos."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "ID del archivo"},
+                    "tool": {"type": "string", "description": "Filtrar por tool al listar"},
+                },
+            },
+        ),
+        Tool(
             name="apex_handoff_write",
             description=(
                 "Sprint 9.1 — Serializa el estado activo de la sesión a "
@@ -1521,6 +1554,46 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if verdict_id:
                 lines.append(f"Persistido como verdict #{verdict_id}")
             result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_archive_output":
+            tool_name = arguments["tool"]
+            tool_args = arguments.get("arguments", {})
+            output = arguments["output"]
+            summary = _tf.summarize_for_context(output)
+            aid = await db.archive_output(tool_name, tool_args, output, summary)
+            result = [TextContent(type="text", text=(
+                f"Archivado #{aid} — {len(output):,} chars completos, "
+                f"{len(summary):,} chars en resumen.\n"
+                f"Recuperar con apex_get_archived(id={aid}).\n\n"
+                f"Resumen:\n{summary}"
+            ))]
+
+        elif name == "apex_get_archived":
+            aid = arguments.get("id")
+            if aid is None:
+                tool_filter = arguments.get("tool")
+                items = await db.list_archived(limit=20, tool=tool_filter)
+                if not items:
+                    result = [TextContent(type="text", text="No hay archivos en tool_output_archive.")]
+                else:
+                    lines = [f"{len(items)} archivo(s):"]
+                    for it in items:
+                        lines.append(
+                            f"  #{it['id']} · {it['tool']} · "
+                            f"{it['chars_full']:,} chars (resumen {it['chars_summary']:,}) · "
+                            f"{it['created_at']}"
+                        )
+                    result = [TextContent(type="text", text="\n".join(lines))]
+            else:
+                rec = await db.get_archived(int(aid))
+                if rec is None:
+                    result = [TextContent(type="text", text=f"No existe archivo #{aid}.")]
+                else:
+                    result = [TextContent(type="text", text=(
+                        f"Archivo #{rec['id']} ({rec['tool']}, "
+                        f"{rec['chars_full']:,} chars, {rec['created_at']}):\n\n"
+                        f"{rec['output_full']}"
+                    ))]
 
         elif name == "apex_handoff_write":
             session_id = arguments["session_id"]
