@@ -14,6 +14,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__apex__apex_set_phase",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/phase-gate.py"
+          }
+        ]
+      }
     ]
   }
 }

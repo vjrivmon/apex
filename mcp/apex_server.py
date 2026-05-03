@@ -37,6 +37,9 @@ from pathlib import Path
 _apex_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_apex_root / "lib"))
 
+import grader as _grader  # noqa: E402
+import goal_loop as _goal  # noqa: E402
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
@@ -63,10 +66,25 @@ from reverse_engineer import (
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
+# Hub v2 prefiere hub-v2-port; mantenemos fallback al legacy hub-port
+_HUB_PORT_FILE_V2 = Path.home() / ".apex" / "hub-v2-port"
 _HUB_PORT_FILE = Path.home() / ".apex" / "hub-port"
 _HUB_DIR = Path.home() / "RoadToDevOps" / "apex-hub"
 _HUB_LOG = Path.home() / ".apex" / "hub.log"
 _FALLBACK_MONITOR_URL = "http://localhost:8099/event"
+
+
+def _read_hub_port() -> str | None:
+    """Lee el puerto del Hub. Prefiere v2 sobre legacy."""
+    for f in (_HUB_PORT_FILE_V2, _HUB_PORT_FILE):
+        try:
+            if f.exists():
+                p = f.read_text().strip()
+                if p.isdigit():
+                    return p
+        except Exception:
+            continue
+    return None
 
 
 def _hub_is_running() -> bool:
@@ -152,26 +170,28 @@ def _launch_hub_if_needed() -> None:
 
 
 def _hub_urls() -> list[str]:
-    """Detecta dinámicamente el puerto del APEX Hub leyendo ~/.apex/hub-port."""
+    """Detecta dinámicamente el puerto del APEX Hub. Prefiere hub-v2-port."""
     urls = []
-    try:
-        if _HUB_PORT_FILE.exists():
-            port = _HUB_PORT_FILE.read_text().strip()
-            if port.isdigit():
-                urls.append(f"http://localhost:{port}/api/live/event")
-    except Exception:
-        pass
+    port = _read_hub_port()
+    if port:
+        urls.append(f"http://localhost:{port}/api/live/event")
     urls.append(_FALLBACK_MONITOR_URL)
     return urls
 
 
 async def _debug_log(tool: str, arguments: dict, result: str, duration_ms: int = 0) -> None:
     """Envía evento al APEX Hub (puerto auto-detectado) y/o debug monitor. No falla si ninguno está."""
+    project = ""
+    try:
+        project = _find_project_root().name
+    except Exception:
+        pass
     payload = {
         "tool": tool,
         "arguments": arguments,
         "result": result[:500],
         "duration_ms": duration_ms,
+        "project": project,
     }
     try:
         import httpx
@@ -426,13 +446,28 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="apex_set_phase",
-            description="Actualiza el estado de una fase del proyecto (0-14). Estados: pending, in_progress, completed, skipped.",
+            description=(
+                "Actualiza el estado de una fase (0-14). Estados: pending, "
+                "in_progress, completed, skipped. Sprint 8: si el último verdict "
+                "del grader para la fase tiene should_block=true, esta tool falla "
+                "salvo que se pase force=true (registra apex_add_error con motivo)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "phase_number": {"type": "integer", "minimum": 0, "maximum": 14},
                     "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "skipped"]},
                     "notes": {"type": "string", "description": "Observaciones sobre la fase", "default": ""},
+                    "force": {
+                        "type": "boolean",
+                        "description": "Bypass al bloqueo del grader (registra error con razón)",
+                        "default": False,
+                    },
+                    "force_reason": {
+                        "type": "string",
+                        "description": "Razón del override (obligatoria si force=true)",
+                        "default": "",
+                    },
                 },
                 "required": ["phase_number", "status"],
             },
@@ -798,6 +833,73 @@ async def list_tools() -> list[Tool]:
                 "required": ["path", "scan_report"],
             },
         ),
+        Tool(
+            name="apex_grader_evaluate",
+            description=(
+                "Sprint 8.1 — Grader outcome-based. Evalúa el cierre de una fase "
+                "ejecutando checks deterministas (git, tests, OS, emojis, schema, "
+                "Playwright) y opcionalmente juicio LLM. Persiste el verdict en "
+                "context.db. Si should_block=true, apex_set_phase debe rechazar la "
+                "transición a esa fase."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "phase": {"type": "integer", "description": "Fase a evaluar (0-14)"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["deterministic", "full"],
+                        "description": "deterministic = solo checks programáticos; full = + juicio LLM si hay ANTHROPIC_API_KEY",
+                        "default": "deterministic",
+                    },
+                    "component_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tipos de componente detectados (web, cli, mcp, bot, ...). Phase-aware checks los usan.",
+                        "default": [],
+                    },
+                    "persist": {
+                        "type": "boolean",
+                        "description": "Guardar verdict en grader_verdicts table",
+                        "default": True,
+                    },
+                },
+                "required": ["phase"],
+            },
+        ),
+        Tool(
+            name="apex_goal_loop",
+            description=(
+                "Sprint 8.2 — /goal turn-budget loop. Acciones: start, record_turn, "
+                "judge_prompt, apply_decision, pause, list. El estado se persiste "
+                "en .apex/goal/{id}.json. El juez decide done|continue|degenerate."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["start", "record_turn", "judge_prompt",
+                                 "apply_decision", "pause", "list", "load"],
+                    },
+                    "goal": {"type": "string", "description": "Texto del goal (action=start)"},
+                    "turn_budget": {"type": "integer", "default": 20},
+                    "goal_id": {"type": "string", "description": "ID del goal (action != start/list)"},
+                    "turn_summary": {"type": "string", "description": "Resumen del turno (action=record_turn)"},
+                    "tools_used": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Herramientas usadas en el turno",
+                        "default": [],
+                    },
+                    "decision": {
+                        "type": "object",
+                        "description": "Decisión del juez (action=apply_decision): {decision, reason}",
+                    },
+                },
+                "required": ["action"],
+            },
+        ),
     ]
 
 
@@ -830,10 +932,48 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
 
         elif name == "apex_set_phase":
-            await db.set_phase(arguments["phase_number"], arguments["status"], arguments.get("notes", ""))
-            _project = await db.get_meta("nombre") or "unknown"
-            _sync_to_obsidian("phase", {"project": _project, "phase": arguments["phase_number"], "status": arguments["status"], "notes": arguments.get("notes", "")})
-            result = [TextContent(type="text", text=f"Fase {arguments['phase_number']} → {arguments['status']}")]
+            phase_n = arguments["phase_number"]
+            new_status = arguments["status"]
+            force = bool(arguments.get("force", False))
+            force_reason = arguments.get("force_reason", "")
+
+            # Sprint 8: consultar último verdict del grader
+            blocking_phase = phase_n if new_status == "completed" else (phase_n - 1 if new_status == "in_progress" else None)
+            verdict = None
+            if blocking_phase is not None and blocking_phase >= 0:
+                verdict = await db.get_latest_verdict(blocking_phase)
+
+            if verdict and verdict.get("should_block") and not force:
+                msg_lines = [
+                    f"BLOQUEADO por grader (verdict #{verdict['id']} de fase {blocking_phase}):",
+                    f"  Quality: {verdict['quality']}/4",
+                    f"  Issues: {', '.join(verdict['issues']) or '(ninguna)'}",
+                    f"  Razón: {verdict['reasoning']}",
+                    "",
+                    "Para bypassear: apex_set_phase(..., force=True, force_reason='...')",
+                    "Para resolver: ataca los issues y vuelve a llamar apex_grader_evaluate.",
+                ]
+                result = [TextContent(type="text", text="\n".join(msg_lines))]
+            else:
+                if verdict and verdict.get("should_block") and force:
+                    # registra el override como error con la razón
+                    await db.add_error(
+                        source="claude",
+                        description=f"Override de bloqueo del grader en fase {blocking_phase}",
+                        lesson=force_reason or "(sin razón documentada)",
+                        phase=blocking_phase,
+                        severity="high",
+                    )
+                await db.set_phase(phase_n, new_status, arguments.get("notes", ""))
+                _project = await db.get_meta("nombre") or "unknown"
+                _sync_to_obsidian("phase", {
+                    "project": _project, "phase": phase_n,
+                    "status": new_status, "notes": arguments.get("notes", ""),
+                })
+                msg = f"Fase {phase_n} → {new_status}"
+                if verdict:
+                    msg += f" (grader: quality {verdict['quality']}/4)"
+                result = [TextContent(type="text", text=msg)]
 
         elif name == "apex_add_decision":
             did = await db.add_decision(
@@ -1277,6 +1417,105 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 f"- Wiki: concepts/gap-analysis.md creado\n"
                 f"- .apex/ listo para arrancar fase 12 (iteración)"
             ))]
+
+        elif name == "apex_grader_evaluate":
+            phase_n = int(arguments["phase"])
+            mode = arguments.get("mode", "deterministic")
+            component_types = list(arguments.get("component_types", []))
+            persist = bool(arguments.get("persist", True))
+
+            # Recolectar metadata de decisiones para enriquecer evidence
+            try:
+                decisions_meta = {}
+                _os = await db.get_meta("detected_os")
+                if _os:
+                    decisions_meta["detected_os"] = _os
+            except Exception:
+                decisions_meta = {}
+
+            project_root = _find_project_root()
+            evidence = _grader.gather_evidence(
+                project_root=project_root,
+                phase=phase_n,
+                component_types=component_types,
+                decisions_metadata=decisions_meta,
+            )
+            if mode == "full":
+                verdict_obj = _grader.evaluate_full(evidence, use_anthropic=True)
+            else:
+                verdict_obj = _grader.evaluate_deterministic(evidence)
+
+            verdict_id = None
+            if persist:
+                verdict_id = await db.add_verdict(**verdict_obj.to_db_kwargs())
+
+            block_marker = "BLOCK" if verdict_obj.should_block else "PASS"
+            lines = [
+                f"[{block_marker}] Grader fase {phase_n} — quality {verdict_obj.quality}/4",
+                f"Issues: {', '.join(verdict_obj.issues) or '(ninguna)'}",
+                f"Checks: {json.dumps(verdict_obj.deterministic_checks, ensure_ascii=False)}",
+                f"LLM judged: {verdict_obj.llm_judged}",
+                f"Razón: {verdict_obj.reasoning}",
+            ]
+            if verdict_id:
+                lines.append(f"Persistido como verdict #{verdict_id}")
+            result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_goal_loop":
+            action = arguments["action"]
+            project_root = _find_project_root()
+            if action == "start":
+                state = _goal.start_goal(
+                    project_root,
+                    arguments["goal"],
+                    turn_budget=int(arguments.get("turn_budget", _goal.DEFAULT_TURN_BUDGET)),
+                )
+                result = [TextContent(type="text", text=(
+                    f"○ Goal set ({state.turn_budget}-turn budget): {state.goal}\n"
+                    f"  id: {state.id}"
+                ))]
+            elif action == "record_turn":
+                state = _goal.record_turn(
+                    project_root,
+                    arguments["goal_id"],
+                    arguments.get("turn_summary", ""),
+                    list(arguments.get("tools_used", [])),
+                )
+                result = [TextContent(type="text", text=(
+                    f"Turn {state.turns_used}/{state.turn_budget} recorded — status={state.status}"
+                ))]
+            elif action == "judge_prompt":
+                state = _goal.load_goal(project_root, arguments["goal_id"])
+                prompt = _goal.build_judge_prompt(state)
+                result = [TextContent(type="text", text=prompt)]
+            elif action == "apply_decision":
+                decision = arguments.get("decision") or {"decision": "continue", "reason": "(sin)"}
+                state = _goal.apply_judge_decision(project_root, arguments["goal_id"], decision)
+                glyph = {"done": "✓", "degenerate": "✗", "active": "↻",
+                         "paused": "‖", "budget_exhausted": "⊘"}.get(state.status, "·")
+                result = [TextContent(type="text", text=(
+                    f"{glyph} status={state.status} ({state.turns_used}/{state.turn_budget}) — "
+                    f"{decision.get('reason', '')}"
+                ))]
+            elif action == "pause":
+                state = _goal.pause_goal(project_root, arguments["goal_id"])
+                result = [TextContent(type="text", text=(
+                    f"‖ Goal paused — {state.turns_used}/{state.turn_budget} turns used"
+                ))]
+            elif action == "list":
+                actives = _goal.list_active_goals(project_root)
+                if not actives:
+                    result = [TextContent(type="text", text="No hay goals activos.")]
+                else:
+                    lines = [f"{len(actives)} goal(s) activo(s):"]
+                    for s in actives:
+                        lines.append(f"  - [{s.id}] {s.turns_used}/{s.turn_budget} — {s.goal[:120]}")
+                    result = [TextContent(type="text", text="\n".join(lines))]
+            elif action == "load":
+                state = _goal.load_goal(project_root, arguments["goal_id"])
+                result = [TextContent(type="text", text=state.to_json())]
+            else:
+                result = [TextContent(type="text", text=f"action desconocida: {action}")]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
