@@ -22,7 +22,7 @@ Las herramientas se llaman `mcp__apex__apex_*`. Lista completa:
 | ---------------------------------------- | ---------------------------------------- |
 | `mcp__apex__apex_init_project`           | Crear `.apex/` al inicio                 |
 | `mcp__apex__apex_get_context`            | Leer estado del proyecto (compact/timeline/full) |
-| `mcp__apex__apex_set_phase`              | Cambiar de fase                          |
+| `mcp__apex__apex_set_phase`              | Cambiar de fase (consulta grader, bloquea si should_block) |
 | `mcp__apex__apex_add_decision`           | Registrar cada decision                  |
 | `mcp__apex__apex_add_error`              | Registrar errores                        |
 | `mcp__apex__apex_add_component`          | Registrar componentes                    |
@@ -40,6 +40,12 @@ Las herramientas se llaman `mcp__apex__apex_*`. Lista completa:
 | `mcp__apex__apex_lint_second_brain`      | Linter auto-healing del wiki             |
 | `mcp__apex__apex_synthesize`             | Promocion density-triggered              |
 | `mcp__apex__apex_scaffold_devops`        | Templates CI/CD/Docker/observability     |
+| `mcp__apex__apex_security_gate`          | Gate AgentArmor 8 capas (fase 10.5)      |
+| `mcp__apex__apex_reverse_scan`           | Escaner code-first para proyectos maduros |
+| `mcp__apex__apex_reverse_plan`           | Plan retroactivo desde scan report       |
+| `mcp__apex__apex_onboard_apply`          | Aplicar plan retroactivo a `.apex/`      |
+| `mcp__apex__apex_grader_evaluate`        | **(Sprint 8.1)** Grader outcome-based de fase |
+| `mcp__apex__apex_goal_loop`              | **(Sprint 8.2)** /goal turn-budget loop  |
 | `mcp__apex__apex_security_gate`          | Gate AgentArmor 8-capas (fase 10.5)      |
 
 **Si `ToolSearch` no devuelve herramientas apex, avisa al usuario de que

@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-04-20
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 8)
 
 ## Qué es APEX
 
@@ -63,41 +63,52 @@ en `~/RoadToDevOps/apex-hub/`).
   - Detecta proyecto nuevo vs existente
   - 11 errores documentados a evitar
 
-- [x] **12 Skills**
-  - Core: `socratic`, `architect`, `flow-guardian`, `iterate`,
-    `onboard-existing`, `tools-integration`
+- [x] **19 Skills** (post Sprint 8)
+  - Core flow: `socratic`, `architect`, `flow-guardian` (v2 outcome-based),
+    `iterate`, `onboard-existing`, `reverse-engineer`, `tools-integration`
   - Diseño: `design-system`, `design-research`, `brand-identity`
   - Entrega: `portfolio-publisher`, `devops`, `monitor`
-  - Segundo cerebro: `second-brain`
-  - Seguridad: `security-audit` (con AgentArmor)
+  - Segundo cerebro: `second-brain`, `brainstorming`
+  - Seguridad: `security-audit` (AgentArmor)
   - Revisión: `code-review`
-  - `flow-guardian/SKILL.md` — Vigilante de 14 fases + gate 10.5 con criterios
-  - `iterate/SKILL.md` — Guía para fases 12-14
+  - **Sprint 8 (nuevos)**: `grader` (outcome-based judge), `apex-goal`
+    (turn-budget loop)
+  - Eliminados (eran huérfanos vacíos): `implement`, `verify`
 
-- [x] **Backend web** (modo producción con Ollama)
-  - Arquitectura hexagonal (core/domain/agents/ports + infrastructure +
-    application)
-  - 8 agentes: Orchestrator, Conversation, Architect, RAG, CodeGen, SkillGen,
-    Review, Eval
-  - FastAPI + WebSocket + 14 endpoints REST
-  - RAG: 7 patrones SMA + 21 casos reales de Vicente indexados en ChromaDB
+- [x] **Sprint 8 — Grader + /goal + Bridge Hub** (2026-05-03)
+  - `lib/grader.py` (430L): checks deterministas (git, tests, OS, emojis,
+    Pydantic, Playwright) + LLM judge prompt builder + Anthropic SDK
+    wrapper opcional
+  - `lib/goal_loop.py` (240L): turn-budget loop con detección de
+    degeneración estilo Hermes /goal
+  - Tabla `grader_verdicts` en context.db con CRUD
+  - 2 tools MCP nuevas: `apex_grader_evaluate`, `apex_goal_loop`
+  - Hook `phase-gate.py` (PreToolUse) bloquea apex_set_phase si verdict
+    should_block
+  - Bridge APEX↔Hub: detección hub-v2-port, endpoint
+    `/api/hub/search-cross-project` en apex-hub
+  - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **Frontend** (Next.js 15, estilo Linear dark)
-  - 9 páginas: landing, dashboard, session, patterns, projects, skills, monitor
-  - Componentes: ChatInterface, OptionCards, PhaseIndicator, ArchitectureCard,
-    CodePreview
-  - Todo en español con tildes
+- [x] **MCP server** completo con 26 tools (Sprint 8 cierra esta deuda)
 
-### NO Completado
+### Legacy (rama `archive/legacy-web`, no se usa en CLI)
 
-- [ ] **MCP server** para acceder a context.db desde Claude Code
+El backend web (FastAPI + ChromaDB) y el frontend Next.js fueron
+explorados al inicio del proyecto pero **NO se usan en el flujo actual**.
+APEX en producción es puro CLI + MCP + skills + apex-hub. Los directorios
+`backend/` y `frontend/` siguen en main por inercia histórica; se moverán
+a la rama `archive/legacy-web` en un chore futuro.
+
+### NO Completado (Sprints 9-13 del roadmap aprobado)
+
+- [ ] **Sprint 9 — Context hygiene** (token filter, handoff a 40%, apex_resume_session)
+- [ ] **Sprint 10 — Phase 1-3 v2** (DESIGN.md Google estándar, Scrapling research)
+- [ ] **Sprint 11 — Living ecosystem** (browser-trace con Chrome real, skill_forge auto-creation, library-skills.io)
+- [ ] **Sprint 12 — Virtual office** (Architect/Implementer/Reviewer/QA/DevOps roles)
+- [ ] **Sprint 13 — Apex-doctor** (cron diario, clusters de overrides, self-improvement)
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
-- [ ] **Skill security audit** — Inspirado en gstack `/cso` (OWASP + STRIDE)
-- [ ] **Skill code review** — Agente verificador post-implementación
 - [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
 - [ ] **Integración Pencil MCP** — Diseños automáticos en fase 2
-- [ ] **Tests del backend web** — Solo context_db está testeado (28 tests)
-- [ ] **Frontend no conectado al backend** — Existe pero no se usa en modo CLI
 
 ---
 
@@ -105,14 +116,17 @@ en `~/RoadToDevOps/apex-hub/`).
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5          | ✅ Verificado |
-| Wiki Scaffold | Python puro (Markdown)             | ✅ Verificado |
-| Skills        | Markdown (SKILL.md)                | ✅ 4 skills   |
-| Backend       | Python 3.12+ / FastAPI             | ✅ Compila    |
-| Frontend      | Next.js 15 / TypeScript / Tailwind | ✅ Compila    |
-| LLMs (prod)   | Ollama (gemma4, deepseek-r1, qwen) | Configurado   |
-| RAG           | ChromaDB (7 patrones + 21 casos)   | Indexado      |
-| Tests         | pytest                             | 28 pasando    |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts | Verificado    |
+| Wiki Scaffold | Python puro (Markdown)             | Verificado    |
+| Skills        | Markdown (SKILL.md)                | 19 skills     |
+| MCP server    | Python + mcp.server                | 26 tools      |
+| Hooks         | Python scripts                     | 3 (session, design-lint, phase-gate) |
+| Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
+| /goal loop    | lib/goal_loop.py (Sprint 8.2)      | 18 tests      |
+| Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
+| Tests totales | pytest                             | 98 pasando    |
+| Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
+| Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 
 ---
 
