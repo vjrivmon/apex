@@ -39,6 +39,7 @@ sys.path.insert(0, str(_apex_root / "lib"))
 
 import grader as _grader  # noqa: E402
 import goal_loop as _goal  # noqa: E402
+import handoff as _handoff  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -886,6 +887,47 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_handoff_write",
+            description=(
+                "Sprint 9.1 — Serializa el estado activo de la sesión a "
+                ".apex/handoff/{session_id}.md (fase actual, verdicts del grader "
+                "bloqueando, goals activos, próximos pasos). Útil cuando el "
+                "context-watch.py avisa de >40% de contexto."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "ID de la sesión (truncado a 12 chars suele ser suficiente)",
+                    },
+                    "transcript_tokens": {
+                        "type": "integer",
+                        "description": "Tokens estimados en la sesión actual (opcional, solo informativo)",
+                        "default": 0,
+                    },
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="apex_resume_session",
+            description=(
+                "Sprint 9.1 — Rehidrata el contexto de una sesión previa leyendo "
+                ".apex/handoff/{session_id}.md. Si no se pasa session_id, lista "
+                "los handoffs disponibles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "ID de la sesión a rehidratar. Si se omite, devuelve la lista.",
+                    },
+                },
+            },
+        ),
+        Tool(
             name="apex_goal_loop",
             description=(
                 "Sprint 8.2 — /goal turn-budget loop. Acciones: start, record_turn, "
@@ -1479,6 +1521,42 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if verdict_id:
                 lines.append(f"Persistido como verdict #{verdict_id}")
             result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_handoff_write":
+            session_id = arguments["session_id"]
+            transcript_tokens = int(arguments.get("transcript_tokens", 0))
+            project_root = _find_project_root()
+            path = await _handoff.serialize_handoff(
+                project_root, session_id, db, transcript_tokens=transcript_tokens)
+            result = [TextContent(type="text", text=(
+                f"Handoff escrito en {path}\n"
+                f"Tokens estimados: {transcript_tokens:,}\n"
+                f"Para retomar: apex_resume_session(session_id=\"{session_id}\")"
+            ))]
+
+        elif name == "apex_resume_session":
+            project_root = _find_project_root()
+            session_id = arguments.get("session_id")
+            if not session_id:
+                handoffs = _handoff.list_handoffs(project_root)
+                if not handoffs:
+                    result = [TextContent(type="text", text=(
+                        "No hay handoffs en .apex/handoff/. "
+                        "Ejecuta apex_handoff_write(session_id=...) primero."))]
+                else:
+                    lines = [f"{len(handoffs)} handoff(s) disponible(s):"]
+                    for h in handoffs[:10]:
+                        lines.append(f"  - {h['session_id']} · "
+                                     f"{h['size_bytes']:,} bytes · {h['modified']}")
+                    result = [TextContent(type="text", text="\n".join(lines))]
+            else:
+                content = _handoff.load_handoff(project_root, session_id)
+                if content is None:
+                    result = [TextContent(type="text", text=(
+                        f"No hay handoff para session_id={session_id}. "
+                        f"Lista disponibles con apex_resume_session() sin args."))]
+                else:
+                    result = [TextContent(type="text", text=content)]
 
         elif name == "apex_goal_loop":
             action = arguments["action"]
