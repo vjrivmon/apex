@@ -268,11 +268,29 @@ def _find_project_root() -> Path:
     return cwd
 
 
+_INITIALIZED_DB_PATHS: set[str] = set()
+
+
 def _get_db() -> ApexContextDB:
     """Obtiene la instancia de context.db para el proyecto actual."""
     root = _find_project_root()
     db_path = root / ".apex" / "context.db"
     return ApexContextDB(str(db_path))
+
+
+async def _ensure_db_schema(db: ApexContextDB) -> None:
+    """Garantiza que el schema está al día. Ejecuta initialize() (idempotente)
+    una vez por path en cada vida del proceso. Necesario para que BDs creadas
+    antes del Sprint 8 reciban automáticamente la tabla grader_verdicts y
+    cualquier futura adición al schema."""
+    key = str(db.db_path)
+    if key in _INITIALIZED_DB_PATHS:
+        return
+    if db.db_path.exists():
+        # BD existente: ejecuta executescript para añadir tablas nuevas
+        # (CREATE TABLE IF NOT EXISTS) sin tocar datos.
+        await db.initialize()
+    _INITIALIZED_DB_PATHS.add(key)
 
 
 # --- Cross-project retrieval (lectura de apex-hub/data/hub.db) ---
@@ -906,6 +924,7 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     db = _get_db()
+    await _ensure_db_schema(db)
     import time
     _t0 = time.monotonic()
 
