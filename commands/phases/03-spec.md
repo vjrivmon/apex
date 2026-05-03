@@ -15,6 +15,11 @@ Especificacion por fases, no monolitica. Empieza con reflexion profunda.
 - **[3c]** Generar SPEC.md con secciones: Problema, Solucion, Usuarios,
   Funcionalidad core (fase 1), Funcionalidad extendida (fase 2+), Stack,
   Arquitectura, Restricciones, Metricas de exito.
+- **[3c-bis]** **Referenciar tokens reales del DESIGN.md** (Sprint 10.1)
+  cuando SPEC mencione UI: en lugar de "color primario azul" escribir
+  "color primario = `accent` token de DESIGN.md". Eso evita drift entre
+  SPEC y diseño implementado, y lo verificamos con
+  `apex_design_md_validate()` antes de cerrar fase 3.
 - **[3d]** Dividir la funcionalidad en checkpoints (MVP → v1 → v2). Cada
   checkpoint debe ser deployable y usable.
 - **[3e]** Definir criterios de "hecho" para cada checkpoint.

@@ -41,6 +41,8 @@ import grader as _grader  # noqa: E402
 import goal_loop as _goal  # noqa: E402
 import handoff as _handoff  # noqa: E402
 import token_filter as _tf  # noqa: E402
+import design_md as _design  # noqa: E402
+import research as _research  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -888,6 +890,59 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_design_md_init",
+            description=(
+                "Sprint 10.1 — Crea DESIGN.md en raíz del proyecto siguiendo el "
+                "estándar Google Labs (5 secciones: Brand, Color, Type, Components, "
+                "Accessibility/Dark). No sobreescribe salvo overwrite=true."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "brand_name": {"type": "string", "default": "Acme"},
+                    "overwrite": {"type": "boolean", "default": False},
+                },
+            },
+        ),
+        Tool(
+            name="apex_design_md_validate",
+            description=(
+                "Sprint 10.1 — Valida DESIGN.md actual: estructura (5 secciones "
+                "obligatorias), contraste WCAG AA en pares text/bg/text-muted/accent, "
+                "tamaño máximo. Devuelve lista de violations."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path del DESIGN.md (default: ./DESIGN.md)",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="apex_research_competitor",
+            description=(
+                "Sprint 10.2 — Fetch + extract de competidor. Estático (httpx) o "
+                "SPA (chromium --dump-dom con virtual-time-budget). Devuelve "
+                "signals: title, H1, H2, nav, CTAs, paleta, fuentes. Útil en "
+                "fase 0 (mercado) y fase 2 (diseño visual)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "prefer_spa": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Forzar chromium dump-dom (SPAs modernas)",
+                    },
+                },
+                "required": ["url"],
+            },
+        ),
+        Tool(
             name="apex_archive_output",
             description=(
                 "Sprint 9.2 — Archiva un output largo de herramienta en "
@@ -1554,6 +1609,37 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if verdict_id:
                 lines.append(f"Persistido como verdict #{verdict_id}")
             result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_design_md_init":
+            project_root = _find_project_root()
+            brand = arguments.get("brand_name", "Acme")
+            overwrite = bool(arguments.get("overwrite", False))
+            path = _design.init_design_md(project_root, brand_name=brand,
+                                            overwrite=overwrite)
+            existed = path.exists() and not overwrite
+            msg = (f"DESIGN.md {'sobrescrito' if overwrite else 'inicializado'} "
+                   f"en {path}\nBrand: {brand}\n"
+                   f"Próximo: editar valores reales y commitear como prerequisito de fase 2.")
+            result = [TextContent(type="text", text=msg)]
+
+        elif name == "apex_design_md_validate":
+            project_root = _find_project_root()
+            path_arg = arguments.get("path")
+            path = Path(path_arg) if path_arg else _design.design_md_path(project_root)
+            if not path.exists():
+                result = [TextContent(type="text", text=(
+                    f"DESIGN.md no existe en {path}. "
+                    f"Ejecuta apex_design_md_init primero."))]
+            else:
+                violations = _design.validate(path.read_text(encoding="utf-8"))
+                result = [TextContent(type="text", text=_design.format_violations(violations))]
+
+        elif name == "apex_research_competitor":
+            url = arguments["url"]
+            prefer_spa = bool(arguments.get("prefer_spa", False))
+            signals = _research.summarize_competitor(url, prefer_spa=prefer_spa)
+            md = _research.signals_to_markdown(signals)
+            result = [TextContent(type="text", text=md)]
 
         elif name == "apex_archive_output":
             tool_name = arguments["tool"]

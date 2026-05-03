@@ -62,6 +62,17 @@ awesome-design-md + skill `brand-identity` + skill `design-research`.
   - Pesos por nivel: display=500-600, body=400, emphasis=500-600
   - Letter-spacing por tamano (negativo en display, normal en body)
   - Line-height por nivel. Registrar en wiki design-system.
+- **[2f-bis]** **DESIGN.md commiteado OBLIGATORIO** (Sprint 10.1):
+  ```
+  apex_design_md_init(brand_name="<nombre>")
+  # editar valores reales (paleta, escala, componentes)
+  apex_design_md_validate()  # PASS antes de commit
+  git add DESIGN.md && git commit -m "design: estándar Google design.md"
+  ```
+  Cinco secciones obligatorias del estándar Google Labs (Brand, Color,
+  Type, Components, Accessibility/Dark). El validador comprueba contraste
+  WCAG AA en pares text/bg. Las fases 5-8 leen los tokens reales del
+  DESIGN.md, no del wiki — DESIGN.md es la fuente de verdad ejecutable.
 - **[2g]** Espaciado, radios y elevation:
   - Base unit (4px u 8px)
   - Escala: 2xs(2), xs(4), sm(8), md(16), lg(24), xl(32), 2xl(48), 3xl(64)
@@ -77,7 +88,23 @@ awesome-design-md + skill `brand-identity` + skill `design-research`.
   - Roles ARIA documentados para componentes custom
   - Plan de screen reader para flujos principales
 
-## Bloque C: UX y Pantallas
+## Bloque C: Research de competencia (Sprint 10.2)
+
+OBLIGATORIO si el proyecto es producto de mercado (web/app/SaaS).
+
+- **[2-research-1]** Investigar mínimo 3 competidores con
+  `apex_research_competitor(url, prefer_spa=true)`. La tool descarga el
+  DOM renderizado (chromium --dump-dom para SPAs) y extrae H1, H2, nav,
+  CTAs, paleta y fuentes.
+- **[2-research-2]** Generar `wiki/research/competitors.md` con los
+  signals de cada uno. Identificar:
+  - Patrones que se repiten (lo que el mercado considera estándar).
+  - Huecos donde nadie compite (océano azul).
+  - Antipatterns que ningún proyecto debería repetir.
+- **[2-research-3]** Cruzar resultados con `apex_search_cross_project`
+  para no repetir errores documentados en otros proyectos.
+
+## Bloque D: UX y Pantallas
 
 - **[2j]** Wireframes en MULTIPLES herramientas:
   - Pencil MCP para wireframes low-fi de cada pantalla
@@ -94,7 +121,13 @@ awesome-design-md + skill `brand-identity` + skill `design-research`.
 - **[2m]** Registrar TODOS los componentes detectados con `apex_add_component`.
 - **[2n]** Guardar design system completo en wiki + context.db:
   `apex_wiki_add(slug="concepts/design-system", content="paleta+typo+spacing")`.
-- **[2o]** `apex_set_phase(phase_number=2, status="completed")`.
+- **[2o]** **Validación final del DESIGN.md** antes de cerrar:
+  `apex_design_md_validate()` debe devolver PASS sin violaciones críticas.
+  Si fallan checks de contraste WCAG, ajustar tokens en DESIGN.md y
+  re-commitear.
+- **[2p]** `apex_grader_evaluate(phase=2, mode="full")` para verdict
+  final. Si `should_block=true`, atacar issues antes de avanzar.
+- **[2q]** `apex_set_phase(phase_number=2, status="completed")`.
 
 ## North star visual (referencias)
 
@@ -102,11 +135,16 @@ Apuntar al nivel de calidad de: `drapz.design`, Buffet Designs (Solaris),
 Bitmap Studio (Solaris visual identity), Talo, Delegento (4 variantes), Bloom,
 Havernex. Consultar `skills/brand-identity/SKILL.md`.
 
-## Criterio de salida
+## Criterio de salida (outcome-based)
 
 - Diagramas C4 (context, container, componentes) generados con Mermaid.
+- **`DESIGN.md` commiteado** en raíz (estándar Google Labs, 5 secciones).
+- **`apex_design_md_validate()` PASS** sin críticas (contraste WCAG AA).
 - Design system completo en wiki (`concepts/design-system`).
-- Al menos 2 herramientas de diseno usadas en Bloque B.
-- Mapa de navegacion Excalidraw exportado.
+- Al menos 2 herramientas de diseño usadas en Bloque B.
+- **Research mínimo de 3 competidores** en `wiki/research/competitors.md`
+  (si producto de mercado).
+- Mapa de navegación Excalidraw exportado.
 - 3 user flows documentados.
-- Fase marcada como `completed` en context.db.
+- Verdict del grader: `should_block=false`.
+- Fase marcada como `completed` (sólo si verdict pasa).
