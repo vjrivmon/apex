@@ -51,6 +51,7 @@ import apex_doctor as _doctor  # noqa: E402
 import advisor as _advisor  # noqa: E402
 import reasoning_traces as _traces  # noqa: E402
 import skill_handoff as _handoff_skill  # noqa: E402
+import prototype as _prototype  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -1505,6 +1506,68 @@ async def list_tools() -> list[Tool]:
                 "required": ["handoff_id"],
             },
         ),
+        Tool(
+            name="apex_prototype_init",
+            description=(
+                "Sprint 15 (skill /prototype) — Genera un prototipo "
+                "ejecutable de máquina de estados (Textual TUI Python) "
+                "para validar lógica de negocio compleja antes de "
+                "escribirla en el código real. Crea "
+                "`.apex/prototypes/<feature>.py` + "
+                "`wiki/concepts/<feature>-state-machine.md` (con "
+                "diagrama Mermaid) y registra la máquina en la tabla "
+                "`state_machines` para que el grader pueda verificar "
+                "después que el código real honra las transiciones. "
+                "Usa `force=True` para sobrescribir un feature_name "
+                "existente."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "feature_name": {
+                        "type": "string",
+                        "description": (
+                            "Slug snake-case (a-z0-9_-), 1-50 chars."),
+                    },
+                    "states": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Lista de estados (>=2, únicos)."),
+                    },
+                    "transitions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "from": {"type": "string"},
+                                "event": {"type": "string"},
+                                "to": {"type": "string"},
+                                "guard": {"type": "string"},
+                            },
+                            "required": ["from", "event", "to"],
+                        },
+                        "description": (
+                            "Transiciones [{from, event, to, guard?}]."),
+                    },
+                    "initial_state": {
+                        "type": "string",
+                        "description": (
+                            "Estado de arranque, debe estar en `states`."),
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "Si feature_name ya existe, sobrescribe."),
+                    },
+                },
+                "required": [
+                    "feature_name", "states", "transitions",
+                    "initial_state",
+                ],
+            },
+        ),
     ]
 
 
@@ -2687,6 +2750,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if isinstance(snap, dict) and snap:
                     lines.append(f"  snapshot keys: {list(snap.keys())}")
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_prototype_init":
+            root = _find_project_root()
+            try:
+                out = _prototype.apex_prototype_init(
+                    project_root=root,
+                    feature_name=arguments["feature_name"],
+                    states=arguments["states"],
+                    transitions=arguments["transitions"],
+                    initial_state=arguments["initial_state"],
+                    force=bool(arguments.get("force", False)),
+                )
+            except ValueError as e:
+                result = [TextContent(
+                    type="text", text=f"Validación falló: {e}")]
+            else:
+                tui_rel = Path(out["tui_path"]).relative_to(root)
+                wiki_rel = Path(out["wiki_path"]).relative_to(root)
+                result = [TextContent(
+                    type="text",
+                    text=(
+                        f"prototype #{out['machine_id']} listo:\n"
+                        f"  TUI: {tui_rel} (corre con: "
+                        f"`pip install textual && python {tui_rel}`)\n"
+                        f"  Wiki: {wiki_rel} (Mermaid stateDiagram + "
+                        f"reglas)\n"
+                        f"Mantén ambos sincronizados al editar la "
+                        f"máquina de estados."
+                    ),
+                )]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
