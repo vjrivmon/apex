@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""UserPromptSubmit hook: aviso de handoff cuando el transcript pasa el 40%
-de la ventana de contexto efectiva (Sprint 9.1).
+"""UserPromptSubmit hook: aviso de handoff cuando el transcript pasa el umbral
+configurado (Sprint 9.1, refinado para Opus 1M).
 
-A ~40% de contexto, las respuestas pierden precisión. Este hook mide el
-tamaño del transcript JSONL de la sesión actual y, si supera el umbral,
-inyecta un aviso visible para que el agente sugiera al usuario hacer
-handoff + /clear + /apex:resume.
+Dos modos de configurar el umbral (el absoluto gana si está > 0):
+
+- `APEX_HANDOFF_THRESHOLD_TOKENS` (absoluto, recomendado): dispara cuando el
+  transcript supera ese número de tokens, independiente del modelo. Útil con
+  Opus 4.7 1M context donde "el 40%" no tiene el mismo significado que en
+  Sonnet 200K. Por defecto `0` (desactivado, usa porcentaje).
+- `APEX_HANDOFF_THRESHOLD` (porcentaje, fallback): fracción [0, 1] aplicada
+  sobre `APEX_CONTEXT_LIMIT` (default 200000). Por defecto `0.40`.
+
+A partir del umbral, las respuestas pierden precisión. Este hook mide el
+tamaño del transcript JSONL de la sesión actual y, si lo supera, inyecta un
+aviso para que el agente sugiera handoff + /clear + apex_resume_session.
 
 No bloquea. Solo informa. El usuario decide.
 
@@ -25,6 +33,7 @@ from pathlib import Path
 _CHARS_PER_TOKEN = 4
 _DEFAULT_CONTEXT_LIMIT = int(os.environ.get("APEX_CONTEXT_LIMIT", "200000"))
 _THRESHOLD = float(os.environ.get("APEX_HANDOFF_THRESHOLD", "0.40"))
+_THRESHOLD_TOKENS = int(os.environ.get("APEX_HANDOFF_THRESHOLD_TOKENS", "0"))
 
 
 def _measure_transcript(path: str) -> int:
@@ -48,7 +57,10 @@ def main() -> int:
     if tokens == 0:
         return 0
 
-    threshold_tokens = int(_DEFAULT_CONTEXT_LIMIT * _THRESHOLD)
+    if _THRESHOLD_TOKENS > 0:
+        threshold_tokens = _THRESHOLD_TOKENS
+    else:
+        threshold_tokens = int(_DEFAULT_CONTEXT_LIMIT * _THRESHOLD)
     if tokens < threshold_tokens:
         return 0
 
@@ -56,10 +68,17 @@ def main() -> int:
     session_id = payload.get("session_id", "")
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
+    if _THRESHOLD_TOKENS > 0:
+        threshold_label = f"umbral absoluto {_THRESHOLD_TOKENS:,} tk"
+    else:
+        threshold_label = (
+            f"{int(_THRESHOLD * 100)}% de {_DEFAULT_CONTEXT_LIMIT:,}"
+        )
     sys.stdout.write(
         "\n"
         f"[apex context-watch] La sesión actual usa ~{tokens:,} tokens "
-        f"(~{pct}% de {_DEFAULT_CONTEXT_LIMIT:,}). Recomendado:\n"
+        f"(~{pct}% de {_DEFAULT_CONTEXT_LIMIT:,}, supera {threshold_label}). "
+        f"Recomendado:\n"
         f"  1. Llama a `apex_resume_session` para serializar el handoff "
         f"de esta sesión ({session_id[:12] or '?'}).\n"
         f"  2. Ejecuta `/clear` para liberar contexto.\n"
