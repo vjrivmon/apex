@@ -68,6 +68,9 @@ SESSION_AGE_HOURS = float(
 DOCTOR_TIMEOUT_S = float(
     os.environ.get("APEX_DOCTOR_TIMEOUT_S", "8.0")
 )
+HANDOFF_HARD_TIMEOUT_S = float(
+    os.environ.get("APEX_HANDOFF_TIMEOUT_S", "3.0")
+)
 
 
 def _find_project_root(cwd: Path) -> Path | None:
@@ -157,15 +160,28 @@ def main() -> int:
             "resultados parciales escritos pero no inyectados completos.\n"
         )
 
-    # 5) Handoff
+    # 5) Handoff con timeout duro: aiosqlite puede colgarse si otra sesión
+    #    Claude concurrente tiene el WAL bloqueado. Lo aislamos en un thread
+    #    daemon con join timeout — si no termina, abandonamos el handoff y
+    #    seguimos. El hook DEBE salir; si no, Claude declara timeout, trunca
+    #    additionalContext, y la sesión muere.
+    import threading
     handoff_path: Path | None = None
     if session_id:
-        try:
-            handoff_path = asyncio.run(
-                _write_handoff(project_root, session_id, transcript_path)
-            )
-        except Exception:
-            handoff_path = None
+        _result: list[Path | None] = [None]
+
+        def _runner() -> None:
+            try:
+                _result[0] = asyncio.run(
+                    _write_handoff(project_root, session_id, transcript_path)
+                )
+            except Exception:
+                _result[0] = None
+
+        t = threading.Thread(target=_runner, daemon=True)
+        t.start()
+        t.join(timeout=HANDOFF_HARD_TIMEOUT_S)
+        handoff_path = _result[0]
 
     # 6) Inyecta resumen al agente
     summary = _doc.short_summary(run)
