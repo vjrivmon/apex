@@ -11,6 +11,7 @@ from goal_loop import (
     DECISION_DONE,
     STATUS_ACTIVE,
     STATUS_BUDGET_EXHAUSTED,
+    STATUS_CONTEXT_THRESHOLD,
     STATUS_DEGENERATE,
     STATUS_DONE,
     STATUS_PAUSED,
@@ -165,3 +166,78 @@ def test_build_prompt_excludes_judge_self_history(tmp_path: Path) -> None:
     prompt = build_judge_prompt(s)
     # El último entry es del juez, no debe aparecer en el bloque de turnos
     assert "[judge]" not in prompt
+
+
+# ── context_threshold trigger (sprint corto: /goal + auto-handoff) ────────
+
+
+def _write_fake_transcript(path: Path, size_bytes: int) -> Path:
+    path.write_text("x" * size_bytes, encoding="utf-8")
+    return path
+
+
+def test_record_turn_no_transcript_path_keeps_legacy_behavior(
+    tmp_path: Path,
+) -> None:
+    s = start_goal(tmp_path, "legacy", turn_budget=3)
+    state = record_turn(tmp_path, s.id, "T1")
+    assert state.status == STATUS_ACTIVE
+    assert "transcript_tokens" not in state.history[-1]
+
+
+def test_record_turn_below_threshold_stays_active(tmp_path: Path) -> None:
+    s = start_goal(tmp_path, "below", turn_budget=5)
+    transcript = _write_fake_transcript(tmp_path / "t.jsonl", 4_000)  # ~1000 tk
+    state = record_turn(
+        tmp_path, s.id, "small turn",
+        transcript_path=transcript,
+        threshold_tokens=200_000,
+    )
+    assert state.status == STATUS_ACTIVE
+    last = state.history[-1]
+    assert last["transcript_tokens"] == 1_000
+    assert "threshold_tokens" not in last
+
+
+def test_record_turn_over_threshold_marks_context_threshold(
+    tmp_path: Path,
+) -> None:
+    s = start_goal(tmp_path, "over", turn_budget=10)
+    # 4 chars/token => 800_000 bytes ≈ 200_000 tokens (== umbral)
+    transcript = _write_fake_transcript(tmp_path / "t.jsonl", 900_000)
+    state = record_turn(
+        tmp_path, s.id, "big turn",
+        transcript_path=transcript,
+        threshold_tokens=200_000,
+    )
+    assert state.status == STATUS_CONTEXT_THRESHOLD
+    last = state.history[-1]
+    assert last["transcript_tokens"] == 225_000
+    assert last["threshold_tokens"] == 200_000
+
+
+def test_context_threshold_overrides_budget_exhausted(tmp_path: Path) -> None:
+    """Si el último turno cumple budget Y umbral, gana context_threshold."""
+    s = start_goal(tmp_path, "both", turn_budget=1)
+    transcript = _write_fake_transcript(tmp_path / "t.jsonl", 900_000)
+    state = record_turn(
+        tmp_path, s.id, "final turn",
+        transcript_path=transcript,
+        threshold_tokens=200_000,
+    )
+    # Budget se agotó (1/1) Y umbral cruzado: prevalece context_threshold
+    assert state.turns_used == 1
+    assert state.status == STATUS_CONTEXT_THRESHOLD
+
+
+def test_record_turn_threshold_from_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APEX_HANDOFF_THRESHOLD_TOKENS", "5000")
+    s = start_goal(tmp_path, "env", turn_budget=10)
+    transcript = _write_fake_transcript(tmp_path / "t.jsonl", 24_000)  # 6000 tk
+    state = record_turn(
+        tmp_path, s.id, "env-driven", transcript_path=transcript,
+    )
+    assert state.status == STATUS_CONTEXT_THRESHOLD
+    assert state.history[-1]["threshold_tokens"] == 5_000

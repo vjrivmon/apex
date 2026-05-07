@@ -1099,6 +1099,31 @@ async def list_tools() -> list[Tool]:
                         "type": "object",
                         "description": "Decisión del juez (action=apply_decision): {decision, reason}",
                     },
+                    "transcript_path": {
+                        "type": "string",
+                        "description": (
+                            "(action=record_turn) Ruta al JSONL de la sesión. "
+                            "Si se pasa y supera APEX_HANDOFF_THRESHOLD_TOKENS, "
+                            "el goal termina con status=context_threshold y "
+                            "se escribe handoff automáticamente."
+                        ),
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": (
+                            "(action=record_turn) ID de la sesión de Claude Code. "
+                            "Necesario si pasas transcript_path para que el "
+                            "auto-handoff sepa dónde escribirlo."
+                        ),
+                    },
+                    "threshold_tokens": {
+                        "type": "integer",
+                        "description": (
+                            "(action=record_turn) Override del umbral de tokens. "
+                            "Si no se pasa, lee APEX_HANDOFF_THRESHOLD_TOKENS o "
+                            "200000."
+                        ),
+                    },
                 },
                 "required": ["action"],
             },
@@ -2039,15 +2064,39 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     f"  id: {state.id}"
                 ))]
             elif action == "record_turn":
+                transcript_path = arguments.get("transcript_path") or None
+                threshold_tokens = arguments.get("threshold_tokens")
                 state = _goal.record_turn(
                     project_root,
                     arguments["goal_id"],
                     arguments.get("turn_summary", ""),
                     list(arguments.get("tools_used", [])),
+                    transcript_path=transcript_path,
+                    threshold_tokens=int(threshold_tokens) if threshold_tokens else None,
                 )
-                result = [TextContent(type="text", text=(
-                    f"Turn {state.turns_used}/{state.turn_budget} recorded — status={state.status}"
-                ))]
+                msg = (
+                    f"Turn {state.turns_used}/{state.turn_budget} recorded — "
+                    f"status={state.status}"
+                )
+                if state.status == _goal.STATUS_CONTEXT_THRESHOLD:
+                    sid = arguments.get("session_id") or f"goal_{state.id}"
+                    last_entry = state.history[-1] if state.history else {}
+                    transcript_tokens = int(last_entry.get("transcript_tokens", 0))
+                    threshold_used = int(last_entry.get("threshold_tokens", 0))
+                    handoff_path = await _handoff.serialize_handoff(
+                        project_root, sid, db,
+                        transcript_tokens=transcript_tokens,
+                    )
+                    msg += (
+                        f"\n\n⚠ Umbral de contexto cruzado "
+                        f"({transcript_tokens:,} tk ≥ {threshold_used:,} tk).\n"
+                        f"Handoff escrito en: {handoff_path}\n"
+                        f"Acción del usuario:\n"
+                        f"  1. Teclea `/clear` para liberar contexto.\n"
+                        f"  2. En la sesión nueva, ejecuta:\n"
+                        f"     apex_resume_session(session_id=\"{sid}\")"
+                    )
+                result = [TextContent(type="text", text=msg)]
             elif action == "judge_prompt":
                 state = _goal.load_goal(project_root, arguments["goal_id"])
                 prompt = _goal.build_judge_prompt(state)

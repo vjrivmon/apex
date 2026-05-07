@@ -15,10 +15,13 @@ construye prompts para el juez y parsea decisiones.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+import handoff as _handoff_lib
 
 DEFAULT_TURN_BUDGET = 20
 
@@ -31,6 +34,23 @@ STATUS_DONE = "done"
 STATUS_PAUSED = "paused"
 STATUS_BUDGET_EXHAUSTED = "budget_exhausted"
 STATUS_DEGENERATE = "degenerate"
+STATUS_CONTEXT_THRESHOLD = "context_threshold"
+
+_DEFAULT_THRESHOLD_TOKENS = 200_000
+
+
+def _resolve_threshold_tokens(override: int | None) -> int:
+    if override is not None and override > 0:
+        return int(override)
+    env_val = os.environ.get("APEX_HANDOFF_THRESHOLD_TOKENS")
+    if env_val:
+        try:
+            n = int(env_val)
+            if n > 0:
+                return n
+        except ValueError:
+            pass
+    return _DEFAULT_THRESHOLD_TOKENS
 
 
 @dataclass
@@ -96,21 +116,46 @@ def save_goal(project_root: Path | str, state: GoalState) -> None:
 
 def record_turn(project_root: Path | str, goal_id: str,
                 turn_summary: str,
-                tools_used: list[str] | None = None) -> GoalState:
-    """Registra un turno completado por el agente. Si supera el budget,
-    marca el goal como exhausted."""
+                tools_used: list[str] | None = None,
+                transcript_path: Path | str | None = None,
+                threshold_tokens: int | None = None) -> GoalState:
+    """Registra un turno completado por el agente.
+
+    Termina el goal con un status terminal en dos condiciones independientes:
+
+    - `STATUS_BUDGET_EXHAUSTED` si `turns_used >= turn_budget`.
+    - `STATUS_CONTEXT_THRESHOLD` si `transcript_path` se pasa y los tokens
+      estimados del transcript JSONL superan `threshold_tokens` (override) o
+      la env `APEX_HANDOFF_THRESHOLD_TOKENS` (default 200_000).
+
+    Si las dos condiciones se cumplen en el mismo turno, prevalece
+    `context_threshold` porque requiere acción del usuario (handoff + /clear),
+    mientras que budget_exhausted es solo cierre del ciclo.
+    """
     state = load_goal(project_root, goal_id)
     if state.is_terminal():
         return state
     state.turns_used += 1
-    state.history.append({
+    entry: dict = {
         "turn": state.turns_used,
         "summary": (turn_summary or "")[:1000],
         "tools_used": tools_used or [],
         "ts": datetime.now(timezone.utc).isoformat(),
-    })
+    }
+    state.history.append(entry)
+
     if state.turns_used >= state.turn_budget:
         state.status = STATUS_BUDGET_EXHAUSTED
+
+    if transcript_path:
+        tokens = _handoff_lib.estimate_tokens_in_transcript(transcript_path)
+        if tokens > 0:
+            limit = _resolve_threshold_tokens(threshold_tokens)
+            entry["transcript_tokens"] = tokens
+            if tokens >= limit:
+                state.status = STATUS_CONTEXT_THRESHOLD
+                entry["threshold_tokens"] = limit
+
     save_goal(project_root, state)
     return state
 
