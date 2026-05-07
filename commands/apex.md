@@ -231,6 +231,71 @@ Para correr manualmente: `apex_doctor_run(force=True)`.
 
 ---
 
+## Flujo Pocock (Sprint 15 — Advisor + skill_handoff + /prototype)
+
+APEX cablea un patrón de cambio de modo dentro de la sesión inspirado en
+las skills de Matt Pocock. La idea: cuando un skill se atasca contra un
+problema mejor resuelto por otro modo, **cede el control con snapshot**
+y vuelve cuando el modo destino aporta el resultado. Sin perder
+contexto, sin abrir sesiones nuevas, registrado como traza auditable.
+
+### El puente principal
+
+```
+grill-with-docs → handoff → prototype → handoff de vuelta → grill-with-docs
+                                ↓
+                           (escala futura: to-prd → to-issues → sandcastle → improve-architecture)
+```
+
+`grill-with-docs` afila el plan contra el dominio. Si durante el
+interrogatorio aparece **lógica de negocio con >5 reglas o transiciones
+no triviales**, prosa más detallada solo añade ambigüedad: la skill
+`/prototype` (Sprint 15) modela esa lógica como máquina de estados
+ejecutable (Textual TUI + Mermaid stateDiagram) y el grill retoma con la
+máquina ya validada.
+
+### Tools del flujo
+
+1. `apex_handoff_skill(session_id, from_skill, to_skill, reason,
+   snapshot)` — persiste el estado actual (archivos abiertos,
+   decisiones tentativas, preguntas pendientes) y devuelve `handoff_id`
+   junto con instrucción para invocar el skill destino.
+2. `apex_prototype_init(feature_name, states, transitions,
+   initial_state)` — genera `.apex/prototypes/<feature>.py` (Textual
+   TUI con bindings por evento) + `wiki/concepts/<feature>-state-machine.md`
+   (Mermaid + tabla de reglas) e inserta la máquina en
+   `state_machines` para que el grader (fase 9) verifique que el
+   código real honra las transiciones declaradas.
+3. `apex_resume_skill_handoff(handoff_id, result_summary)` — marca el
+   handoff como retornado, guarda el resumen del modo destino y
+   devuelve el snapshot original para que el skill origen retome con
+   contexto fresco.
+
+### Cuándo dispara automáticamente
+
+El **Advisor** (subagent `apex-advisor`, S15.5) lee evidencia de la
+sesión cada N tool calls (default 8) y emite cards de tipo
+`recommend_skill_handoff(target='prototype')` cuando ve:
+
+- Una decisión en `wiki/decisions/` con `complexity_score` alta y solo
+  prosa en el rationale.
+- Tests fallando que apuntan a transiciones de estado mal entendidas.
+- Más de 5 reglas de negocio acumuladas en una spec sin máquina
+  asociada.
+
+El orquestador puede aceptar la card (invoca el handoff) o descartarla
+con `apex_dismiss_advice(advice_id, reason='...')`. Los dismiss
+recurrentes alimentan al doctor en runs futuros.
+
+### Detección de huérfanos
+
+Un handoff sin retorno >30 min queda como "huérfano" y el Advisor lo
+marca con card `phase_drift`. Esto evita que un cambio de modo se
+quede colgado en silencio mientras el orquestador olvida volver al
+modo origen.
+
+---
+
 ## Reglas transversales
 
 Antes de cualquier fase, tener leidas en contexto:

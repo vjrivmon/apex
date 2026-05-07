@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-03 (post Sprint 13)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-07 (post Sprint 15)
 
 ## Qué es APEX
 
@@ -63,7 +63,7 @@ en `~/RoadToDevOps/apex-hub/`).
   - Detecta proyecto nuevo vs existente
   - 11 errores documentados a evitar
 
-- [x] **23 Skills** (19 post Sprint 8 + 4 del Sprint 14: grill-with-docs, tdd, diagnose, improve-architecture)
+- [x] **24 Skills** (19 post Sprint 8 + 4 del Sprint 14: grill-with-docs, tdd, diagnose, improve-architecture + 1 del Sprint 15: prototype)
   - Core flow: `socratic`, `architect`, `flow-guardian` (v2 outcome-based),
     `iterate`, `onboard-existing`, `reverse-engineer`, `tools-integration`
   - Diseño: `design-system`, `design-research`, `brand-identity`
@@ -89,7 +89,50 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 42 tools (Sprints 8-13 cierran esta deuda)
+- [x] **MCP server** completo con 49 tools (Sprints 8-15 cierran esta deuda)
+
+- [x] **Sprint 15 — The Advisor Strategy + reasoning_traces + /prototype** (2026-05-07)
+  - **S15.A** (commit `fa65891`): construye la capa preventiva (Advisor
+    como subagent Opus) y la capa de combustible (reasoning_traces).
+    - `lib/advisor.py`: build_bundle (≤2500 tokens) con throttle (8 calls
+      mínimo entre reviews) + circuit breaker (≥3 calls/min lo apaga).
+      CRUD de `advisor_reviews` y `advisor_advice` (4 tipos: forgotten_tool,
+      phase_drift, recommend_skill_handoff, grader_overdue).
+    - `lib/reasoning_traces.py`: 4 categorías iniciales (subset Hermes 3),
+      logging por fase, retrieval, ShareGPT export, prompt-for-trace
+      injection en gates clave.
+    - `lib/skill_handoff.py`: cambio de modo intra-sesión con snapshot;
+      detección de huérfanos >30 min para emitir `phase_drift` cards.
+    - 5 tablas nuevas: `advisor_reviews`, `advisor_advice`,
+      `reasoning_traces`, `skill_handoffs`, `state_machines`.
+    - 6 tools MCP: `apex_advisor_review`, `apex_record_advice`,
+      `apex_dismiss_advice`, `apex_log_trace`, `apex_handoff_skill`,
+      `apex_resume_skill_handoff`. Subagent `apex-advisor` (Opus,
+      whitelist restringida sin Task/Bash). 3 hooks nuevos
+      (advisor-trigger, advice-injector, trace-prompt). Suite: 466 verde.
+  - **S15.7-9** (commit `33d59fc` + cierre Sprint 15): scaffold de
+    prototipos ejecutables y wiring del flujo Pocock.
+    - `lib/prototype.py` (~250L): `apex_prototype_init(feature_name,
+      states, transitions, initial_state, force=False)`. Validación de
+      regex slug, estados ≥2, transiciones referencian estados conocidos;
+      reachability vía BFS desde initial_state (estados huérfanos →
+      ValueError); idempotencia con flag `force` que UPDATE en vez de
+      duplicar. Genera Textual TUI con BINDINGS por evento (atajos
+      teclado a transiciones) + wiki Mermaid stateDiagram-v2 con tabla
+      de reglas. INSERT en `state_machines` para que el grader (fase 9)
+      verifique que el código real honra las transiciones.
+    - `skills/prototype/SKILL.md`: 4 triggers concretos (>5 reglas de
+      negocio, decision densa solo prosa, tests fallando que apuntan a
+      transiciones, `recommend_skill_handoff(target='prototype')`),
+      anti-patrones, puente APEX (Advisor + grader + handoff), deuda
+      explícita para S16 (replay, fuzzing, atajos profundos).
+    - 1 tool MCP nueva: `apex_prototype_init`. Total tools: **49**.
+    - `commands/apex.md` extendido con sección "Flujo Pocock" que
+      describe el patrón `grill-with-docs → handoff → prototype →
+      handoff de vuelta → grill-with-docs`, las 3 tools del flujo y
+      cómo el Advisor dispara `recommend_skill_handoff`.
+    - 18 tests nuevos (15 prototype + 3 wiring Pocock). Suite: **484
+      verde** (466 → 481 → 484). Cierra Sprint 15 completo.
 
 - [x] **Sprint 14 — Skills For Real Engineers (port Matt Pocock)** (2026-05-03)
   - 4 skills nuevas adaptadas del repo `mattpocock/skills` (49k⭐, MIT) que
@@ -403,11 +446,16 @@ APEX en producción es puro CLI + MCP + skills + apex-hub. Los directorios
 `backend/` y `frontend/` siguen en main por inercia histórica; se moverán
 a la rama `archive/legacy-web` en un chore futuro.
 
-### NO Completado (Sprints 11-13 del roadmap aprobado)
+### Roadmap (sprints aprobados)
 
 - [x] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, ~~11.3 library_ingest~~ ✓)
 - [x] **Sprint 12 — Virtual office** ✓ (5 roles: architect, implementer, reviewer, qa, devops como subagents nativos)
 - [x] **Sprint 13 — Apex-doctor** ✓ (auto-mejora dirigida por intención: hook UserPromptSubmit con triggers semánticos + edad de sesión, 3 analizadores)
+- [x] **Sprint 14 — Skills For Real Engineers** ✓ (4 skills port Matt Pocock: grill-with-docs, tdd, diagnose, improve-architecture)
+- [x] **Sprint 15 — Advisor + reasoning_traces + /prototype** ✓ (subagent apex-advisor Opus, 4 categorías traces, skill_handoff intra-sesión, prototype Textual TUI + Mermaid)
+- [ ] **Sprint 16 — /prototype S2** — replay/fuzzing/atajos profundos en TUI, promoción automática a tests parametrizados
+- [ ] **Sprint 17 — VirtualFS cross-project** — filesystem virtual sobre vector DB para compartir contexto entre proyectos
+- [ ] **Sprint 18 — Granite Curator opt-in** — curador de memoria con Granite vía `APEX_CURATOR_MODEL` env
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
 - [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
 - [ ] **Integración Pencil MCP** — Diseños automáticos en fase 2
@@ -418,15 +466,19 @@ a la rama `archive/legacy-web` en un chore futuro.
 
 | Componente    | Tecnología                         | Estado        |
 | ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations + doctor_runs + doctor_proposals + session_starts | Verificado |
+| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations + doctor_runs + doctor_proposals + session_starts + advisor_reviews + advisor_advice + reasoning_traces + skill_handoffs + state_machines | Verificado |
 | Usage data reader (Sprint 13.9) | lib/usage_data_reader.py — `~/.claude/usage-data/` cruce con grader vía heurística temporal | 8 tests |
 | Apex-doctor A5+A6 (Sprint 13.9) | grader_false_positives + friction_recurrence | 12 tests |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
-| Skills        | Markdown (SKILL.md)                | 23 skills (incl. 4 port Matt Pocock S14: grill-with-docs, tdd, diagnose, improve-architecture) |
-| MCP server    | Python + mcp.server                | 42 tools      |
+| Skills        | Markdown (SKILL.md)                | 24 skills (incl. 4 Matt Pocock S14 + /prototype S15) |
+| MCP server    | Python + mcp.server                | 49 tools      |
+| Advisor (Sprint 15) | lib/advisor.py + subagent apex-advisor (Opus) | build_bundle ≤2500tk, throttle 8 calls, circuit breaker 3/min |
+| Reasoning traces (Sprint 15) | lib/reasoning_traces.py (4 categorías Hermes 3) | logging por fase, ShareGPT export |
+| Skill handoff (Sprint 15) | lib/skill_handoff.py + huérfanos >30 min | flujo Pocock intra-sesión |
+| Prototype (Sprint 15) | lib/prototype.py (~250L) — Textual TUI + Mermaid + state_machines | 15 tests, BFS reachability, force overwrite |
 | Apex-doctor (Sprint 13) | lib/apex_doctor.py + lib/wrapup_phrases.py | 72 tests, 3 analizadores |
 | Roles (Sprint 12) | lib/roles.py (5 subagents)     | 45 tests      |
-| Hooks         | Python scripts                     | 7 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch, end-of-day-doctor) |
+| Hooks         | Python scripts                     | 10 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch, end-of-day-doctor, advisor-trigger, advice-injector, trace-prompt) |
 | Library Ingest| lib/library_ingest.py (Sprint 11.3)| 35 tests, GitHub + library-skills CLI |
 | Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
 | Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
@@ -437,7 +489,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 396 pasando   |
+| Tests totales | pytest                             | 484 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 
