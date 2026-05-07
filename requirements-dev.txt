@@ -1,0 +1,10 @@
+# Dependencias opcionales de desarrollo (no production runtime).
+# El runtime de APEX (lib/* + mcp/*) usa solo stdlib + aiosqlite + mcp + httpx,
+# todo ya disponible en el venv estándar.
+#
+# Este archivo lista lo que tools/* o smoke tests pueden necesitar:
+#
+# - textual: requerido por las TUIs generadas por skills/prototype
+#   (Sprint 15.7) y por tools/smoke_prototype.sh para correr el TUI
+#   headless con Textual Pilot.
+textual>=0.50
