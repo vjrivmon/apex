@@ -2,94 +2,91 @@
 
 > Snapshot del estado actual y arranque de la próxima sesión. Se
 > sobrescribe en cada handoff. Última actualización: **2026-05-07**
-> tras cierre de **Sprint 16.1 + 16.5**.
+> tras cierre de **Sprint 16.1 + 16.5 + 16.2**.
 
 ---
 
 ## Estado actual
 
 - **Branch:** `main`
-- **HEAD:** `ba4e306 feat(s16.5): get/set_advisor_constants con fallback a defaults`
-- **Suite:** 501 verde (7s)
-- **`git status`:** limpio
-- **Origin:** `Everything up-to-date`
+- **HEAD:** `feat(s16.2): advisor_outcomes motor implícito + tool MCP` (pendiente commit)
+- **Suite:** 515 verde (7.5s)
+- **Tools MCP:** 50 (49 → 50 con `apex_advisor_compute_outcomes`)
+- **`git status`:** working dir con cambios S16.2 (lib + tests + mcp)
 - **Sprint en curso:** **Sprint 16 — Advisor Feedback Loop** (rating
   implícito vía facets + escape hatch manual)
 
 ### Progreso S16 (blueprint v2)
 
-| ID    | Subtarea                                                    | Estado | Tests | Suite delta |
-|-------|-------------------------------------------------------------|--------|-------|-------------|
+| ID    | Subtarea                                                    | Estado      | Tests | Suite delta |
+|-------|-------------------------------------------------------------|-------------|-------|-------------|
 | S16.1 | Schema (`advice_outcomes`, `advisor_tuning_history`)        | ✅ `5bed398` | 8     | 484 → 492   |
 | S16.5 | Migración constantes `advisor.py` → `project_meta`          | ✅ `ba4e306` | 9     | 492 → 501   |
-| S16.2 | `lib/advisor_outcomes.py` + `apex_advisor_compute_outcomes` | 🔜 next     | (14)  | 501 → ~515  |
-| S16.6 | `apex_rate_advice` (escape hatch) + validación              | pendiente   | (6)   |             |
+| S16.2 | `lib/advisor_outcomes.py` + `apex_advisor_compute_outcomes` | ✅ pending commit | 14    | 501 → 515   |
+| S16.6 | `apex_rate_advice` (escape hatch) + validación              | 🔜 next     | (6)   |             |
 | S16.3 | `lib/advisor_health.py` + `apex_advisor_health`             | pendiente   | (8)   |             |
 | S16.4 | `lib/advisor_tuning.py` + `apex_advisor_apply_tuning`       | pendiente   | (12)  |             |
 | S16.7 | Hook `advisor-outcome-watch.py`                             | pendiente   | (4)   |             |
 | S16.8 | (Opcional) `skills/advisor-feedback/SKILL.md`               | pendiente   | (0)   |             |
 
-Orden recomendado (§8 del blueprint): `S16.1 ✓ → S16.5 ✓ → **S16.2** →
-S16.6 → S16.3 → S16.4 → S16.7 → S16.8`.
+Orden recomendado (§8 del blueprint): `S16.1 ✓ → S16.5 ✓ → S16.2 ✓ →
+**S16.6** → S16.3 → S16.4 → S16.7 → S16.8`.
 
 ---
 
-## Próximo paso (sesión nueva): S16.2
+## Próximo paso (sesión nueva): S16.6 — escape hatch manual
 
-**Objetivo:** motor implícito que rellena `advice_outcomes` cruzando
-`advisor_advice` con facets de `~/.claude/usage-data/facets/`.
+**Objetivo:** escape hatch manual `apex_rate_advice(advice_id, rating,
+reason)` para casos donde el rating implícito no llega (sesión
+globalmente buena con una card específicamente ruidosa, o `/insights`
+sin correr).
 
-### Entregables
+### Entregables (blueprint §4 + §11)
 
-1. **`lib/advisor_outcomes.py`** (~180 LoC):
-   - `compute_outcomes(db_path, lookback_days=14, force=False) -> ComputeResult`
-   - Lee `advisor_advice` reciente, asocia con sesión de facets vía
-     `usage_data_reader.find_session_for_timestamp(advice.created_at,
-     project_path, slack_minutes=5)`.
-   - Si match: extrae `outcome`, `helpfulness`, `satisfaction`,
-     `friction_keys` con count>0 desde `UsageFacets`.
-   - Infiere `inferred_rating ∈ {useful, not_useful, unclear}` con
-     heurística del blueprint §3.
-   - INSERT en `advice_outcomes` con `assoc_method='temporal'`.
-   - `UNIQUE (advice_id, assoc_method)` → idempotente.
-   - `force=True` permite UPDATE en lugar de skip.
-   - Si no hay facet match → skip (no row, próximo pase del hook S16.7
-     reintenta).
+1. **`apex_rate_advice` en `lib/advisor.py`** (~60 LoC):
+   - Inserta fila en `advice_outcomes` con `assoc_method='manual'`.
+   - `rating ∈ {'useful', 'not_useful'}` (sin `unclear` para forzar
+     señal explícita).
+   - `reason` obligatoria (>=10 chars).
+   - `manual_reason` se guarda en la columna correspondiente.
+   - Coexiste con outcome temporal por la `UNIQUE (advice_id,
+     assoc_method)` del schema.
+   - FK inválida → `ValueError("advice_id no existe")`.
 
-2. **Tool MCP `apex_advisor_compute_outcomes(force=False, lookback_days=14)`**
-   en `mcp/apex_server.py` (list_tools + dispatch). Total tools: 49 → **50**.
+2. **Tool MCP `apex_rate_advice`** (49 → 51 tools tras S16.2 + S16.6).
 
-3. **`tests/test_advisor_outcomes.py`** (14 tests):
-   - Asociación temporal con facet en rango.
-   - Inferencia rating: `fully_achieved + essential` → `useful`.
-   - Inferencia rating: `not_achieved + frustrated` → `not_useful`.
-   - Inferencia rating: facets ausentes (sólo friction) → `unclear`.
-   - Caso sin facet match → no crea row.
-   - Idempotencia: misma llamada 2x no duplica.
-   - `force=True` recomputa rating si cambian facets.
-   - `lookback_days` filtra advices viejos.
-   - Etc. (resto del catálogo §11).
-
-### Heurística de inferencia (resumen del §3, no canónico)
-
-```
-useful     ← outcome ∈ {fully_achieved, mostly_achieved}
-              AND helpfulness ∈ {essential, very_helpful}
-              AND satisfaction ∉ {dissatisfied, frustrated}
-
-not_useful ← outcome ∈ {not_achieved, partially_achieved}
-              OR helpfulness ∈ {unhelpful, slightly_helpful}
-              OR satisfaction ∈ {dissatisfied, frustrated}
-
-unclear    ← cualquier otro caso (mixed/medio o señales contradictorias)
-```
-
-`unclear` se EXCLUYE del denominador del FP rate del auto-tuning S16.4
-(es ausencia de señal, no señal negativa).
+3. **`tests/test_apex_rate_advice.py`** (6 tests):
+   - Inserta manual outcome con reason válida.
+   - Reason vacía o < 10 chars → ValueError.
+   - FK inválida (advice_id inexistente) → ValueError.
+   - UNIQUE compuesto permite coexistir con outcome temporal previo.
+   - Valida rating enum (rechaza `'unclear'` y `'foo'`).
+   - Idempotencia: dos manuales sobre el mismo advice → segundo falla
+     o sobreescribe (decisión: sobreescribir vía `INSERT OR REPLACE`
+     respetando UNIQUE).
 
 ### Suite objetivo
 
-501 → ~515 verde (+14 tests).
+515 → ~521 verde (+6 tests).
+
+---
+
+## Cierre de S16.2 (esta sesión)
+
+- `lib/advisor_outcomes.py` (~245 LoC con docstrings + helpers).
+- `tests/test_advisor_outcomes.py` (14 tests: 4 heurística pura + 10
+  integración compute).
+- `mcp/apex_server.py`: import `_advisor_outcomes`, tool definition,
+  dispatch handler con resumen `computed/skipped/no_facet_yet/force_updated`.
+- Heurística §3 implementada literal: `not_useful` ante CUALQUIER señal
+  negativa (orden de checks importa); `useful` solo si outcome+helpfulness
+  positivos y satisfaction no negativa; `unclear` el resto.
+- `_derive_satisfaction(counts)`: prioridad `frustrated > dissatisfied >
+  satisfied > likely_satisfied > mixed > ""`.
+- `_friction_keys_active(counts)`: solo keys con count>0, ordenadas por
+  count desc + key asc para reproducibilidad.
+- `_parse_db_timestamp`: acepta tanto `'YYYY-MM-DD HH:MM:SS'` (default
+  SQLite) como ISO8601.
 
 ---
 
@@ -97,9 +94,9 @@ unclear    ← cualquier otro caso (mixed/medio o señales contradictorias)
 
 ```bash
 cd ~/RoadToDevOps/apex
-PYTHONPATH=lib .venv/bin/pytest tests/ -q       # 501 verde
+PYTHONPATH=lib .venv/bin/pytest tests/ -q       # 515 verde
 git status                                       # limpio
-git log --oneline -3                             # ba4e306 head
+git log --oneline -3                             # commit s16.2 head
 ```
 
 Y dentro de Claude Code:
@@ -110,11 +107,12 @@ Read .apex/sprints/sprint-16-advisor-feedback-loop-blueprint.md  # spec completa
 Read BLUEPRINT.md                                                 # este doc
 ```
 
-Empezar TDD de S16.2:
-1. Red phase: escribir `tests/test_advisor_outcomes.py` con 14 tests
+Empezar TDD de S16.6:
+1. Red phase: escribir `tests/test_apex_rate_advice.py` con 6 tests
    fallando.
-2. Green phase: implementar `lib/advisor_outcomes.py` + wiring tool.
-3. Suite full → commit `feat(s16.2)` → push.
+2. Green phase: añadir `rate_advice()` en `lib/advisor.py` + wiring
+   tool MCP `apex_rate_advice`.
+3. Suite full → commit `feat(s16.6)` → push.
 
 ---
 
@@ -138,12 +136,15 @@ Empezar TDD de S16.2:
 
 - `.apex/sprints/sprint-16-advisor-feedback-loop-blueprint.md` — spec completa S16 v2
 - `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` — siguientes sprints
-- `.apex/handoff/b1d2e3f4-567.md` — handoff de esta sesión (con contexto rico)
-- `lib/advisor.py` — añadidas `get_advisor_constants` / `set_advisor_constants`
-- `lib/context_db.py` — añadido schema S16
-- `lib/usage_data_reader.py` — base de S16.2 (lee `~/.claude/usage-data/`)
+- `.apex/handoff/b1d2e3f4-567.md` — handoff de la sesión origen (contexto rico)
+- `lib/advisor.py` — añadidas `get_advisor_constants` / `set_advisor_constants` (S16.5)
+- `lib/advisor_outcomes.py` — motor implícito de outcomes (S16.2, NUEVO)
+- `lib/context_db.py` — schema S16 (advice_outcomes + advisor_tuning_history)
+- `lib/usage_data_reader.py` — base reusada por S16.2
+- `mcp/apex_server.py` — tool `apex_advisor_compute_outcomes` (S16.2)
 - `tests/test_advice_outcomes_schema.py` — 8 tests S16.1
 - `tests/test_advisor_constants_migration.py` — 9 tests S16.5
+- `tests/test_advisor_outcomes.py` — 14 tests S16.2 (NUEVO)
 
 ---
 

@@ -49,6 +49,7 @@ import library_ingest as _library  # noqa: E402
 import roles as _roles  # noqa: E402
 import apex_doctor as _doctor  # noqa: E402
 import advisor as _advisor  # noqa: E402
+import advisor_outcomes as _advisor_outcomes  # noqa: E402
 import reasoning_traces as _traces  # noqa: E402
 import skill_handoff as _handoff_skill  # noqa: E402
 import prototype as _prototype  # noqa: E402
@@ -1568,6 +1569,42 @@ async def list_tools() -> list[Tool]:
                 ],
             },
         ),
+        Tool(
+            name="apex_advisor_compute_outcomes",
+            description=(
+                "Sprint 16.2 — Motor implícito de outcomes del Advisor. "
+                "Cruza `advisor_advice` reciente con los facets de "
+                "`~/.claude/usage-data/facets/` (Sprint 13.9): para cada "
+                "advice sin outcome temporal, asocia con la sesión que "
+                "contenía su `created_at` (slack 5 min) e infiere "
+                "`useful` / `not_useful` / `unclear` siguiendo la "
+                "heurística §3 del blueprint S16. Inserta una fila en "
+                "`advice_outcomes` con `assoc_method='temporal'`. "
+                "Idempotente: re-ejecutar omite los advices ya "
+                "procesados salvo `force=True`. Si Claude Code nunca "
+                "corrió `/insights`, los advices terminan en "
+                "`no_facet_yet` sin error."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lookback_days": {
+                        "type": "integer", "default": 14,
+                        "description": (
+                            "Ventana hacia atrás desde ahora; advices "
+                            "más viejos se ignoran."
+                        ),
+                    },
+                    "force": {
+                        "type": "boolean", "default": False,
+                        "description": (
+                            "Recomputa outcomes ya existentes con "
+                            "`assoc_method='temporal'` (UPDATE)."
+                        ),
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -2780,6 +2817,30 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         f"máquina de estados."
                     ),
                 )]
+
+        elif name == "apex_advisor_compute_outcomes":
+            project_path = str(_find_project_root().resolve())
+            res = _advisor_outcomes.compute_outcomes(
+                str(db.db_path),
+                project_path,
+                lookback_days=int(arguments.get("lookback_days", 14)),
+                force=bool(arguments.get("force", False)),
+            )
+            lines = [
+                "advisor_compute_outcomes:",
+                f"  computed:      {res.computed}",
+                f"  skipped:       {res.skipped}",
+                f"  no_facet_yet:  {res.no_facet_yet}",
+                f"  force_updated: {res.force_updated}",
+            ]
+            if res.no_facet_yet > 0 and res.computed == 0:
+                lines.append(
+                    "  aviso: ningún facet match. Si nunca corres "
+                    "`/insights`, no habrá outcomes implícitos. "
+                    "Considera `apex_rate_advice` (S16.6) como escape "
+                    "hatch o ejecuta `/insights` periódicamente."
+                )
+            result = [TextContent(type="text", text="\n".join(lines))]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
