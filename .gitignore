@@ -59,9 +59,10 @@ apex-fix-*.png
 .apex/skill-proposals/
 .apex/doctor/
 
-# APEX audit outputs (apex_audit.py runs)
-apex_audit.md
+# APEX audit outputs (scripts/apex_audit.py runs)
+apex_audit_report.md
 apex_audit.jsonl
+apex_audit.stderr
 
 # Auto-generated session handoffs
 thoughts/
