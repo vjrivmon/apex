@@ -49,6 +49,73 @@ META_LAST_REVIEW_AT = "advisor_last_review_at"
 ACTIVE_ADVICE_WINDOW_SEC = 7200  # 2h
 
 
+# ── Sprint 16.5 — Constantes migrables a project_meta ────────────────
+# Las 6 constantes anteriores se persisten como JSON en
+# project_meta.advisor_constants para que el auto-tuning del Sprint 16.4
+# pueda mutarlas sin tocar código. Si la fila no existe, fallback a
+# defaults — no se rompe ninguna BD existente.
+
+ADVISOR_CONSTANTS_KEY = "advisor_constants"
+
+ADVISOR_CONSTANT_DEFAULTS: dict[str, int] = {
+    "default_interval": ADVISOR_DEFAULT_INTERVAL,
+    "backoff_interval": ADVISOR_BACKOFF_INTERVAL,
+    "empty_streak_threshold": ADVISOR_EMPTY_STREAK_THRESHOLD,
+    "bundle_max_tokens": ADVISOR_BUNDLE_MAX_TOKENS,
+    "min_calls_before_first": ADVISOR_MIN_CALLS_BEFORE_FIRST,
+    "active_advice_window_sec": ACTIVE_ADVICE_WINDOW_SEC,
+}
+
+
+def get_advisor_constants(db_path: Path | str) -> dict[str, int]:
+    """Devuelve constantes del Advisor con fallback a defaults.
+
+    Lee `project_meta.advisor_constants` (JSON). Si la fila no existe,
+    el JSON está corrupto o no es un dict, devuelve una copia de
+    `ADVISOR_CONSTANT_DEFAULTS`. Las keys desconocidas en el JSON se
+    ignoran; las keys conocidas que falten en el JSON caen a defaults.
+    """
+    with _conn(db_path) as c:
+        cur = c.execute(
+            "SELECT value FROM project_meta WHERE key=?",
+            (ADVISOR_CONSTANTS_KEY,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return dict(ADVISOR_CONSTANT_DEFAULTS)
+    try:
+        parsed = json.loads(row[0])
+    except (json.JSONDecodeError, TypeError):
+        return dict(ADVISOR_CONSTANT_DEFAULTS)
+    if not isinstance(parsed, dict):
+        return dict(ADVISOR_CONSTANT_DEFAULTS)
+    merged = dict(ADVISOR_CONSTANT_DEFAULTS)
+    for k, v in parsed.items():
+        if k in ADVISOR_CONSTANT_DEFAULTS:
+            merged[k] = v
+    return merged
+
+
+def set_advisor_constants(
+    db_path: Path | str, constants: dict[str, Any]
+) -> None:
+    """Persiste constantes del Advisor en `project_meta.advisor_constants`.
+
+    Solo se guardan las keys reconocidas (presentes en
+    `ADVISOR_CONSTANT_DEFAULTS`). Cualquier key desconocida se descarta
+    silenciosamente para evitar contaminación. Idempotente: escribir el
+    mismo dict dos veces produce el mismo estado.
+    """
+    safe = {
+        k: v
+        for k, v in constants.items()
+        if k in ADVISOR_CONSTANT_DEFAULTS
+    }
+    with _conn(db_path) as c:
+        _set_meta(c, ADVISOR_CONSTANTS_KEY, json.dumps(safe))
+        c.commit()
+
+
 # ── Helpers internos ──────────────────────────────────────────────
 
 def _conn(db_path: Path | str) -> sqlite3.Connection:
