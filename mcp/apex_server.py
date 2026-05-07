@@ -48,6 +48,9 @@ import skill_forge as _forge  # noqa: E402
 import library_ingest as _library  # noqa: E402
 import roles as _roles  # noqa: E402
 import apex_doctor as _doctor  # noqa: E402
+import advisor as _advisor  # noqa: E402
+import reasoning_traces as _traces  # noqa: E402
+import skill_handoff as _handoff_skill  # noqa: E402
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -97,13 +100,14 @@ def _read_hub_port() -> str | None:
 
 
 def _hub_is_running() -> bool:
-    """Comprueba si el hub responde en el puerto indicado por hub-port."""
+    """Comprueba si el hub responde en el puerto registrado (prefiere hub-v2-port)."""
     import socket as _socket
-    if not _HUB_PORT_FILE.exists():
+    port_str = _read_hub_port()
+    if not port_str:
         return False
     try:
-        port = int(_HUB_PORT_FILE.read_text().strip())
-    except (ValueError, OSError):
+        port = int(port_str)
+    except ValueError:
         return False
     with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
         s.settimeout(0.5)
@@ -111,11 +115,12 @@ def _hub_is_running() -> bool:
             s.connect(("127.0.0.1", port))
             return True
         except (ConnectionRefusedError, OSError):
-            # Puerto en el archivo pero nadie escuchando → archivo stale
-            try:
-                _HUB_PORT_FILE.unlink()
-            except FileNotFoundError:
-                pass
+            # Puerto en el archivo pero nadie escuchando → archivos stale
+            for f in (_HUB_PORT_FILE_V2, _HUB_PORT_FILE):
+                try:
+                    f.unlink()
+                except FileNotFoundError:
+                    pass
             return False
 
 
@@ -163,17 +168,16 @@ def _launch_hub_if_needed() -> None:
         # Esperar a que el hub escriba el archivo del puerto (máx 6s)
         import time
         for _ in range(30):
-            if _HUB_PORT_FILE.exists() and _hub_is_running():
+            if _hub_is_running():
                 break
             time.sleep(0.2)
 
     # Abrir navegador (esté ya corriendo o recién arrancado)
     try:
-        if _HUB_PORT_FILE.exists():
-            port = _HUB_PORT_FILE.read_text().strip()
-            if port.isdigit() and not already_running:
-                # Solo abrir navegador si acabamos de lanzarlo (no cada vez que se usa /apex)
-                _open_browser(f"http://localhost:{port}")
+        port = _read_hub_port()
+        if port and port.isdigit() and not already_running:
+            # Solo abrir navegador si acabamos de lanzarlo (no cada vez que se usa /apex)
+            _open_browser(f"http://localhost:{port}")
     except Exception:
         pass
 
@@ -1335,6 +1339,172 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="apex_advisor_review",
+            description=(
+                "Sprint 15 — Dispara una revisión del Advisor. Construye el "
+                "shared context (fase, decisiones, verdicts, trazas, tool calls) "
+                "y crea un advisor_review en estado 'pending'. El subagent "
+                "apex-advisor lee el bundle y emite 0-3 advice cards via "
+                "apex_record_advice. Aplica throttle (cada 8 calls) salvo "
+                "force=true. Retorna review_id + bundle resumido."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "ID de sesión activa para asociar el review.",
+                    },
+                    "force": {
+                        "type": "boolean", "default": False,
+                        "description": "Bypass del throttle/circuit breaker.",
+                    },
+                    "trigger": {
+                        "type": "string", "default": "manual",
+                        "description": (
+                            "Etiqueta del trigger: manual | tool_count | "
+                            "phase_change | grader_blocking | circuit_breaker_reset."
+                        ),
+                    },
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="apex_record_advice",
+            description=(
+                "Sprint 15 — Registra una advice card del subagent advisor. "
+                "Idempotente vía UNIQUE(review_id, kind, title). Sólo 5 kinds "
+                "permitidos: forgotten_tool, cross_project_error, phase_drift, "
+                "recommend_skill_handoff, grader_overdue. Cada card debe llevar "
+                "evidence_refs concretos (decision_id, error_id, trace_id, "
+                "cross_project_path)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "review_id": {"type": "integer"},
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "forgotten_tool", "cross_project_error", "phase_drift",
+                            "recommend_skill_handoff", "grader_overdue",
+                        ],
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "critical"],
+                    },
+                    "title": {"type": "string"},
+                    "body": {"type": "string"},
+                    "evidence_refs": {
+                        "type": "array", "default": [],
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["review_id", "kind", "severity", "title", "body"],
+            },
+        ),
+        Tool(
+            name="apex_dismiss_advice",
+            description=(
+                "Sprint 15 — Marca una advice card como descartada con razón "
+                "obligatoria (>=3 chars). Queda en BD para auditar el olvido "
+                "voluntario; el doctor (S16+) detectará dismiss recurrente "
+                "como señal de reglas mal calibradas."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "advice_id": {"type": "integer"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["advice_id", "reason"],
+            },
+        ),
+        Tool(
+            name="apex_log_trace",
+            description=(
+                "Sprint 15 — Registra una traza de razonamiento en un gate denso "
+                "(phase_close, grader_blocking, doctor_proposal, override). 4 "
+                "categorías iniciales: cascading_failure_recovery, "
+                "socratic_self_correction, multi_agent_coordination, "
+                "long_horizon_consequences. Insumo del Advisor + corpus para "
+                "SFT futuro. Deliberation: 200-2000 chars; confidence: 0.0-1.0."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "phase": {"type": "integer"},
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "cascading_failure_recovery",
+                            "socratic_self_correction",
+                            "multi_agent_coordination",
+                            "long_horizon_consequences",
+                        ],
+                    },
+                    "gate_kind": {
+                        "type": "string",
+                        "enum": [
+                            "phase_close", "grader_blocking",
+                            "doctor_proposal", "override",
+                        ],
+                    },
+                    "deliberation": {"type": "string"},
+                    "calibration_confidence": {"type": "number"},
+                    "calibration_text": {"type": "string", "default": ""},
+                    "alternatives_considered": {
+                        "type": "array", "default": [],
+                        "items": {"type": "object"},
+                    },
+                },
+                "required": [
+                    "session_id", "category", "gate_kind",
+                    "deliberation", "calibration_confidence",
+                ],
+            },
+        ),
+        Tool(
+            name="apex_handoff_skill",
+            description=(
+                "Sprint 15 — Cambio de modo dentro de la sesión (flujo Pocock: "
+                "grill-with-docs → prototype → grill-with-docs). Persiste el "
+                "snapshot del estado actual (archivos abiertos, decisiones "
+                "tentativas, preguntas pendientes) para que el modo destino "
+                "pueda retomar y, al volver, registrar el resultado."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "from_skill": {"type": "string"},
+                    "to_skill": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "snapshot": {"type": "object", "default": {}},
+                },
+                "required": ["session_id", "from_skill", "to_skill", "reason"],
+            },
+        ),
+        Tool(
+            name="apex_resume_skill_handoff",
+            description=(
+                "Sprint 15 — Marca el handoff como retornado y guarda el "
+                "result_summary del modo destino. Devuelve el snapshot original "
+                "para que el skill origen retome con contexto fresco."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handoff_id": {"type": "integer"},
+                    "result_summary": {"type": "string", "default": ""},
+                },
+                "required": ["handoff_id"],
+            },
+        ),
     ]
 
 
@@ -2355,6 +2525,168 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             lines.append("Aprobar: apex_skill_forge_approve(slug)")
             lines.append("Rechazar: apex_skill_forge_reject(slug, reason)")
             result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_advisor_review":
+            session_id = arguments["session_id"]
+            force = bool(arguments.get("force", False))
+            trigger = arguments.get("trigger", "manual")
+            db_path = str(db.db_path)
+            run_, reason = _advisor.should_run(db_path, force=force)
+            if not run_:
+                result = [TextContent(
+                    type="text",
+                    text=f"Advisor review SKIPPED: {reason}",
+                )]
+            else:
+                bundle = _advisor.build_bundle(db_path, session_id)
+                tokens = _advisor.estimate_bundle_tokens(bundle)
+                rid = _advisor.record_review(
+                    db_path, session_id, trigger, bundle_size_tokens=tokens,
+                )
+                lines = [
+                    f"advisor_review #{rid} creado · trigger={trigger}",
+                    f"  bundle_size_tokens≈{tokens}",
+                    f"  reason: {reason}",
+                    "",
+                    "Próximo paso: invocar el subagent",
+                    f"  Task(subagent_type='apex-advisor', prompt='review_id={rid}; "
+                    f"session_id={session_id}; ver bundle vía apex_get_context')",
+                ]
+                if bundle.get("phase"):
+                    lines.append(f"  phase actual: {bundle['phase']}")
+                if bundle.get("blocking_verdicts"):
+                    lines.append(
+                        f"  verdicts bloqueantes: {len(bundle['blocking_verdicts'])}"
+                    )
+                result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_record_advice":
+            db_path = str(db.db_path)
+            try:
+                aid = _advisor.record_advice(
+                    db_path,
+                    review_id=int(arguments["review_id"]),
+                    kind=arguments["kind"],
+                    severity=arguments["severity"],
+                    title=arguments["title"],
+                    body=arguments["body"],
+                    evidence_refs=arguments.get("evidence_refs", []),
+                )
+            except ValueError as e:
+                result = [TextContent(type="text", text=f"Validación falló: {e}")]
+            else:
+                if aid is None:
+                    result = [TextContent(
+                        type="text",
+                        text=(
+                            "Card duplicada (mismo review/kind/title) — "
+                            "ignorada silenciosamente."
+                        ),
+                    )]
+                else:
+                    result = [TextContent(
+                        type="text",
+                        text=(
+                            f"advice #{aid} registrada · kind={arguments['kind']} "
+                            f"severity={arguments['severity']}"
+                        ),
+                    )]
+
+        elif name == "apex_dismiss_advice":
+            db_path = str(db.db_path)
+            try:
+                ok = _advisor.dismiss_advice(
+                    db_path,
+                    advice_id=int(arguments["advice_id"]),
+                    reason=arguments["reason"],
+                )
+            except ValueError as e:
+                result = [TextContent(type="text", text=f"Validación falló: {e}")]
+            else:
+                if ok:
+                    result = [TextContent(
+                        type="text",
+                        text=f"advice #{arguments['advice_id']} descartada.",
+                    )]
+                else:
+                    result = [TextContent(
+                        type="text",
+                        text=f"advice #{arguments['advice_id']} no existe.",
+                    )]
+
+        elif name == "apex_log_trace":
+            db_path = str(db.db_path)
+            try:
+                tid = _traces.log_trace(
+                    db_path,
+                    session_id=arguments["session_id"],
+                    phase=arguments.get("phase"),
+                    category=arguments["category"],
+                    gate_kind=arguments["gate_kind"],
+                    deliberation=arguments["deliberation"],
+                    calibration_confidence=float(arguments["calibration_confidence"]),
+                    calibration_text=arguments.get("calibration_text", ""),
+                    alternatives_considered=arguments.get("alternatives_considered", []),
+                )
+            except ValueError as e:
+                result = [TextContent(type="text", text=f"Validación falló: {e}")]
+            else:
+                result = [TextContent(
+                    type="text",
+                    text=(
+                        f"reasoning_trace #{tid} registrada · "
+                        f"category={arguments['category']} "
+                        f"gate={arguments['gate_kind']}"
+                    ),
+                )]
+
+        elif name == "apex_handoff_skill":
+            db_path = str(db.db_path)
+            try:
+                hid = _handoff_skill.create_handoff(
+                    db_path,
+                    session_id=arguments["session_id"],
+                    from_skill=arguments["from_skill"],
+                    to_skill=arguments["to_skill"],
+                    reason=arguments["reason"],
+                    snapshot=arguments.get("snapshot", {}),
+                )
+            except ValueError as e:
+                result = [TextContent(type="text", text=f"Validación falló: {e}")]
+            else:
+                result = [TextContent(
+                    type="text",
+                    text=(
+                        f"skill_handoff #{hid} creado: "
+                        f"{arguments['from_skill']} → {arguments['to_skill']}.\n"
+                        f"Para volver: apex_resume_skill_handoff(handoff_id={hid}, "
+                        f"result_summary='...')"
+                    ),
+                )]
+
+        elif name == "apex_resume_skill_handoff":
+            db_path = str(db.db_path)
+            d = _handoff_skill.resume_handoff(
+                db_path,
+                handoff_id=int(arguments["handoff_id"]),
+                result_summary=arguments.get("result_summary", ""),
+            )
+            if d is None:
+                result = [TextContent(
+                    type="text",
+                    text=f"handoff #{arguments['handoff_id']} no existe.",
+                )]
+            else:
+                lines = [
+                    f"skill_handoff #{d['id']} retomado · "
+                    f"vuelves a {d['from_skill']}",
+                    f"  origen del handoff: {d['from_skill']} → {d['to_skill']}",
+                    f"  razón original: {d['reason']}",
+                ]
+                snap = d.get("snapshot")
+                if isinstance(snap, dict) and snap:
+                    lines.append(f"  snapshot keys: {list(snap.keys())}")
+                result = [TextContent(type="text", text="\n".join(lines))]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]

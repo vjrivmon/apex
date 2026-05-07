@@ -55,10 +55,11 @@ def agents_root(tmp_path: Path) -> Path:
 
 # ── Registry ──────────────────────────────────────────────────────────────
 
-def test_registry_has_five_roles() -> None:
+def test_registry_has_six_roles() -> None:
+    """Sprint 15 añade apex-advisor (asesor on-demand). Total 6 roles."""
     assert set(r.list_roles()) == {
         "apex-architect", "apex-implementer", "apex-reviewer",
-        "apex-qa", "apex-devops",
+        "apex-qa", "apex-devops", "apex-advisor",
     }
 
 
@@ -157,11 +158,12 @@ def test_install_role_force_overwrites(agents_root: Path) -> None:
     assert "apex-architect" in content
 
 
-def test_install_all_creates_five_files(agents_root: Path) -> None:
+def test_install_all_creates_six_files(agents_root: Path) -> None:
+    """Sprint 15: install_all instala 6 (5 de S12 + apex-advisor)."""
     results = r.install_all(agents_root=agents_root)
-    assert len(results) == 5
+    assert len(results) == 6
     files = list(agents_root.glob("*.md"))
-    assert len(files) == 5
+    assert len(files) == 6
     for role_name in r.ROLES:
         assert (agents_root / f"{role_name}.md").exists()
 

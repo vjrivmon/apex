@@ -57,6 +57,11 @@ apex-fix-*.png
 .apex/browser-traces/
 .apex/reverse-reports/
 .apex/skill-proposals/
+.apex/doctor/
+
+# APEX audit outputs (apex_audit.py runs)
+apex_audit.md
+apex_audit.jsonl
 
 # Auto-generated session handoffs
 thoughts/

@@ -256,6 +256,92 @@ CREATE TABLE IF NOT EXISTS session_starts (
     session_id TEXT PRIMARY KEY,
     started_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Sprint 15 — Advisor Strategy: reviews + advice cards estructuradas
+CREATE TABLE IF NOT EXISTS advisor_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    triggered_at TEXT DEFAULT (datetime('now')),
+    trigger_kind TEXT NOT NULL,
+    -- 'tool_count' | 'phase_change' | 'grader_blocking' | 'manual' | 'circuit_breaker_reset'
+    bundle_size_tokens INTEGER DEFAULT 0,
+    advice_count INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending'
+    -- 'pending' | 'completed' | 'skipped' | 'error'
+);
+
+CREATE INDEX IF NOT EXISTS idx_advisor_reviews_session
+    ON advisor_reviews(session_id, triggered_at DESC);
+
+CREATE TABLE IF NOT EXISTS advisor_advice (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_id INTEGER NOT NULL REFERENCES advisor_reviews(id),
+    kind TEXT NOT NULL,
+    -- 'forgotten_tool' | 'cross_project_error' | 'phase_drift'
+    -- | 'recommend_skill_handoff' | 'grader_overdue'
+    severity TEXT NOT NULL,             -- 'info' | 'warn' | 'critical'
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    evidence_refs TEXT DEFAULT '[]',    -- JSON array
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    dismissed_reason TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(review_id, kind, title)
+);
+
+CREATE INDEX IF NOT EXISTS idx_advisor_advice_review
+    ON advisor_advice(review_id, dismissed);
+
+-- Sprint 15 — reasoning_traces: combustible del advisor + corpus SFT
+CREATE TABLE IF NOT EXISTS reasoning_traces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    phase INTEGER,
+    category TEXT NOT NULL,
+    -- TRACE_CATEGORIES_V1: cascading_failure_recovery | socratic_self_correction
+    --                     | multi_agent_coordination | long_horizon_consequences
+    gate_kind TEXT NOT NULL,
+    -- 'phase_close' | 'grader_blocking' | 'doctor_proposal' | 'override'
+    deliberation TEXT NOT NULL,
+    calibration_confidence REAL,
+    calibration_text TEXT DEFAULT '',
+    alternatives_considered TEXT DEFAULT '[]',  -- JSON array
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_traces_session_phase
+    ON reasoning_traces(session_id, phase);
+CREATE INDEX IF NOT EXISTS idx_traces_category
+    ON reasoning_traces(category);
+
+-- Sprint 15 — skill_handoffs: cambio de modo dentro de sesión (flujo Pocock)
+CREATE TABLE IF NOT EXISTS skill_handoffs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    from_skill TEXT NOT NULL,
+    to_skill TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    snapshot TEXT NOT NULL DEFAULT '{}',     -- JSON
+    result_summary TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    returned_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_handoffs_session
+    ON skill_handoffs(session_id, created_at DESC);
+
+-- Sprint 15 — state_machines: prototipos ejecutables registrados (skill /prototype)
+CREATE TABLE IF NOT EXISTS state_machines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feature_name TEXT NOT NULL UNIQUE,
+    states TEXT NOT NULL,               -- JSON array
+    transitions TEXT NOT NULL,          -- JSON array
+    initial_state TEXT NOT NULL,
+    tui_path TEXT NOT NULL,
+    wiki_path TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 PHASES = [

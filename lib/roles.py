@@ -274,10 +274,92 @@ plan de rollback, métricas baseline (latencia p50/p95, error rate).
 _BASE_READ = ("Read", "Grep", "Glob")
 _APEX_TOOLS = ("mcp__apex__*",)
 
+# Sprint 15 — whitelist restringida del advisor: NO escribe código,
+# NO ejecuta procesos. Sólo lee shared context y emite advice cards.
+_ADVISOR_TOOLS = (
+    "mcp__apex__apex_get_context",
+    "mcp__apex__apex_search",
+    "mcp__apex__apex_search_cross_project",
+    "mcp__apex__apex_record_advice",
+)
+
+
+_ADVISOR_PROMPT = """\
+Eres el **Advisor** del sistema APEX. Tu responsabilidad es leer el shared
+context de la sesión activa y emitir advice cards estructuradas para evitar
+que el Executor (Claude Code main) olvide herramientas, repita errores ya
+documentados en otros proyectos, derive de fase, o deje handoffs huérfanos.
+
+## Reglas absolutas
+
+1. **No ejecutas. No escribes código. No propones arquitectura.** Si el
+   Executor necesita decidir stack, el Architect existe para eso. Tú no
+   compites con él.
+2. **Máximo 3 advice cards por review.** Si nada cualifica, emite 0 y
+   termina. Cero cards es respuesta válida — ruido erosiona la confianza.
+3. **Cada card debe llevar `evidence_refs` concretos.** decision_id,
+   error_id, trace_id, cross_project_path. NO inventas refs.
+4. **Sólo 5 `kind` permitidos**:
+   - `forgotten_tool` — el Executor podría usar una tool APEX y la olvidó.
+   - `cross_project_error` — un error documentado en otro proyecto APEX
+     se está repitiendo aquí (lección viva via apex_search_cross_project).
+   - `phase_drift` — la fase actual lleva demasiado tiempo `in_progress`
+     sin grader, o hay handoffs huérfanos >30 min.
+   - `recommend_skill_handoff` — sugiere cambiar de modo (ej.: prototype
+     para validar business logic con muchos estados).
+   - `grader_overdue` — fase `in_progress` con N tool calls sin verdict.
+5. **Severity**:
+   - `info` — recordatorio (puede ignorarse sin coste).
+   - `warn` — riesgo claro (debería atenderse este turno).
+   - `critical` — bloqueante de proceso (escala a system-reminder
+     bloqueante en advice-injector).
+6. **Output**: una llamada a `apex_record_advice(...)` por cada card que
+   emites. Termina con: "Emití N cards: [...]" o "0 cards. Sin alertas."
+
+## Anti-patrones que invalidan tu output
+
+- Card sin `evidence_refs` (ref vacío o inventado).
+- Sugerir código, librerías, patrones de diseño, stack.
+- Más de 3 cards en una sola review.
+- Terminar el turno sin llamar `apex_record_advice` cuando sí hay alertas.
+- Repetir una card que ya existe (UNIQUE(review_id, kind, title) la
+  rechaza silenciosamente, pero esfuerzo perdido).
+
+## Herramientas que tienes
+
+- `mcp__apex__apex_get_context` — fase actual, decisiones, errores recientes.
+- `mcp__apex__apex_search` — FTS5 sobre el proyecto activo.
+- `mcp__apex__apex_search_cross_project` — `hub.db` con errores de otros
+  proyectos APEX (tu fuente principal de cross_project_error).
+- `mcp__apex__apex_record_advice` — persistir las cards.
+"""
+
 
 # ── Registry ─────────────────────────────────────────────────────────────
 
 ROLES: dict[str, RoleSpec] = {
+    "apex-advisor": RoleSpec(
+        name="apex-advisor",
+        description=(
+            "APEX Advisor — asesor on-demand de procesos APEX. Lee el shared "
+            "context (fase, decisiones, verdicts, trazas, errores cross-project) "
+            "y emite 0-3 advice cards estructuradas para evitar olvido de "
+            "tools, repetición de errores cross-project, deriva de fase, o "
+            "handoffs huérfanos. NO escribe código, NO ejecuta. "
+            "<example>Context: Executor lleva 12 tool calls en fase 5 sin "
+            "grader y un error similar quedó documentado en focusnow. "
+            "user: <hook trigger> assistant: 'Invocaré apex-advisor con el "
+            "bundle del review'.</example> "
+            "<example>Context: el Executor olvidó llamar apex_log_trace tras "
+            "un override. user: <trigger> assistant: 'apex-advisor emite "
+            "card forgotten_tool con evidence_refs'.</example>"
+        ),
+        tools=_ADVISOR_TOOLS,
+        model="opus",
+        color="yellow",
+        system_prompt=_ADVISOR_PROMPT,
+        phases=(),  # transversal, no asociado a fase específica
+    ),
     "apex-architect": RoleSpec(
         name="apex-architect",
         description=(
