@@ -342,6 +342,50 @@ CREATE TABLE IF NOT EXISTS state_machines (
     wiki_path TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Sprint 16 — advice_outcomes: rating implícito (facets) + manual (escape hatch)
+CREATE TABLE IF NOT EXISTS advice_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    advice_id INTEGER NOT NULL REFERENCES advisor_advice(id) ON DELETE CASCADE,
+    session_id TEXT,                                 -- session de facets si hay match
+    assoc_method TEXT NOT NULL CHECK (assoc_method IN ('temporal', 'manual')),
+    -- Datos del facet asociado (NULL si assoc_method='manual'):
+    facet_outcome TEXT,                              -- fully_achieved | mostly_achieved | ...
+    facet_helpfulness TEXT,                          -- essential | very_helpful | ...
+    facet_satisfaction TEXT,                         -- satisfied | dissatisfied | ...
+    friction_keys TEXT,                              -- JSON list de keys con count>0
+    -- Rating inferido o manual:
+    inferred_rating TEXT NOT NULL CHECK (inferred_rating IN
+        ('useful', 'not_useful', 'unclear')),
+    manual_reason TEXT,                              -- requerido si assoc_method='manual'
+    computed_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (advice_id, assoc_method)
+);
+
+CREATE INDEX IF NOT EXISTS idx_advice_outcomes_advice
+    ON advice_outcomes(advice_id);
+CREATE INDEX IF NOT EXISTS idx_advice_outcomes_session
+    ON advice_outcomes(session_id);
+CREATE INDEX IF NOT EXISTS idx_advice_outcomes_rating
+    ON advice_outcomes(inferred_rating);
+
+-- Sprint 16 — advisor_tuning_history: bitácora de auto-tuning de constantes
+CREATE TABLE IF NOT EXISTS advisor_tuning_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    applied_at TEXT DEFAULT (datetime('now')),
+    category TEXT NOT NULL,                          -- forgotten_tool | phase_drift | ...
+    constant_name TEXT NOT NULL,                     -- e.g. 'min_calls_between_reviews'
+    old_value REAL NOT NULL,
+    new_value REAL NOT NULL,
+    trigger_n_outcomes INTEGER NOT NULL,
+    fp_rate_before REAL,
+    reason TEXT,
+    source TEXT NOT NULL DEFAULT 'auto'              -- auto | manual_override
+        CHECK (source IN ('auto', 'manual_override'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tuning_history_applied
+    ON advisor_tuning_history(applied_at DESC);
 """
 
 PHASES = [
