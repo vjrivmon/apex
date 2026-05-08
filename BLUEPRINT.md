@@ -2,22 +2,22 @@
 
 > Snapshot del estado actual y arranque de la próxima sesión. Se
 > sobrescribe en cada handoff. Última actualización: **2026-05-08**
-> tras cierre de **Sprint 16.7**.
+> tras cierre de **Sprint 16** y arranque de **Sprint 17**.
 
 ---
 
 ## Estado actual
 
-- **Branch:** `main`
-- **HEAD:** `feat(s16.4): apex_advisor_apply_tuning auto-tuner determinista` (S16.7 pendiente commit)
-- **Suite:** 545 verde (10.4s)
+- **Branch:** `main` (limpia, alineada con `origin/main`)
+- **HEAD:** `bdddf6b feat(s16.7): advisor-outcome-watch hook UserPromptSubmit`
+- **Suite:** 545 verde (7.95s)
 - **Tools MCP:** 53
-- **`git status`:** sin track → `.claude/hooks/advisor-outcome-watch.py`
-  + `tests/test_advisor_outcome_hook.py` + edit en `.claude/settings.json`
-- **Sprint en curso:** **Sprint 16 — Advisor Feedback Loop** (rating
-  implícito vía facets + escape hatch manual)
+- **`git status`:** árbol limpio
+- **Sprint en curso:** **Sprint 17 — VirtualFS cross-project read-only**
+  (mount lógico RO `/projects/<slug>/...` + `/lessons/...` + `/vault/`
+  navegable con primitivas UNIX)
 
-### Progreso S16 (blueprint v2)
+### Progreso S16 (cerrado en su núcleo)
 
 | ID    | Subtarea                                                    | Estado            | Tests | Suite delta |
 |-------|-------------------------------------------------------------|-------------------|-------|-------------|
@@ -27,72 +27,49 @@
 | S16.6 | `apex_rate_advice` (escape hatch) + validación              | ✅ `4bf3624`       | 6     | 515 → 521   |
 | S16.3 | `lib/advisor_health.py` + `apex_advisor_health`             | ✅ `8b610c5`       | 8     | 521 → 529   |
 | S16.4 | `lib/advisor_tuning.py` + `apex_advisor_apply_tuning`       | ✅ `3107c52`       | 12    | 529 → 541   |
-| S16.7 | Hook `advisor-outcome-watch.py`                             | ✅ pending commit | 4     | 541 → 545   |
-| S16.8 | (Opcional) `skills/advisor-feedback/SKILL.md`               | pendiente         | (0)   |             |
+| S16.7 | Hook `advisor-outcome-watch.py`                             | ✅ `bdddf6b`       | 4     | 541 → 545   |
+| S16.8 | (Opcional) `skills/advisor-feedback/SKILL.md`               | 🔄 deferido       | (0)   |             |
 
-Orden recomendado (§8 del blueprint): `S16.1 ✓ → S16.5 ✓ → S16.2 ✓ →
-S16.6 ✓ → S16.3 ✓ → S16.4 ✓ → S16.7 ✓ → **S16.8** (opcional)`.
+S16.8 deferido por decisión explícita 2026-05-08 (deuda fría tolerable;
+la skill se redactará cuando haya datos reales del feedback loop sin
+bloquear S17). Sprint 16 cerrado en su núcleo (7/8 subtareas, todas las
+de código + tests).
 
 ---
 
-## Próximo paso (sesión nueva): commit S16.7 + decidir S16.8
+## Próximo paso (sesión actual): Sprint 17 — VirtualFS cross-project
 
-### Pendiente inmediato (1 minuto)
+S16 cerrado en núcleo (S16.8 deferido como deuda fría). Decisión 2026-
+05-08: respetar **orden estricto del roadmap** (S17 → S18 → S19) en
+lugar de saltar a S19 por urgencia de Gap F (gitleaks). El gap F sigue
+siendo crítico pero puede esperar al cierre ordenado de S17/S18.
 
-Hay un commit S16.7 staged sin cerrar (la sesión anterior cerró por
-error la terminal antes del commit). Working tree:
+### Subtareas S17 (orden TDD)
 
-```
-.claude/hooks/advisor-outcome-watch.py    (nuevo, +178L)
-.claude/settings.json                     (3 hooks UserPromptSubmit → 4)
-tests/test_advisor_outcome_hook.py        (nuevo, 4 tests)
-BLUEPRINT.md                              (este archivo, actualizado)
-```
+| ID     | Subtarea                                                  | LoC est. | Tests |
+|--------|-----------------------------------------------------------|----------|-------|
+| S17.1  | Schema `vfs_render_cache` + `vfs_query_log` + auto-mig    | ~80      | 4     |
+| S17.2  | Path resolver + RBAC whitelist (`vfs_allowed_roots`)      | ~120     | 6     |
+| S17.3  | `VirtualFS.ls` + `cat` sobre mounts reales (RO/EROFS)     | ~100     | 6     |
+| S17.4  | `VirtualFS.find` + glob                                   | ~80      | 4     |
+| S17.5  | `vfs_grep` + flags `-i/-r/-n/-l/-E` + FTS5 pre-filter     | ~150     | 6     |
+| S17.6  | `vfs_sql_render`: errors/skills-history/lessons → md      | ~200     | 5     |
+| S17.7  | Render cache + invalidation                               | ~80      | 3     |
+| S17.8  | `apex_vfs_exec` parser (whitelist, sin shell injection)   | ~120     | 5     |
+| S17.9  | Wiring 4 tools MCP en `apex_server.py`                    | ~60      | 4     |
+| S17.10 | Commit + actualizar BLUEPRINT/CLAUDE.md/handoff           | —        | —     |
 
-Acción:
+Suite objetivo S17: **545 → ~588 verde** (+43 tests netos).
+Tools MCP: **53 → 57** (`apex_vfs_exec`, `apex_vfs_ls`, `apex_vfs_cat`,
+`apex_vfs_grep`).
 
-```bash
-cd ~/RoadToDevOps/apex
-PYTHONPATH=lib .venv/bin/pytest tests/ -q       # confirmar 545 verde
-git status                                       # 4 archivos staged
-git commit -m "feat(s16.7): advisor-outcome-watch hook UserPromptSubmit"
-git push
-```
+### Tras S17 cierra: S18 → S19
 
-Mensaje de commit recomendado:
-
-```
-feat(s16.7): advisor-outcome-watch hook UserPromptSubmit
-
-- .claude/hooks/advisor-outcome-watch.py: high-water mark en
-  project_meta.outcome_watch_prompt_count, cada N=10 prompts ejecuta
-  compute_outcomes(lookback=14d) + apply_tuning(dry_run=True) con
-  timeout 3s. Inyecta additionalContext si hay propuestas de tuning
-  o si facets_freshness > 7d (sugerir /insights). Nunca bloquea.
-- tests/test_advisor_outcome_hook.py: 4 tests (counter increment,
-  silent below threshold, emite proposal en threshold, no bloquea
-  con stdin corrupto).
-- .claude/settings.json: registra el hook como tercer UserPromptSubmit.
-- BLUEPRINT.md: marca S16.7 ✓, suite 545 verde.
-
-Suite: 541 → 545 verde.
-```
-
-### Decisión a tomar antes de seguir: ¿S16.8 ahora o saltar a S17?
-
-`S16.8` es la skill opcional `skills/advisor-feedback/SKILL.md` (~80
-LoC, 0 tests). El blueprint v2 §7 la marca opcional. Dos caminos:
-
-- **A)** Cerrar S16.8 con la skill y declarar Sprint 16 cerrado
-  oficialmente (~30 min: redactar SKILL.md con 4 triggers, anti-
-  patrones, puente APEX al Advisor + escape hatch).
-- **B)** Saltar S16.8 (declarar Sprint 16 cerrado en su núcleo) y
-  arrancar **Sprint 17 — VirtualFS cross-project** o **Sprint 19 —
-  Advent Integration** (Tier 1+2+4, gitleaks crítico).
-
-Recomendación: **B** (saltar). La skill es deuda fría; S19 incluye
-gitleaks como Gap F crítico (incidente de leak ya documentado en
-`hub.db`). S16.8 se puede recuperar más adelante sin coste.
+- **S18 — Granite Curator opcional** (opt-in vía `APEX_CURATOR_MODEL`),
+  blueprint en `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md`.
+- **S19 — Advent Integration** (Tier 1+2+4: gitleaks crítico, CLAUDE.md
+  APEX-aware, slash commands cortos, PreCompact hook, export_session,
+  rules condicionales). Blueprint en `.apex/sprints/sprint-19-advent-integration-blueprint.md`.
 
 ---
 
@@ -112,15 +89,18 @@ gitleaks como Gap F crítico (incidente de leak ya documentado en
 
 ---
 
-## Sprints encolados tras S16
+## Sprints encolados tras S17
 
 | Sprint | Foco | Blueprint |
 |--------|------|-----------|
-| S17 | VirtualFS cross-project | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
+| **S17** | **VirtualFS cross-project** (en curso) | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
 | S18 | Granite Curator opt-in | (mismo archivo que S17) |
-| **S19** | **Advent Integration (Tier 1+2+4)** — gitleaks template, `CLAUDE.md` auto, slash commands cortos, PreCompact hook, `apex_export_session`, project rules condicionales, docs UX | **`.apex/sprints/sprint-19-advent-integration-blueprint.md`** (planificado 2026-05-08) |
+| S19 | Advent Integration (Tier 1+2+4) — gitleaks crítico, CLAUDE.md auto, slash commands cortos, PreCompact hook, `apex_export_session`, rules condicionales | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
 
-S19 nace del análisis `docs/APEX-vs-ADVENT-improvements.md`. **Pre-requisito:** S16 cerrado. Tier 3 (Gap K, GH Action APEX-aware) diferido hasta tener colaboradores.
+Decisión 2026-05-08: orden estricto **S17 → S18 → S19** en lugar de
+priorizar S19 por urgencia. S19 sigue manteniendo Gap F (gitleaks)
+como prioridad cero dentro del propio sprint. Tier 3 (Gap K, GH
+Action APEX-aware) diferido a S20+ hasta tener colaboradores.
 
 ---
 

@@ -386,6 +386,34 @@ CREATE TABLE IF NOT EXISTS advisor_tuning_history (
 
 CREATE INDEX IF NOT EXISTS idx_tuning_history_applied
     ON advisor_tuning_history(applied_at DESC);
+
+-- Sprint 17 — VirtualFS cross-project: caché de renderizados SQL→md
+-- y telemetría de queries. cache_key = sha256(query+rows) para invalidación
+-- selectiva (cuando los datos fuente cambian, el hash cambia y el cache se
+-- regenera). source_hash trazea qué datos generaron la entrada para poder
+-- invalidar masivamente al detectar drift.
+CREATE TABLE IF NOT EXISTS vfs_render_cache (
+    cache_key TEXT PRIMARY KEY,
+    rendered TEXT NOT NULL,
+    generated_at TEXT DEFAULT (datetime('now')),
+    source_hash TEXT
+);
+
+-- Telemetría de queries para detectar paths calientes (futuro: caching agresivo).
+-- project_slug puede ser NULL para queries cross-project (`grep -r /projects/`).
+CREATE TABLE IF NOT EXISTS vfs_query_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT (datetime('now')),
+    command TEXT NOT NULL,
+    project_slug TEXT,
+    hits INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_vfs_query_log_ts
+    ON vfs_query_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_vfs_query_log_project
+    ON vfs_query_log(project_slug);
 """
 
 PHASES = [
