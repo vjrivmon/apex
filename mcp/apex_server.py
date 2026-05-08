@@ -51,6 +51,7 @@ import apex_doctor as _doctor  # noqa: E402
 import advisor as _advisor  # noqa: E402
 import advisor_outcomes as _advisor_outcomes  # noqa: E402
 import advisor_health as _advisor_health  # noqa: E402
+import advisor_tuning as _advisor_tuning  # noqa: E402
 import reasoning_traces as _traces  # noqa: E402
 import skill_handoff as _handoff_skill  # noqa: E402
 import prototype as _prototype  # noqa: E402
@@ -1654,6 +1655,29 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="apex_advisor_apply_tuning",
+            description=(
+                "Sprint 16.4 — Auto-tuner determinista de constantes "
+                "del Advisor. Para cada categoría con ≥20 outcomes y "
+                "not_useful_rate >40%, propone tunear la constante "
+                "asociada (forgotten_tool→default_interval, "
+                "phase_drift→phase_drift_window_min, "
+                "recommend_skill_handoff→complexity_score_threshold, "
+                "grader_overdue→grader_overdue_phases). Cooldown 7 días "
+                "por constante. dry_run=True (default) sólo devuelve "
+                "propuestas; dry_run=False persiste y registra fila en "
+                "advisor_tuning_history. force=True salta cooldown y "
+                "registra source='manual_override'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dry_run": {"type": "boolean", "default": True},
+                    "force": {"type": "boolean", "default": False},
+                },
+            },
+        ),
     ]
 
 
@@ -2917,6 +2941,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             payload = _advisor_health.advisor_health(
                 str(db.db_path),
                 window_days=int(arguments.get("window_days", 30)),
+            )
+            result = [TextContent(
+                type="text",
+                text=_json.dumps(payload, ensure_ascii=False, indent=2),
+            )]
+
+        elif name == "apex_advisor_apply_tuning":
+            import json as _json
+            payload = _advisor_tuning.apply_tuning(
+                str(db.db_path),
+                dry_run=bool(arguments.get("dry_run", True)),
+                force=bool(arguments.get("force", False)),
             )
             result = [TextContent(
                 type="text",

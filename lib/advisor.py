@@ -57,17 +57,21 @@ ACTIVE_ADVICE_WINDOW_SEC = 7200  # 2h
 
 ADVISOR_CONSTANTS_KEY = "advisor_constants"
 
-ADVISOR_CONSTANT_DEFAULTS: dict[str, int] = {
+ADVISOR_CONSTANT_DEFAULTS: dict[str, int | float] = {
     "default_interval": ADVISOR_DEFAULT_INTERVAL,
     "backoff_interval": ADVISOR_BACKOFF_INTERVAL,
     "empty_streak_threshold": ADVISOR_EMPTY_STREAK_THRESHOLD,
     "bundle_max_tokens": ADVISOR_BUNDLE_MAX_TOKENS,
     "min_calls_before_first": ADVISOR_MIN_CALLS_BEFORE_FIRST,
     "active_advice_window_sec": ACTIVE_ADVICE_WINDOW_SEC,
+    # Sprint 16.4 — claves nuevas tuneables
+    "phase_drift_window_min": 30,
+    "complexity_score_threshold": 0.6,
+    "grader_overdue_phases": 2,
 }
 
 
-def get_advisor_constants(db_path: Path | str) -> dict[str, int]:
+def get_advisor_constants(db_path: Path | str) -> dict[str, int | float]:
     """Devuelve constantes del Advisor con fallback a defaults.
 
     Lee `project_meta.advisor_constants` (JSON). Si la fila no existe,

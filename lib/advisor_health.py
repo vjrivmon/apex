@@ -115,9 +115,10 @@ def advisor_health(
         for r in cur.fetchall():
             last_tune_by_constant[r["constant_name"]] = r["last"]
         for name, value in constants_now.items():
-            source = "tuned" if int(value) != int(defaults.get(name, value)) else "default"
+            default_value = defaults.get(name, value)
+            source = "tuned" if value != default_value else "default"
             out["constants_actuales"][name] = {
-                "value": int(value),
+                "value": value,
                 "source": source,
                 "last_tuned_at": last_tune_by_constant.get(name),
             }
