@@ -53,8 +53,30 @@ _LESSONS_MOUNTS: frozenset[str] = frozenset({
 })
 
 
-class VFSPathError(ValueError):
+class VFSError(Exception):
+    """Error genérico del VirtualFS (file not found, not a directory, etc.).
+
+    `VFSPathError` (path inválido / RBAC) es subclase para mantener el
+    contrato existente; código que ya capturaba `VFSPathError` sigue
+    funcionando.
+    """
+
+
+class VFSPathError(VFSError, ValueError):
     """Path virtual inválido o no autorizado."""
+
+
+class VFSNotImplementedError(VFSError):
+    """Operación sobre categoría virtual aún no implementada (S17.6)."""
+
+
+@dataclass(frozen=True)
+class VFSEntry:
+    """Entry en una listing virtual. Equivalente a una línea de `ls -l`."""
+
+    name: str
+    kind: Literal["file", "dir"]
+    size_bytes: int
 
 
 @dataclass(frozen=True)
@@ -131,6 +153,67 @@ class VirtualFS:
         finally:
             conn.close()
         return cls(allowed_roots=roots, vault_root=vault)
+
+    # --- public operations -------------------------------------------------
+
+    def ls(self, virtual_path: str) -> list[VFSEntry]:
+        """Lista entries de un directorio virtual. Read-only.
+
+        Devuelve entries ordenados por nombre. Lanza `VFSPathError` para
+        paths inválidos / RBAC, `VFSError("not found"|"not a directory")`
+        para errores de filesystem, `VFSNotImplementedError` para
+        categorías virtuales (errors, skills-history, lessons-*) que se
+        materializan en S17.6.
+        """
+        resolved = self._resolve(virtual_path)
+        if resolved.kind == "virtual":
+            raise VFSNotImplementedError(
+                f"ls on virtual category '{resolved.category}' not yet implemented "
+                "(scheduled for S17.6)"
+            )
+        path = resolved.real_path
+        assert path is not None  # kind=real implica real_path != None
+        if not path.exists():
+            raise VFSError(f"not found: {virtual_path}")
+        if not path.is_dir():
+            raise VFSError(f"not a directory: {virtual_path}")
+        entries: list[VFSEntry] = []
+        for child in sorted(path.iterdir(), key=lambda p: p.name):
+            try:
+                size = child.stat().st_size if child.is_file() else 0
+            except OSError:
+                size = 0
+            entries.append(
+                VFSEntry(
+                    name=child.name,
+                    kind="dir" if child.is_dir() else "file",
+                    size_bytes=size,
+                )
+            )
+        return entries
+
+    def cat(self, virtual_path: str) -> str:
+        """Lee el contenido de un archivo virtual como texto UTF-8.
+
+        Lanza `VFSError` para paths que no son archivos o no existen, y
+        `VFSNotImplementedError` para virtuales (S17.6).
+        """
+        resolved = self._resolve(virtual_path)
+        if resolved.kind == "virtual":
+            raise VFSNotImplementedError(
+                f"cat on virtual category '{resolved.category}' not yet implemented "
+                "(scheduled for S17.6)"
+            )
+        path = resolved.real_path
+        assert path is not None
+        if not path.exists():
+            raise VFSError(f"not found: {virtual_path}")
+        if path.is_dir():
+            raise VFSError(f"is a directory: {virtual_path}")
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise VFSError(f"binary file (not utf-8): {virtual_path}") from exc
 
     # --- core resolver -----------------------------------------------------
 
