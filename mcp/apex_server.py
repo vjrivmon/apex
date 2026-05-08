@@ -1426,6 +1426,29 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_rate_advice",
+            description=(
+                "Sprint 16.6 — Escape hatch manual: rating explícito de una "
+                "advice card cuando el rating implícito (vía facets) no llega. "
+                "rating ∈ {'useful', 'not_useful'}, reason ≥10 chars. "
+                "Coexiste con outcome temporal (UNIQUE compuesto en "
+                "advice_outcomes); idempotente (segundo rating sobre el "
+                "mismo advice sobreescribe vía INSERT OR REPLACE)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "advice_id": {"type": "integer"},
+                    "rating": {
+                        "type": "string",
+                        "enum": ["useful", "not_useful"],
+                    },
+                    "reason": {"type": "string", "minLength": 10},
+                },
+                "required": ["advice_id", "rating", "reason"],
+            },
+        ),
+        Tool(
             name="apex_log_trace",
             description=(
                 "Sprint 15 — Registra una traza de razonamiento en un gate denso "
@@ -2713,6 +2736,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         type="text",
                         text=f"advice #{arguments['advice_id']} no existe.",
                     )]
+
+        elif name == "apex_rate_advice":
+            db_path = str(db.db_path)
+            try:
+                payload = _advisor.rate_advice(
+                    db_path,
+                    advice_id=int(arguments["advice_id"]),
+                    rating=arguments["rating"],
+                    reason=arguments["reason"],
+                )
+            except ValueError as e:
+                result = [TextContent(type="text", text=f"Validación falló: {e}")]
+            else:
+                result = [TextContent(
+                    type="text",
+                    text=(
+                        f"outcome manual #{payload['outcome_id']} registrado "
+                        f"para advice #{arguments['advice_id']} "
+                        f"({arguments['rating']})."
+                    ),
+                )]
 
         elif name == "apex_log_trace":
             db_path = str(db.db_path)

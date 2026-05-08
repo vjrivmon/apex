@@ -296,6 +296,62 @@ def dismiss_advice(
         return cur.rowcount > 0
 
 
+# ── Sprint 16.6 — Escape hatch manual ────────────────────────────────
+
+ALLOWED_MANUAL_RATINGS: frozenset[str] = frozenset({"useful", "not_useful"})
+MIN_MANUAL_REASON_CHARS = 10
+
+
+def rate_advice(
+    db_path: Path | str,
+    advice_id: int,
+    rating: str,
+    reason: str,
+) -> dict:
+    """Escape hatch manual: inserta una fila en `advice_outcomes` con
+    `assoc_method='manual'`. No reemplaza el outcome temporal: el
+    UNIQUE compuesto permite ambos coexistiendo.
+
+    - rating ∈ {'useful', 'not_useful'}; 'unclear' no aplica al manual
+      (el escape hatch fuerza señal explícita).
+    - reason ≥10 chars (>=10 caracteres no espacios).
+    - advice_id debe existir en advisor_advice (FK validation).
+    - Idempotente: segundo manual sobre el mismo advice usa
+      `INSERT OR REPLACE` respetando el UNIQUE.
+
+    Returns:
+        {'outcome_id': int}
+    """
+    if rating not in ALLOWED_MANUAL_RATINGS:
+        raise ValueError(
+            f"invalid rating: {rating!r} not in {sorted(ALLOWED_MANUAL_RATINGS)}"
+        )
+    if reason is None:
+        raise ValueError("reason required (>=10 chars)")
+    cleaned = reason.strip()
+    if len(cleaned) < MIN_MANUAL_REASON_CHARS:
+        raise ValueError(
+            f"reason too short: requires >={MIN_MANUAL_REASON_CHARS} chars"
+        )
+    with _conn(db_path) as c:
+        # FK validation explícita para mensaje claro (sqlite no la
+        # impone a menos que PRAGMA foreign_keys=ON, y queremos un
+        # ValueError, no IntegrityError opaco).
+        cur = c.execute(
+            "SELECT 1 FROM advisor_advice WHERE id=?", (advice_id,)
+        )
+        if cur.fetchone() is None:
+            raise ValueError(f"advice_id {advice_id} no existe")
+        cur = c.execute(
+            "INSERT OR REPLACE INTO advice_outcomes "
+            "(advice_id, assoc_method, inferred_rating, manual_reason) "
+            "VALUES (?, 'manual', ?, ?)",
+            (advice_id, rating, cleaned),
+        )
+        c.commit()
+        return {"outcome_id": cur.lastrowid}
+
+
 def get_active_advice(db_path: Path | str, session_id: str) -> list[dict]:
     """Para advice-injector. NOT dismissed AND review reciente (<2h).
 
