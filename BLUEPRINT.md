@@ -132,10 +132,24 @@ Empezar TDD de S16.6:
 
 ---
 
+## Sprints encolados tras S16
+
+| Sprint | Foco | Blueprint |
+|--------|------|-----------|
+| S17 | VirtualFS cross-project | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
+| S18 | Granite Curator opt-in | (mismo archivo que S17) |
+| **S19** | **Advent Integration (Tier 1+2+4)** — gitleaks template, `CLAUDE.md` auto, slash commands cortos, PreCompact hook, `apex_export_session`, project rules condicionales, docs UX | **`.apex/sprints/sprint-19-advent-integration-blueprint.md`** (planificado 2026-05-08) |
+
+S19 nace del análisis `docs/APEX-vs-ADVENT-improvements.md`. **Pre-requisito:** S16 cerrado. Tier 3 (Gap K, GH Action APEX-aware) diferido hasta tener colaboradores.
+
+---
+
 ## Archivos clave de la sesión
 
 - `.apex/sprints/sprint-16-advisor-feedback-loop-blueprint.md` — spec completa S16 v2
-- `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` — siguientes sprints
+- `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` — S17 + S18
+- `.apex/sprints/sprint-19-advent-integration-blueprint.md` — S19 (mejoras Advent)
+- `docs/APEX-vs-ADVENT-improvements.md` — análisis comparativo fuente
 - `.apex/handoff/b1d2e3f4-567.md` — handoff de la sesión origen (contexto rico)
 - `lib/advisor.py` — añadidas `get_advisor_constants` / `set_advisor_constants` (S16.5)
 - `lib/advisor_outcomes.py` — motor implícito de outcomes (S16.2, NUEVO)

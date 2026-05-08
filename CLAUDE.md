@@ -453,9 +453,10 @@ a la rama `archive/legacy-web` en un chore futuro.
 - [x] **Sprint 13 — Apex-doctor** ✓ (auto-mejora dirigida por intención: hook UserPromptSubmit con triggers semánticos + edad de sesión, 3 analizadores)
 - [x] **Sprint 14 — Skills For Real Engineers** ✓ (4 skills port Matt Pocock: grill-with-docs, tdd, diagnose, improve-architecture)
 - [x] **Sprint 15 — Advisor + reasoning_traces + /prototype** ✓ (subagent apex-advisor Opus, 4 categorías traces, skill_handoff intra-sesión, prototype Textual TUI + Mermaid)
-- [ ] **Sprint 16 — /prototype S2** — replay/fuzzing/atajos profundos en TUI, promoción automática a tests parametrizados
+- [ ] **Sprint 16 — Advisor feedback loop** — rating implícito vía facets + escape hatch manual (S16.1 ✓, S16.5 ✓, S16.2 ✓; resta S16.6 → S16.3 → S16.4 → S16.7 → S16.8)
 - [ ] **Sprint 17 — VirtualFS cross-project** — filesystem virtual sobre vector DB para compartir contexto entre proyectos
 - [ ] **Sprint 18 — Granite Curator opt-in** — curador de memoria con Granite vía `APEX_CURATOR_MODEL` env
+- [ ] **Sprint 19 — Advent Integration** — Tier 1+2+4 del análisis `docs/APEX-vs-ADVENT-improvements.md`: gitleaks template DevOps (Gap F crítico), `CLAUDE.md` APEX-aware (Gap D), slash commands `apex-decision/error/component/search` (Gap B), PreCompact hook (Gap M), `apex_export_session` (Gap L), project rules condicionales (Gap E), docs UX (Gaps A/I/N). Tier 3 (Gap K, GH Action APEX-aware) diferido. Blueprint en `.apex/sprints/sprint-19-advent-integration-blueprint.md`.
 - [ ] **Dreaming** — Promoción automática de señales a memoria permanente
 - [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
 - [ ] **Integración Pencil MCP** — Diseños automáticos en fase 2
