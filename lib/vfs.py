@@ -27,6 +27,7 @@ grep, find) se añaden en S17.3-S17.5.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -191,6 +192,46 @@ class VirtualFS:
                 )
             )
         return entries
+
+    def find(
+        self, virtual_path: str, name: str | None = None
+    ) -> list[str]:
+        """Lista recursivamente los archivos bajo `virtual_path`, opcionalmente
+        filtrados por glob `name` (estilo `find ... -name <pattern>`).
+
+        Devuelve **paths virtuales** (no reales del filesystem). Si
+        `virtual_path` apunta a un archivo, devuelve sólo ese path si
+        matchea el pattern (o el archivo entero si `name is None`).
+        """
+        resolved = self._resolve(virtual_path)
+        if resolved.kind == "virtual":
+            raise VFSNotImplementedError(
+                f"find on virtual category '{resolved.category}' not yet implemented "
+                "(scheduled for S17.6)"
+            )
+        path = resolved.real_path
+        assert path is not None
+        if not path.exists():
+            raise VFSError(f"not found: {virtual_path}")
+
+        mount_real_root, mount_virtual_prefix = self._mount_for(resolved)
+        pattern = name or "*"
+
+        if path.is_file():
+            if fnmatch.fnmatch(path.name, pattern):
+                return [self._real_to_virtual(path, mount_real_root, mount_virtual_prefix)]
+            return []
+
+        matches: list[str] = []
+        for child in path.rglob("*"):
+            if not child.is_file():
+                continue
+            if name is not None and not fnmatch.fnmatch(child.name, pattern):
+                continue
+            matches.append(
+                self._real_to_virtual(child, mount_real_root, mount_virtual_prefix)
+            )
+        return sorted(matches)
 
     def cat(self, virtual_path: str) -> str:
         """Lee el contenido de un archivo virtual como texto UTF-8.
@@ -369,6 +410,30 @@ class VirtualFS:
             if (root / slug).exists() and (root / slug).is_dir():
                 return True
         return False
+
+    def _mount_for(self, resolved: ResolvedPath) -> tuple[Path, str]:
+        """Devuelve (mount_real_root, mount_virtual_prefix) para un ResolvedPath
+        de tipo `real`. Necesario para reverse-mapping en `find`."""
+        if resolved.category == "vault":
+            assert self.vault_root is not None
+            return self.vault_root, "/vault"
+        if resolved.category in _PROJECT_REAL_MOUNTS:
+            slug = resolved.slug
+            assert slug is not None
+            for root in self.allowed_roots:
+                base = root / slug
+                if base.exists():
+                    mount_root = base.joinpath(*_PROJECT_REAL_MOUNTS[resolved.category])
+                    return mount_root, f"/projects/{slug}/{resolved.category}"
+        raise VFSError(f"no mount for category '{resolved.category}'")
+
+    @staticmethod
+    def _real_to_virtual(real: Path, mount_root: Path, mount_prefix: str) -> str:
+        """Construye el path virtual a partir de un path real bajo un mount."""
+        rel = real.relative_to(mount_root).as_posix()
+        if rel == ".":
+            return mount_prefix
+        return f"{mount_prefix}/{rel}"
 
 
 def _is_under(path: Path, root: Path) -> bool:
