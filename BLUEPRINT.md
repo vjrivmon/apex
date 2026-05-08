@@ -1,118 +1,98 @@
 # BLUEPRINT — APEX
 
 > Snapshot del estado actual y arranque de la próxima sesión. Se
-> sobrescribe en cada handoff. Última actualización: **2026-05-07**
-> tras cierre de **Sprint 16.1 + 16.5 + 16.2**.
+> sobrescribe en cada handoff. Última actualización: **2026-05-08**
+> tras cierre de **Sprint 16.7**.
 
 ---
 
 ## Estado actual
 
 - **Branch:** `main`
-- **HEAD:** `feat(s16.2): advisor_outcomes motor implícito + tool MCP` (pendiente commit)
-- **Suite:** 515 verde (7.5s)
-- **Tools MCP:** 50 (49 → 50 con `apex_advisor_compute_outcomes`)
-- **`git status`:** working dir con cambios S16.2 (lib + tests + mcp)
+- **HEAD:** `feat(s16.4): apex_advisor_apply_tuning auto-tuner determinista` (S16.7 pendiente commit)
+- **Suite:** 545 verde (10.4s)
+- **Tools MCP:** 53
+- **`git status`:** sin track → `.claude/hooks/advisor-outcome-watch.py`
+  + `tests/test_advisor_outcome_hook.py` + edit en `.claude/settings.json`
 - **Sprint en curso:** **Sprint 16 — Advisor Feedback Loop** (rating
   implícito vía facets + escape hatch manual)
 
 ### Progreso S16 (blueprint v2)
 
-| ID    | Subtarea                                                    | Estado      | Tests | Suite delta |
-|-------|-------------------------------------------------------------|-------------|-------|-------------|
-| S16.1 | Schema (`advice_outcomes`, `advisor_tuning_history`)        | ✅ `5bed398` | 8     | 484 → 492   |
-| S16.5 | Migración constantes `advisor.py` → `project_meta`          | ✅ `ba4e306` | 9     | 492 → 501   |
-| S16.2 | `lib/advisor_outcomes.py` + `apex_advisor_compute_outcomes` | ✅ pending commit | 14    | 501 → 515   |
-| S16.6 | `apex_rate_advice` (escape hatch) + validación              | 🔜 next     | (6)   |             |
-| S16.3 | `lib/advisor_health.py` + `apex_advisor_health`             | pendiente   | (8)   |             |
-| S16.4 | `lib/advisor_tuning.py` + `apex_advisor_apply_tuning`       | pendiente   | (12)  |             |
-| S16.7 | Hook `advisor-outcome-watch.py`                             | pendiente   | (4)   |             |
-| S16.8 | (Opcional) `skills/advisor-feedback/SKILL.md`               | pendiente   | (0)   |             |
+| ID    | Subtarea                                                    | Estado            | Tests | Suite delta |
+|-------|-------------------------------------------------------------|-------------------|-------|-------------|
+| S16.1 | Schema (`advice_outcomes`, `advisor_tuning_history`)        | ✅ `5bed398`       | 8     | 484 → 492   |
+| S16.5 | Migración constantes `advisor.py` → `project_meta`          | ✅ `ba4e306`       | 9     | 492 → 501   |
+| S16.2 | `lib/advisor_outcomes.py` + `apex_advisor_compute_outcomes` | ✅ `e6844c8`       | 14    | 501 → 515   |
+| S16.6 | `apex_rate_advice` (escape hatch) + validación              | ✅ `4bf3624`       | 6     | 515 → 521   |
+| S16.3 | `lib/advisor_health.py` + `apex_advisor_health`             | ✅ `8b610c5`       | 8     | 521 → 529   |
+| S16.4 | `lib/advisor_tuning.py` + `apex_advisor_apply_tuning`       | ✅ `3107c52`       | 12    | 529 → 541   |
+| S16.7 | Hook `advisor-outcome-watch.py`                             | ✅ pending commit | 4     | 541 → 545   |
+| S16.8 | (Opcional) `skills/advisor-feedback/SKILL.md`               | pendiente         | (0)   |             |
 
 Orden recomendado (§8 del blueprint): `S16.1 ✓ → S16.5 ✓ → S16.2 ✓ →
-**S16.6** → S16.3 → S16.4 → S16.7 → S16.8`.
+S16.6 ✓ → S16.3 ✓ → S16.4 ✓ → S16.7 ✓ → **S16.8** (opcional)`.
 
 ---
 
-## Próximo paso (sesión nueva): S16.6 — escape hatch manual
+## Próximo paso (sesión nueva): commit S16.7 + decidir S16.8
 
-**Objetivo:** escape hatch manual `apex_rate_advice(advice_id, rating,
-reason)` para casos donde el rating implícito no llega (sesión
-globalmente buena con una card específicamente ruidosa, o `/insights`
-sin correr).
+### Pendiente inmediato (1 minuto)
 
-### Entregables (blueprint §4 + §11)
+Hay un commit S16.7 staged sin cerrar (la sesión anterior cerró por
+error la terminal antes del commit). Working tree:
 
-1. **`apex_rate_advice` en `lib/advisor.py`** (~60 LoC):
-   - Inserta fila en `advice_outcomes` con `assoc_method='manual'`.
-   - `rating ∈ {'useful', 'not_useful'}` (sin `unclear` para forzar
-     señal explícita).
-   - `reason` obligatoria (>=10 chars).
-   - `manual_reason` se guarda en la columna correspondiente.
-   - Coexiste con outcome temporal por la `UNIQUE (advice_id,
-     assoc_method)` del schema.
-   - FK inválida → `ValueError("advice_id no existe")`.
+```
+.claude/hooks/advisor-outcome-watch.py    (nuevo, +178L)
+.claude/settings.json                     (3 hooks UserPromptSubmit → 4)
+tests/test_advisor_outcome_hook.py        (nuevo, 4 tests)
+BLUEPRINT.md                              (este archivo, actualizado)
+```
 
-2. **Tool MCP `apex_rate_advice`** (49 → 51 tools tras S16.2 + S16.6).
-
-3. **`tests/test_apex_rate_advice.py`** (6 tests):
-   - Inserta manual outcome con reason válida.
-   - Reason vacía o < 10 chars → ValueError.
-   - FK inválida (advice_id inexistente) → ValueError.
-   - UNIQUE compuesto permite coexistir con outcome temporal previo.
-   - Valida rating enum (rechaza `'unclear'` y `'foo'`).
-   - Idempotencia: dos manuales sobre el mismo advice → segundo falla
-     o sobreescribe (decisión: sobreescribir vía `INSERT OR REPLACE`
-     respetando UNIQUE).
-
-### Suite objetivo
-
-515 → ~521 verde (+6 tests).
-
----
-
-## Cierre de S16.2 (esta sesión)
-
-- `lib/advisor_outcomes.py` (~245 LoC con docstrings + helpers).
-- `tests/test_advisor_outcomes.py` (14 tests: 4 heurística pura + 10
-  integración compute).
-- `mcp/apex_server.py`: import `_advisor_outcomes`, tool definition,
-  dispatch handler con resumen `computed/skipped/no_facet_yet/force_updated`.
-- Heurística §3 implementada literal: `not_useful` ante CUALQUIER señal
-  negativa (orden de checks importa); `useful` solo si outcome+helpfulness
-  positivos y satisfaction no negativa; `unclear` el resto.
-- `_derive_satisfaction(counts)`: prioridad `frustrated > dissatisfied >
-  satisfied > likely_satisfied > mixed > ""`.
-- `_friction_keys_active(counts)`: solo keys con count>0, ordenadas por
-  count desc + key asc para reproducibilidad.
-- `_parse_db_timestamp`: acepta tanto `'YYYY-MM-DD HH:MM:SS'` (default
-  SQLite) como ISO8601.
-
----
-
-## Cómo arrancar la próxima sesión
+Acción:
 
 ```bash
 cd ~/RoadToDevOps/apex
-PYTHONPATH=lib .venv/bin/pytest tests/ -q       # 515 verde
-git status                                       # limpio
-git log --oneline -3                             # commit s16.2 head
+PYTHONPATH=lib .venv/bin/pytest tests/ -q       # confirmar 545 verde
+git status                                       # 4 archivos staged
+git commit -m "feat(s16.7): advisor-outcome-watch hook UserPromptSubmit"
+git push
 ```
 
-Y dentro de Claude Code:
+Mensaje de commit recomendado:
 
 ```
-apex_resume_session(session_id="b1d2e3f4-567")
-Read .apex/sprints/sprint-16-advisor-feedback-loop-blueprint.md  # spec completa
-Read BLUEPRINT.md                                                 # este doc
+feat(s16.7): advisor-outcome-watch hook UserPromptSubmit
+
+- .claude/hooks/advisor-outcome-watch.py: high-water mark en
+  project_meta.outcome_watch_prompt_count, cada N=10 prompts ejecuta
+  compute_outcomes(lookback=14d) + apply_tuning(dry_run=True) con
+  timeout 3s. Inyecta additionalContext si hay propuestas de tuning
+  o si facets_freshness > 7d (sugerir /insights). Nunca bloquea.
+- tests/test_advisor_outcome_hook.py: 4 tests (counter increment,
+  silent below threshold, emite proposal en threshold, no bloquea
+  con stdin corrupto).
+- .claude/settings.json: registra el hook como tercer UserPromptSubmit.
+- BLUEPRINT.md: marca S16.7 ✓, suite 545 verde.
+
+Suite: 541 → 545 verde.
 ```
 
-Empezar TDD de S16.6:
-1. Red phase: escribir `tests/test_apex_rate_advice.py` con 6 tests
-   fallando.
-2. Green phase: añadir `rate_advice()` en `lib/advisor.py` + wiring
-   tool MCP `apex_rate_advice`.
-3. Suite full → commit `feat(s16.6)` → push.
+### Decisión a tomar antes de seguir: ¿S16.8 ahora o saltar a S17?
+
+`S16.8` es la skill opcional `skills/advisor-feedback/SKILL.md` (~80
+LoC, 0 tests). El blueprint v2 §7 la marca opcional. Dos caminos:
+
+- **A)** Cerrar S16.8 con la skill y declarar Sprint 16 cerrado
+  oficialmente (~30 min: redactar SKILL.md con 4 triggers, anti-
+  patrones, puente APEX al Advisor + escape hatch).
+- **B)** Saltar S16.8 (declarar Sprint 16 cerrado en su núcleo) y
+  arrancar **Sprint 17 — VirtualFS cross-project** o **Sprint 19 —
+  Advent Integration** (Tier 1+2+4, gitleaks crítico).
+
+Recomendación: **B** (saltar). La skill es deuda fría; S19 incluye
+gitleaks como Gap F crítico (incidente de leak ya documentado en
+`hub.db`). S16.8 se puede recuperar más adelante sin coste.
 
 ---
 
