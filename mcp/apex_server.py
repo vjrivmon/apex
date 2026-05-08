@@ -50,6 +50,7 @@ import roles as _roles  # noqa: E402
 import apex_doctor as _doctor  # noqa: E402
 import advisor as _advisor  # noqa: E402
 import advisor_outcomes as _advisor_outcomes  # noqa: E402
+import advisor_health as _advisor_health  # noqa: E402
 import reasoning_traces as _traces  # noqa: E402
 import skill_handoff as _handoff_skill  # noqa: E402
 import prototype as _prototype  # noqa: E402
@@ -1628,6 +1629,31 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="apex_advisor_health",
+            description=(
+                "Sprint 16.3 — Dashboard JSON-friendly del Advisor: "
+                "totales por categoría, outcomes (temporal/manual × "
+                "useful/not_useful/unclear), fp_rate por categoría "
+                "(None si <5 not_useful), constants actuales (default "
+                "vs tuned con timestamp del último tune), tuning_history "
+                "últimos 5, circuit_breaker_trips últimas 24h, "
+                "facets_freshness_days. Sólo enums y números — sin "
+                "texto libre, publicable sin riesgo."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "window_days": {
+                        "type": "integer", "default": 30,
+                        "description": (
+                            "Ventana hacia atrás para outcomes. "
+                            "total_advice_emitted ignora la ventana."
+                        ),
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -2885,6 +2911,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "hatch o ejecuta `/insights` periódicamente."
                 )
             result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_advisor_health":
+            import json as _json
+            payload = _advisor_health.advisor_health(
+                str(db.db_path),
+                window_days=int(arguments.get("window_days", 30)),
+            )
+            result = [TextContent(
+                type="text",
+                text=_json.dumps(payload, ensure_ascii=False, indent=2),
+            )]
 
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
