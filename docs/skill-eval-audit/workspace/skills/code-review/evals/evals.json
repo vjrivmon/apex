@@ -1,0 +1,28 @@
+{
+  "skill_name": "code-review",
+  "evals": [
+    {
+      "id": "catch-missing-await",
+      "name": "code-review catches the real bug and gives a concrete fix",
+      "prompt": "Revisa este módulo de la API de pedidos como un staff engineer. Reporta lo que encuentres.",
+      "files": ["evals/files/order_api.py"],
+      "assertions": [
+        "La revisión identifica como bug crítico (P0 / bloqueante) que `checkout.compute_total(cart_id)` se llama sin `await` siendo `compute_total` una corrutina, de modo que `total` queda con una corrutina en vez del importe.",
+        "La revisión incluye el código del fix concreto para ese bug (poner `await` delante de la llamada), no solo la descripción del problema.",
+        "La revisión clasifica los hallazgos por severidad (p. ej. P0/P1/P2/P3 o crítico/alto/medio/bajo).",
+        "La revisión no hace bikeshedding: no reporta exclusivamente cuestiones de estilo (nombres, comillas, formato) como si fueran lo importante; prioriza el bug real."
+      ]
+    },
+    {
+      "id": "clean-code-lgtm",
+      "name": "code-review says LGTM on clean code instead of inventing issues",
+      "prompt": "Revisa este módulo `Money` como un staff engineer. Reporta lo que encuentres.",
+      "files": ["evals/files/money.py"],
+      "assertions": [
+        "La revisión concluye que el código está esencialmente correcto y limpio: no hay hallazgos críticos (dice algo como 'LGTM' o 'sin hallazgos críticos').",
+        "La revisión no inventa bugs falsos ni reporta como crítico/alto algo que en realidad es correcto en este código.",
+        "Si menciona algo, son a lo sumo observaciones menores o nice-to-have claramente etiquetadas como tales, no problemas graves fabricados para justificar el review."
+      ]
+    }
+  ]
+}

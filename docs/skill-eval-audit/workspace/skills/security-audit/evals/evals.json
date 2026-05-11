@@ -1,0 +1,28 @@
+{
+  "skill_name": "security-audit",
+  "evals": [
+    {
+      "id": "sql-injection-endpoint",
+      "name": "security-audit finds the SQL injection with category, confidence and fix",
+      "prompt": "Audita la seguridad de este módulo de endpoints de búsqueda de productos. Reporta los hallazgos.",
+      "files": ["evals/files/search_api.py"],
+      "assertions": [
+        "El informe identifica una inyección SQL en el endpoint `/api/products/search`, donde el parámetro `query` (y `limit`) se interpola directamente en la cadena SQL con un f-string.",
+        "El informe etiqueta ese hallazgo con la categoría correspondiente (OWASP A03 / Injection, y/o STRIDE Tampering).",
+        "El informe asigna una puntuación de confianza al hallazgo (del orden de 8/10 o superior, o equivalente verbal explícito de alta confianza).",
+        "El informe incluye el código del fix concreto: usar una consulta parametrizada con placeholders (`?`) y pasar el valor como parámetro, en lugar de interpolarlo."
+      ]
+    },
+    {
+      "id": "cors-star-dev-context",
+      "name": "security-audit weighs context for a dev-only CORS=*",
+      "prompt": "Audita la seguridad de este fichero de configuración. Reporta los hallazgos.",
+      "files": ["evals/files/dev_settings.py"],
+      "assertions": [
+        "El informe reconoce que el `CORS_ALLOWED_ORIGINS = ['*']` y el `DEBUG = True` aparecen aquí en un fichero de configuración de desarrollo cuyo equivalente de producción los sobrescribe, y por tanto NO lo trata como un hallazgo crítico incondicional, sino que matiza la severidad según el contexto (dev vs prod).",
+        "El informe no sobre-reporta: no infla a crítico/alto cuestiones cuya gravedad depende del contexto sin señalar esa dependencia, en línea con un umbral de confianza alto antes de reportar.",
+        "Si el informe menciona el `SECRET_KEY` de relleno, lo enmarca también en el contexto de desarrollo (prod lo lee del entorno) en vez de tratarlo como un secreto filtrado crítico."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "skill_name": "diagnose",
+  "evals": [
+    {
+      "id": "logic-bug-feedback-loop-first",
+      "name": "diagnose builds a feedback loop before hypothesizing",
+      "prompt": "Tengo un bug: el endpoint POST /checkout a veces devuelve `total: 0` aunque el carrito tiene productos. Pasa quizá 1 de cada 20 veces. ¿Cómo lo diagnostico paso a paso?",
+      "assertions": [
+        "Lo primero que recomienda es construir un bucle de feedback rápido, determinista y reproducible para el bug (un test que falla, un script HTTP/curl, un harness) ANTES de empezar a proponer causas.",
+        "Para el carácter intermitente del bug, recomienda subir la tasa de reproducción (repetir el trigger muchas veces, paralelizar, estrechar ventanas de timing) en vez de intentar un repro de una sola pasada.",
+        "Genera o pide generar varias hipótesis (del orden de 3 a 5) ANTES de testar ninguna, y cada hipótesis va acompañada de una predicción falsable (qué cambio haría desaparecer o empeorar el bug).",
+        "Recomienda añadir un test de regresión que ejercite el patrón real del bug, y limpiar la instrumentación de debug temporal al terminar (p. ej. logs etiquetados con un prefijo único)."
+      ]
+    },
+    {
+      "id": "perf-regression-measure-first",
+      "name": "diagnose handles a perf regression by measuring first",
+      "prompt": "Una página de mi app que antes cargaba en 300ms ahora tarda 8 segundos. Empezó esta semana. Diagnostícalo.",
+      "assertions": [
+        "Recomienda establecer una medición baseline y perfilar / medir (timing harness, profiler, query plan) ANTES de proponer un fix; trata el rendimiento como algo que se mide, no que se adivina.",
+        "Para una regresión de rendimiento dice o implica que los logs dispersos suelen ser la herramienta equivocada y que conviene medir/perfilar en su lugar.",
+        "Como apareció entre dos estados conocidos (semana pasada vs ahora), sugiere bisección entre el estado bueno conocido y el malo conocido (p. ej. git bisect o equivalente) para localizar el cambio causante."
+      ]
+    }
+  ]
+}

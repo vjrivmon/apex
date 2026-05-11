@@ -1,0 +1,26 @@
+{
+  "skill_name": "socratic",
+  "evals": [
+    {
+      "id": "habit-tracker-web-app",
+      "name": "socratic questions a new idea without proposing a solution",
+      "prompt": "Tengo una idea: una app web con dashboard para trackear mis hábitos diarios (agua, ejercicio, lectura). ¿Qué te parece? Quiero empezar.",
+      "assertions": [
+        "La respuesta consiste exclusivamente en preguntas dirigidas al usuario; no propone una solución, ni una arquitectura, ni un stack tecnológico, ni se pone a diseñar o planificar la app.",
+        "Entre las preguntas hay alguna sobre si ya existe algo similar y/o qué haría diferente su versión.",
+        "Entre las preguntas hay alguna que cuestiona si realmente necesita una app web (vs. un CLI, un script, un bot, una hoja de cálculo, etc.) y/o con qué frecuencia la usaría.",
+        "La respuesta no plantea una cantidad desbordante de preguntas: se mantiene en el orden de unas pocas (una ronda acotada, ~5 preguntas como mucho), no agota al usuario."
+      ]
+    },
+    {
+      "id": "vague-new-tool",
+      "name": "socratic probes a vague idea with questions only",
+      "prompt": "Estoy pensando en construir una herramienta nueva que me ayude con el trabajo. Aún no tengo claros los detalles pero me hace ilusión. ¿Empezamos?",
+      "assertions": [
+        "La respuesta es solo preguntas para clarificar la idea; no ofrece soluciones, ni tecnologías, ni un plan de implementación.",
+        "Las preguntas sondean al menos la existencia/diferenciación (¿ya hay algo que lo haga?) y/o el problema concreto que resuelve y la frecuencia de uso.",
+        "La respuesta no se lanza a construir nada ni asume un tipo de solución concreto."
+      ]
+    }
+  ]
+}

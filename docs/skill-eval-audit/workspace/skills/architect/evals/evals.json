@@ -1,0 +1,26 @@
+{
+  "skill_name": "architect",
+  "evals": [
+    {
+      "id": "price-watch-daily-alert",
+      "name": "architect recommends CLI+cron+bot, not a web dashboard",
+      "prompt": "Quiero algo que una vez al día mire el precio de un producto concreto en una web y me avise si baja de cierto umbral. Solo lo voy a usar yo, desde el móvil. ¿Qué tipo de solución debería construir?",
+      "assertions": [
+        "La recomendación principal es del estilo CLI/script ejecutado por cron (o un agente programado) para la parte de comprobación, combinado con una notificación push tipo bot de Telegram (o similar) para el aviso al móvil.",
+        "La respuesta NO recomienda como solución principal una app web con dashboard.",
+        "La respuesta justifica la elección apoyándose en la frecuencia de uso (una vez al día), en que es un único usuario, y en que el aviso llega al móvil.",
+        "La respuesta considera explícitamente más de una opción de tipo de solución antes de decidirse (comparación / trade-off), aunque sea brevemente."
+      ]
+    },
+    {
+      "id": "extend-claude-code",
+      "name": "architect recommends an MCP server / plugin to extend Claude Code",
+      "prompt": "Uso Claude Code todos los días y quiero darle una capacidad nueva que ahora no tiene (consultar cierta base de datos interna). ¿Qué tipo de solución debería construir para esto?",
+      "assertions": [
+        "La recomendación principal es construir un MCP server (o plugin/extensión) para Claude Code.",
+        "La respuesta justifica esa elección precisamente porque el usuario ya usa Claude Code y lo que quiere es extenderlo, no crear una herramienta aparte.",
+        "La respuesta no propone por defecto una app web independiente como solución principal."
+      ]
+    }
+  ]
+}

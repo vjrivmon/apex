@@ -66,3 +66,8 @@ apex_audit.stderr
 
 # Auto-generated session handoffs
 thoughts/
+
+# Skill-eval audit: generated run artifacts + node_modules from npx
+docs/skill-eval-audit/workspace/runs/
+docs/skill-eval-audit/workspace/agent-skills-workspace/
+docs/skill-eval-audit/node_modules/

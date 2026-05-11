@@ -1,0 +1,43 @@
+# agent-skills-eval — config para la auditoría de contraste de los SKILL.md de APEX.
+#
+# Ejecutar DESDE este directorio (docs/skill-eval-audit/):
+#   export OLLAMA_API_KEY=ollama          # placeholder; Ollama local lo ignora,
+#                                          # el modelo cloud usa el token de `ollama signin`
+#   npx agent-skills-eval --config agent-skills-eval.yaml --baseline --report
+#
+# `root` y `workspace` se resuelven relativos al CWD (no a este fichero).
+
+root: ./workspace/skills
+workspace: ./workspace/runs
+baseline: true
+strict: true
+
+# Target = agente bajo test (local, sin coste).
+target: qwen2.5:14b-instruct
+# Juez = puntúa with_skill vs without_skill (cloud Ollama, tier free — vigilar cuota).
+judge: gpt-oss:120b-cloud
+
+baseUrl: http://localhost:11434/v1
+apiKeyEnv: OLLAMA_API_KEY
+
+# Ollama serializa la inferencia local; concurrency alta no ayuda y además
+# protege el tier free del juez cloud.
+concurrency: 1
+layout: iteration
+
+report:
+  enabled: true
+  title: "APEX skills — auditoría de contraste (with vs without)"
+
+logging:
+  format: pretty
+  verbose: false
+  color: auto
+
+targetParams:
+  temperature: 0
+  max_tokens: 2048
+
+judgeParams:
+  temperature: 0
+  max_tokens: 4096

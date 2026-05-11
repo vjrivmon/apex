@@ -1,0 +1,26 @@
+{
+  "skill_name": "improve-architecture",
+  "evals": [
+    {
+      "id": "many-shallow-modules",
+      "name": "improve-architecture proposes deepening with the deletion test",
+      "prompt": "Mi codebase tiene un montón de módulos diminutos: funciones puras extraídas solo para poder testearlas, capas pass-through, helpers de una línea. Entender un solo concepto me obliga a saltar entre seis archivos. ¿Cómo mejoro la arquitectura?",
+      "assertions": [
+        "La respuesta usa el concepto de módulo profundo (deep module) frente a módulo shallow, y propone profundizar (deepening): mover complejidad detrás de interfaces pequeñas.",
+        "La respuesta aplica o describe el test de borrado: imaginar que borras el módulo y ver si la complejidad desaparece (era pass-through) o reaparece a través de los callers (se ganaba el sustento).",
+        "La respuesta dice que primero hay que presentar una lista numerada de oportunidades candidatas (files / problem / solution / benefits) y dejar que el usuario elija una, en lugar de saltar a diseñar interfaces concretas ya.",
+        "La respuesta justifica los beneficios en términos de locality (cambios/bugs/conocimiento concentrados en un sitio) y leverage (mucho comportamiento detrás de una interfaz pequeña), y de mejor testabilidad."
+      ]
+    },
+    {
+      "id": "single-adapter-premature-seam",
+      "name": "improve-architecture applies the one-adapter rule",
+      "prompt": "Tengo un módulo de notificaciones que solo manda emails. Estoy pensando en extraer una interfaz `Notifier` con un adapter `EmailNotifier` para que quede más limpio. ¿Lo hago?",
+      "assertions": [
+        "La respuesta invoca la regla 'un adapter = seam hipotético, dos adapters = seam real': con una sola implementación, el seam todavía no se ha ganado el sustento y la interfaz extra es abstracción prematura.",
+        "La respuesta recomienda no introducir todavía la interfaz/seam y esperar a tener una segunda implementación real (o una necesidad concreta de variar el comportamiento), en vez de extraerla por estética.",
+        "La respuesta usa el vocabulario canónico de arquitectura (al menos seam y adapter) de forma consistente."
+      ]
+    }
+  ]
+}

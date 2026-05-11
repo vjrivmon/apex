@@ -1,0 +1,26 @@
+{
+  "skill_name": "grill-with-docs",
+  "evals": [
+    {
+      "id": "grill-cancellation-plan",
+      "name": "grill-with-docs interrogates a plan one question at a time",
+      "prompt": "Mi plan: voy a añadir 'cancelación' de pedidos a la tienda. Un pedido cancelado libera el stock y reembolsa al cliente. Quiero que estreses este plan contra el modelo de dominio.",
+      "assertions": [
+        "La respuesta hace las preguntas de una en una (o como mucho una pregunta destacada) y espera el feedback del usuario antes de seguir, en lugar de soltar una batería larga de preguntas de golpe.",
+        "Para la pregunta (o preguntas) que plantea, ofrece su propia respuesta recomendada.",
+        "La respuesta presiona para desambiguar terminología vaga o sobrecargada del plan: por ejemplo distinguir cancelación total vs parcial, o 'cliente' vs 'cuenta'/'usuario', o qué significa exactamente 'liberar stock'.",
+        "La respuesta menciona actualizar la documentación de dominio inline (CONTEXT.md / glosario, o registrar un ADR / decisión) conforme se resuelven los términos."
+      ]
+    },
+    {
+      "id": "grill-adr-criteria",
+      "name": "grill-with-docs applies the 3-condition ADR test",
+      "prompt": "He decidido modelar los pedidos con event sourcing en lugar de un modelo CRUD clásico. ¿Debería registrar esto como un ADR? ¿Y la decisión de poner los botones de la UI alineados a la derecha?",
+      "assertions": [
+        "La respuesta enuncia las tres condiciones para crear un ADR: difícil de revertir, sorprendente sin contexto, y resultado de un trade-off real con alternativas genuinas.",
+        "La respuesta recomienda registrar un ADR para la decisión de event sourcing porque cumple las tres condiciones.",
+        "La respuesta NO recomienda un ADR para la alineación de los botones de la UI (decisión trivial / fácil de revertir / no sorprendente), o explica que ahí no aplica."
+      ]
+    }
+  ]
+}

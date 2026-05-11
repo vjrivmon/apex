@@ -1,0 +1,27 @@
+{
+  "skill_name": "tdd",
+  "evals": [
+    {
+      "id": "plan-vertical-slices",
+      "name": "tdd plan uses vertical slices",
+      "prompt": "Voy a implementar una función `apply_promo(cart, code)` que aplica un código promocional a un carrito de la compra usando TDD. Algunos códigos son porcentaje, otros importe fijo, algunos están caducados, algunos tienen mínimo de compra. Dame tu plan de TDD para esto antes de escribir nada de código.",
+      "assertions": [
+        "El plan sigue un bucle incremental de UN test seguido de su implementación mínima, repetido (rebanadas verticales / tracer bullets), en lugar de escribir todos los tests primero y luego todo el código.",
+        "El plan advierte explícitamente contra escribir todos los tests por adelantado en bloque (anti-patrón de rebanado horizontal) o explica por qué eso produce tests de baja calidad.",
+        "El plan dice que hay que confirmar con el usuario qué comportamientos son los más importantes a testear antes de empezar (no se puede testear todo).",
+        "El plan dice que los tests deben ejercitar el comportamiento a través de la interfaz pública, no detalles de implementación."
+      ]
+    },
+    {
+      "id": "critique-impl-coupled-tests",
+      "name": "tdd flags implementation-coupled tests",
+      "prompt": "Heredé esta suite de tests para el carrito. ¿Están bien escritos según buenas prácticas de testing? Dime qué problemas tienen y cómo los reescribirías.",
+      "files": ["evals/files/test_cart_impl_coupled.py"],
+      "assertions": [
+        "La respuesta identifica que varios de estos tests están acoplados a la implementación (mockean colaboradores internos, prueban funciones privadas como `_apply_line_discount` / `_recalc_totals`, asertan sobre atributos internos como `_items`, o consultan la base de datos directamente en vez de usar la interfaz pública).",
+        "La respuesta señala que estos tests romperían ante un refactor interno aunque el comportamiento observable no cambie, lo cual es una señal de alarma.",
+        "La respuesta recomienda reescribirlos para verificar comportamiento observable a través de la interfaz pública del carrito."
+      ]
+    }
+  ]
+}
