@@ -784,6 +784,34 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="apex_phase_entry_check",
+            description=(
+                "OBLIGATORIO al inicio de cada fase (5-10). Ejecuta tres comprobaciones: "
+                "(1) verifica que la fase anterior está completed en context.db, "
+                "(2) recupera errores y decisiones cross-project relevantes para esta fase, "
+                "(3) devuelve un bloque visual '### Lecciones cross-project aplicadas' con "
+                "los hits reales (proyecto, severidad, lección). El bloque es auditable — "
+                "si está vacío, lo indica explícitamente. Usar ANTES del primer sub-paso "
+                "de la fase. Nunca mockear ni saltarse."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "phase": {
+                        "type": "integer",
+                        "description": "Número de fase que va a comenzar (5-10)",
+                        "minimum": 5,
+                        "maximum": 10,
+                    },
+                    "context_hint": {
+                        "type": "string",
+                        "description": "Descripción breve del proyecto/feature actual para dirigir el retrieval (ej: 'auth con JWT', 'scraper de productos', 'bot Telegram')",
+                    },
+                },
+                "required": ["phase"],
+            },
+        ),
+        Tool(
             name="apex_log_session",
             description="Registra un resumen de la sesión actual para persistir entre conversaciones.",
             inputSchema={
@@ -2009,6 +2037,108 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                             f"- [{c['project_id']} · {c.get('type','')}] {c.get('name','')}: {(c.get('description') or '')[:120]}"
                         )
                 result = [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "apex_phase_entry_check":
+            phase = arguments["phase"]
+            context_hint = arguments.get("context_hint", "")
+
+            # Queries dirigidas por fase — no genéricas
+            _PHASE_QUERIES = {
+                5: ["scaffold hexagonal estructura errores", "git init secretos env"],
+                6: ["domain logic pure core errores", "entidades casos de uso tests"],
+                7: ["database adapter migraciones errores", "LLM adapter infraestructura"],
+                8: ["integration end-to-end errores", "mock datos hardcoded frontend"],
+                9: ["tests coverage playwright errores", "edge cases regresion"],
+                10: ["seguridad OWASP secretos errores", "rate limit headers auth"],
+            }
+
+            lines = [f"## Gate de entrada — Fase {phase}"]
+            lines.append("")
+
+            # 1. Verificar fase anterior completada
+            prev_phase = phase - 1
+            try:
+                all_phases = await db.get_all_phases()
+                phase_map = {p["phase_number"]: p["status"] for p in all_phases}
+                prev_status = phase_map.get(prev_phase)
+            except Exception:
+                prev_status = None
+
+            if prev_status and prev_status != "completed":
+                lines.append(f"ADVERTENCIA: Fase {prev_phase} esta en estado '{prev_status}', no 'completed'.")
+                lines.append(f"  Verifica con apex_get_context(level='timeline') antes de continuar.")
+            elif prev_status == "completed":
+                lines.append(f"Fase {prev_phase}: completed")
+            else:
+                lines.append(f"Fase {prev_phase}: estado desconocido (context.db no inicializado o fase no registrada)")
+
+            lines.append("")
+
+            # 2. Retrieval cross-project dirigido por fase
+            root = _find_project_root()
+            current_project = root.name.lower().replace(" ", "-")
+            all_errors: list[dict] = []
+            all_decisions: list[dict] = []
+
+            base_queries = _PHASE_QUERIES.get(phase, [])
+            if context_hint:
+                base_queries = [context_hint] + base_queries
+
+            seen_error_ids: set = set()
+            seen_decision_ids: set = set()
+
+            for q in base_queries[:3]:  # máx 3 queries para no saturar
+                hits = _search_cross_project(q, limit=5, exclude_project=current_project)
+                for e in hits.get("errors", []):
+                    key = (e["project_id"], e["description"][:60])
+                    if key not in seen_error_ids:
+                        seen_error_ids.add(key)
+                        all_errors.append(e)
+                for d in hits.get("decisions", []):
+                    key = (d["project_id"], d["decision"][:60])
+                    if key not in seen_decision_ids:
+                        seen_decision_ids.add(key)
+                        all_decisions.append(d)
+
+            hub_ok = _HUB_DB.exists()
+
+            # 3. Bloque visual auditable
+            lines.append("### Lecciones cross-project aplicadas")
+            lines.append("")
+
+            if not hub_ok:
+                lines.append("hub.db no disponible — retrieval cross-project desactivado.")
+                lines.append("Para activarlo: lanza apex-hub (`python -m backend` en ~/RoadToDevOps/apex-hub/).")
+            elif not all_errors and not all_decisions:
+                lines.append(f"Sin lecciones cross-project para fase {phase}. No hay errores ni decisiones previas relevantes.")
+                lines.append("(hub.db disponible, 0 hits)")
+            else:
+                if all_errors:
+                    lines.append(f"**Errores a evitar ({len(all_errors)})**")
+                    for e in all_errors[:6]:
+                        sev = e.get("severity", "medium")
+                        rec = e.get("recurrence_count", 1)
+                        proj = e.get("project_id", "?")
+                        desc = e.get("description", "")[:120]
+                        lesson = e.get("lesson", "")[:180]
+                        lines.append(f"- [{proj} · {sev} · x{rec}] {desc}")
+                        if lesson:
+                            lines.append(f"  → Lección: {lesson}")
+                if all_decisions:
+                    lines.append("")
+                    lines.append(f"**Decisiones previas relevantes ({len(all_decisions)})**")
+                    for d in all_decisions[:4]:
+                        proj = d.get("project_id", "?")
+                        cat = d.get("category", "")
+                        dec = d.get("decision", "")[:120]
+                        tag = "INVALIDADA" if d.get("invalid_from") else "vigente"
+                        lines.append(f"- [{proj} · {cat} · {tag}] {dec}")
+
+            lines.append("")
+            lines.append("---")
+            lines.append(f"Retrieval completado. Procede con sub-paso [{'abcdefghij'[phase-5]}a] de la fase {phase}.")
+
+            result = [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "apex_log_session":
             await db.log_session(

@@ -8,6 +8,19 @@ Siempre arquitectura hexagonal + SMA cuando haya lógica distribuida.
 Nunca colapsar responsabilidades en un módulo gigante, incluso cuando parezca
 más simple.
 
+## Gate de entrada (OBLIGATORIO antes del sub-paso [6a])
+
+```
+apex_phase_entry_check(phase=6, context_hint="<dominio del proyecto>")
+```
+
+Lee el bloque `### Lecciones cross-project aplicadas` y cita explicitamente
+que errores de logica de dominio o patrones SMA previos aplican. Presta
+especial atencion a errores sobre datos no propagados entre agentes
+(patron tfg-tutor#5).
+
+**Queries internas**: "domain logic pure core errores", "entidades casos de uso tests".
+
 ## Sub-pasos en orden
 
 - **[6a]** Entidades de dominio (modelos, value objects, enums).
@@ -24,6 +37,9 @@ más simple.
 - **[6f]** Verificar que todo compila y los tests pasan
   (`pytest -q` / `npm test`).
 - **[6g]** Registrar cada componente con `apex_add_component`.
+- **[6h-sec]** Verificar que no hay logica de autenticacion o criptografia implementada
+  en el dominio puro (viola hexagonal: eso va en adapters). Si se detecta:
+  mover a un puerto/adapter antes de continuar.
 - **[6h]** Conventional commit del core (`feat: core domain + ports +
   use_cases + tests unitarios`).
 - **[6i]** Ejecutar `apex_grader_evaluate(phase=6, mode="full")`.

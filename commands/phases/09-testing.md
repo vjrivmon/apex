@@ -1,5 +1,17 @@
 # Fase 9 — Testing
 
+## Gate de entrada (OBLIGATORIO antes del sub-paso [9a])
+
+```
+apex_phase_entry_check(phase=9, context_hint="<stack de tests del proyecto>")
+```
+
+Lee el bloque `### Lecciones cross-project aplicadas`. Presta especial atencion
+a errores de mocks que enmascaran fallos reales y edge cases no cubiertos que
+llegaron a produccion.
+
+**Queries internas**: "tests coverage playwright errores", "edge cases regresion".
+
 ## Sub-pasos en orden
 
 - **[9a]** Unit tests: cobertura minima 80% en dominio (entidades, casos de
@@ -13,6 +25,11 @@
 - **[9d]** Edge case tests: implementar los escenarios de EDGE-CASES.md
   marcados como MVP-blocking.
 - **[9e]** Verificar que TODOS los tests pasan antes de continuar.
+- **[9e-sec]** Anadir al menos 3 tests de inputs maliciosos por endpoint publico:
+  - Payload con SQL injection clasico: `'; DROP TABLE --`.
+  - Payload XSS: `<script>alert(1)</script>`.
+  - Payload de tamano extremo: string de 100KB o lista de 10000 items.
+  Si los tests no lanzan error 400/422, el endpoint no valida: corregir antes de continuar.
 - **[9f]** Coverage report: Ejecutar coverage y generar report HTML.
   - Python: `pytest --cov --cov-report=html`
   - JS/TS: `npx nyc` / `jest --coverage`

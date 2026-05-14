@@ -3,6 +3,21 @@
 Crear estructura sin logica. Solo esqueleto. **Git inicializado obligatorio
 ANTES de escribir codigo** (lección focusnow#4).
 
+## Gate de entrada (OBLIGATORIO antes del sub-paso [5a])
+
+```
+apex_phase_entry_check(phase=5, context_hint="<nombre-del-proyecto o feature>")
+```
+
+Lee el bloque `### Lecciones cross-project aplicadas` que devuelve y **cita
+explícitamente** en el siguiente mensaje qué errores previos aplican a este
+proyecto. Si el bloque dice "0 hits", escríbelo también. No continuar sin
+haber citado el bloque.
+
+**Queries que ejecuta internamente**: "scaffold hexagonal estructura errores",
+"git init secretos env". Añade `context_hint` con el stack concreto (ej:
+`"FastAPI + Next.js"`) para retrieval más preciso.
+
 ## Sub-pasos en orden
 
 - **[5a]** **Git init OBLIGATORIO** antes que cualquier otra cosa:
@@ -26,6 +41,9 @@ ANTES de escribir codigo** (lección focusnow#4).
 - **[5g]** Verificar que `npm run build` / `python -m py_compile` pasa sin
   errores.
 - **[5h]** Registrar componentes con `apex_add_component`.
+- **[5i-sec]** Verificar que `.env` esta en `.gitignore` ANTES del primer commit.
+  Ejecutar `grep -r "password\|secret\|api_key\|token" . --include="*.py" --include="*.ts" --include="*.js" -l | grep -v ".env.example" | grep -v ".gitignore"`.
+  Si hay hits: corregir antes de continuar. Secretos en repo = bloqueo de fase.
 - **[5i]** Conventional commit del scaffold completo (`feat: scaffold
   hexagonal con linter y .env.example`).
 - **[5j]** Ejecutar `apex_grader_evaluate(phase=5, mode="deterministic")`.
