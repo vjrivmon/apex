@@ -18,6 +18,8 @@ import os
 import sys
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
@@ -49,18 +51,23 @@ def _format_card(card: dict) -> str:
 
 
 def main() -> int:
+    _hook_start = start_hook("advice-injector")
     if _advisor is None:
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
     cwd = Path(payload.get("cwd") or os.getcwd())
     root = _find_project_root(cwd)
     if root is None:
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
     db_path = root / ".apex" / "context.db"
     if not db_path.exists():
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
     session_id = (
         payload.get("session_id")
@@ -71,8 +78,10 @@ def main() -> int:
     try:
         cards = _advisor.get_active_advice(str(db_path), session_id)
     except Exception:
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
     if not cards:
+        end_hook("advice-injector", _hook_start, exit_code=0)
         return 0
 
     has_critical = any((c.get("severity") or "") == "critical" for c in cards)
@@ -94,6 +103,7 @@ def main() -> int:
         }
     }
     sys.stdout.write(json.dumps(out, ensure_ascii=False))
+    end_hook("advice-injector", _hook_start, exit_code=0)
     return 0
 
 

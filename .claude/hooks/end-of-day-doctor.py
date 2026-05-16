@@ -40,6 +40,8 @@ import sys
 import time
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
@@ -100,11 +102,14 @@ async def _write_handoff(project_root: Path, session_id: str,
 
 
 def main() -> int:
+    _hook_start = start_hook("end-of-day-doctor")
     if _doc is None or _wp is None:
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
 
     prompt = (payload.get("prompt") or "").strip()
@@ -113,6 +118,7 @@ def main() -> int:
     cwd_raw = payload.get("cwd") or os.getcwd()
     project_root = _find_project_root(Path(cwd_raw))
     if project_root is None:
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
 
     db_path = _doc.context_db_path(project_root)
@@ -129,18 +135,21 @@ def main() -> int:
         triggered_by_age = True
 
     if not matched and not triggered_by_age:
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
 
     trigger = "wrapup_phrase" if matched else "session_age"
 
-    # 3) Throttle preview (sin correr todavía)
+# 3) Throttle preview (sin correr todavía)
     if _doc.is_throttled(db_path):
+        match_info = f'"{matched}"' if matched else f"{age_seconds/3600:.1f}h"
         sys.stdout.write(
             "\n[apex-doctor] Detectado cierre"
-            f" ({trigger}={'\"' + matched + '\"' if matched else f'{age_seconds/3600:.1f}h'}),"
+            f" ({trigger}={match_info}),"
             " pero el doctor corrió hace <1h. Salto la ejecución.\n"
             "  Si quieres forzar: `apex_doctor_run(force=True)`.\n"
         )
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
 
     # 4) Doctor + handoff con timeout wall-clock
@@ -151,6 +160,7 @@ def main() -> int:
         sys.stdout.write(
             f"\n[apex-doctor] Falló al ejecutar: {exc}\n"
         )
+        end_hook("end-of-day-doctor", _hook_start, exit_code=0)
         return 0
 
     elapsed = time.monotonic() - t0
@@ -206,6 +216,7 @@ def main() -> int:
             "hallazgos y que el handoff está listo."
         )
     sys.stdout.write("\n".join(lines) + "\n")
+    end_hook("end-of-day-doctor", _hook_start, exit_code=0)
     return 0
 
 

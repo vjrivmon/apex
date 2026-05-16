@@ -32,6 +32,8 @@ import sys
 import time
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 # Permite importar `lib/skill_forge.py` cuando el hook corre desde cualquier cwd
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
@@ -87,6 +89,7 @@ def _last_scan_id(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.OperationalError:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute(
@@ -95,6 +98,7 @@ def _last_scan_id(db_path: Path) -> int:
         ).fetchone()
         return int(row[0]) if row and row[0] else 0
     except (sqlite3.OperationalError, ValueError):
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
@@ -120,28 +124,34 @@ def _current_max_log_id(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.OperationalError:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute("SELECT MAX(id) FROM tool_call_log").fetchone()
         return int(row[0]) if row and row[0] else 0
     except sqlite3.OperationalError:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
 
 
 def main() -> int:
+    _hook_start = start_hook("skill-forge-watch")
     if _forge is None:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     tool = payload.get("tool_name", "") or ""
     cwd_raw = payload.get("cwd") or os.getcwd()
     project_root = _find_project_root(Path(cwd_raw))
     if project_root is None:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     db_path = _forge.context_db_path(project_root)
@@ -161,6 +171,7 @@ def main() -> int:
 
     is_trigger = tool in SCAN_TRIGGERS
     if not is_trigger and delta < SCAN_EVERY_N:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     # 3) Scan con timeout wall-clock
@@ -176,6 +187,7 @@ def main() -> int:
             project_id=project_id,
         )
     except Exception:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     elapsed = time.monotonic() - t0
@@ -187,11 +199,13 @@ def main() -> int:
             f"[skill-forge] scan tardó {elapsed:.1f}s (>={SCAN_TIMEOUT_S}s); "
             "abortado parcialmente\n"
         )
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     _set_last_scan_id(db_path, cur_id)
 
     if not written:
+        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
 
     slugs = ", ".join(p.stem for p in written)
@@ -199,6 +213,7 @@ def main() -> int:
         f"[skill-forge] {len(written)} propuesta(s) nueva(s): {slugs}\n"
         f"  revisa con: ls .apex/skill-proposals/\n"
     )
+    end_hook("skill-forge-watch", _hook_start, exit_code=0)
     return 0
 
 

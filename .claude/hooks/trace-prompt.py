@@ -18,6 +18,8 @@ import os
 import sys
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
@@ -78,22 +80,28 @@ def _category_for(tool: str, payload: dict) -> tuple[str, str] | None:
 
 
 def main() -> int:
+    _hook_start = start_hook("trace-prompt")
     if _rt is None:
+        end_hook("trace-prompt", _hook_start, exit_code=0)
         return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("trace-prompt", _hook_start, exit_code=0)
         return 0
     tool = payload.get("tool_name", "") or ""
     decision = _category_for(tool, payload)
     if decision is None:
+        end_hook("trace-prompt", _hook_start, exit_code=0)
         return 0
     category, gate_kind = decision
     try:
         prompt = _rt.prompt_for_trace(category, gate_kind)
     except Exception:
+        end_hook("trace-prompt", _hook_start, exit_code=0)
         return 0
     sys.stderr.write(f"[apex-trace] {prompt}\n")
+    end_hook("trace-prompt", _hook_start, exit_code=0)
     return 0
 
 

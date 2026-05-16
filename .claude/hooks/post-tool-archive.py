@@ -16,6 +16,8 @@ import json
 import os
 import sys
 
+from lib.hook_metrics import start_hook, end_hook
+
 DEFAULT_THRESHOLD = int(os.environ.get("APEX_ARCHIVE_THRESHOLD_CHARS", "5000"))
 
 # Tools cuya salida queremos vigilar. apex_get_archived NO se vigila a sí mismo
@@ -53,21 +55,26 @@ def _output_size(response: dict) -> int:
 
 
 def main() -> int:
+    _hook_start = start_hook("post-tool-archive")
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("post-tool-archive", _hook_start, exit_code=0)
         return 0
 
     tool = payload.get("tool_name", "")
     if tool in SKIP_TOOLS:
+        end_hook("post-tool-archive", _hook_start, exit_code=0)
         return 0
 
     if not any(tool.startswith(p) for p in WATCHED_TOOL_PREFIXES):
+        end_hook("post-tool-archive", _hook_start, exit_code=0)
         return 0
 
     response = payload.get("tool_response") or payload.get("output") or ""
     size = _output_size(response)
     if size < DEFAULT_THRESHOLD:
+        end_hook("post-tool-archive", _hook_start, exit_code=0)
         return 0
 
     sys.stderr.write(
@@ -75,6 +82,7 @@ def main() -> int:
         f"Considera apex_archive_output(tool=\"{tool}\", output=...) "
         f"para mantener el contexto limpio.\n"
     )
+    end_hook("post-tool-archive", _hook_start, exit_code=0)
     return 0
 
 

@@ -337,7 +337,10 @@ Reglas:
 
 
 def parse_llm_verdict(text: str) -> dict:
-    """Parser tolerante: extrae el primer bloque JSON encontrado."""
+    """Parser tolerante: extrae el primer bloque JSON y valida contra schema.
+
+    Returns validated dict or {} if parse/validation fails.
+    """
     if not text:
         return {}
     start = text.find("{")
@@ -345,9 +348,81 @@ def parse_llm_verdict(text: str) -> dict:
     if start < 0 or end < 0 or end <= start:
         return {}
     try:
-        return json.loads(text[start:end + 1])
+        parsed = json.loads(text[start:end + 1])
     except json.JSONDecodeError:
         return {}
+
+    # Validate against expected schema
+    return _validate_verdict(parsed)
+
+
+# JSON Schema for LLM verdict validation
+_VERDICT_SCHEMA = {
+    "type": "object",
+    "required": ["quality", "should_block", "reasoning"],
+    "properties": {
+        "quality": {"type": "integer", "minimum": 1, "maximum": 4},
+        "category": {
+            "type": "string",
+            "enum": ["coding", "design", "integration", "deploy", "testing", "other"],
+        },
+        "additional_issues": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "should_block": {"type": "boolean"},
+        "reasoning": {"type": "string", "minLength": 1},
+    },
+    "additionalProperties": False,
+}
+
+_VALID_CATEGORIES = {"coding", "design", "integration", "deploy", "testing", "other"}
+
+
+def _validate_verdict(parsed: dict) -> dict:
+    """Validate parsed LLM verdict against schema. Returns {} on failure."""
+    if not isinstance(parsed, dict):
+        return {}
+
+    # Required fields
+    for field in ("quality", "should_block", "reasoning"):
+        if field not in parsed:
+            return {}
+
+    # quality: int 1-4
+    try:
+        q = int(parsed["quality"])
+        if q < 1 or q > 4:
+            return {}
+        parsed["quality"] = q
+    except (TypeError, ValueError):
+        return {}
+
+    # should_block: bool
+    if not isinstance(parsed["should_block"], bool):
+        return {}
+
+    # reasoning: non-empty string
+    if not isinstance(parsed["reasoning"], str) or not parsed["reasoning"].strip():
+        return {}
+
+    # category: optional, must be in allowed set
+    if "category" in parsed:
+        cat = parsed["category"]
+        if cat not in _VALID_CATEGORIES:
+            parsed["category"] = "other"
+
+    # additional_issues: optional, list of strings
+    if "additional_issues" in parsed:
+        issues = parsed["additional_issues"]
+        if not isinstance(issues, list):
+            parsed["additional_issues"] = []
+        else:
+            parsed["additional_issues"] = [
+                str(i) for i in issues if isinstance(i, (str, int))
+            ]
+
+    return parsed
 
 
 def merge_verdicts(determinista: Verdict, llm: dict) -> Verdict:

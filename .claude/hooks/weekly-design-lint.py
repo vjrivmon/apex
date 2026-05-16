@@ -17,6 +17,8 @@ import datetime as dt
 import os
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 # Biblioteca rotativa (clasificada por categoría para que no se repitan las mismas URLs cada semana)
 LIBRARY = [
     # curadurías
@@ -66,6 +68,7 @@ def _find_project_apex_dir() -> Path | None:
 
 
 def main() -> None:
+    _hook_start = start_hook("weekly-design-lint")
     apex_dir = _find_project_apex_dir()
     if apex_dir is None:
         return  # No es un proyecto APEX — silencio

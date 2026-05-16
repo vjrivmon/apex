@@ -29,6 +29,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from lib.db_utils import get_sync_db
+
 import advisor
 
 
@@ -93,7 +95,7 @@ def apply_tuning(
     proposals: list[dict[str, Any]] = []
     cooldown_blocked: list[str] = []
 
-    with sqlite3.connect(db_path) as c:
+    with get_sync_db(db_path) as c:
         counts = _outcome_counts_by_kind(c)
         constants_now = advisor.get_advisor_constants(db_path)
 
@@ -147,7 +149,7 @@ def apply_tuning(
         new_constants[p["constant"]] = p["new"]
     advisor.set_advisor_constants(db_path, new_constants)
     source = "manual_override" if force else "auto"
-    with sqlite3.connect(db_path) as c:
+    with get_sync_db(db_path) as c:
         for p in proposals:
             c.execute(
                 "INSERT INTO advisor_tuning_history "

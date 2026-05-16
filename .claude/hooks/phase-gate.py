@@ -22,6 +22,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from lib.hook_metrics import start_hook, end_hook
+
 TARGET_TOOLS = {
     "mcp__apex__apex_set_phase",
     "apex_set_phase",
@@ -97,22 +99,27 @@ def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
 
 
 def main() -> int:
+    _hook_start = start_hook("phase-gate")
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0  # input inválido: no bloqueamos
 
     tool_name = payload.get("tool_name") or payload.get("name") or ""
     if tool_name not in TARGET_TOOLS:
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
     args = payload.get("tool_input") or payload.get("arguments") or {}
     if args.get("force"):
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0  # override explícito
 
     phase_number = args.get("phase_number")
     new_status = args.get("status")
     if phase_number is None or new_status is None:
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
     blocking_phase = None
@@ -121,11 +128,13 @@ def main() -> int:
     elif new_status == "in_progress" and int(phase_number) > 0:
         blocking_phase = int(phase_number) - 1
     if blocking_phase is None or blocking_phase < 0:
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
     cwd = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     db_path = _find_context_db(cwd)
     if not db_path:
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
     verdict = _get_latest_verdict(db_path, blocking_phase)
@@ -134,6 +143,7 @@ def main() -> int:
         # tiene rol asociado, sugiere invocarlo (no bloqueante).
         if new_status == "in_progress":
             _suggest_role_for_phase(int(phase_number))
+        end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
     # Bloqueo: stderr → usuario, exit 2 → tool no se ejecuta
@@ -148,6 +158,7 @@ def main() -> int:
         "Override: pasa force=True con force_reason='...' al apex_set_phase.",
         file=sys.stderr,
     )
+    end_hook("phase-gate", _hook_start, exit_code=2)
     return 2
 
 

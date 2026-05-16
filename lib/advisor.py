@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.db_utils import get_sync_db
+
 # ── Constantes de pacing (blueprint sec 2.2) ──
 ADVISOR_DEFAULT_INTERVAL = 8
 ADVISOR_BACKOFF_INTERVAL = 16
@@ -123,7 +125,8 @@ def set_advisor_constants(
 # ── Helpers internos ──────────────────────────────────────────────
 
 def _conn(db_path: Path | str) -> sqlite3.Connection:
-    return sqlite3.connect(str(db_path), timeout=5.0)
+    """Open a sync connection with standard PRAGMAs (thin wrapper around get_sync_db)."""
+    return get_sync_db(db_path).__enter__()
 
 
 def _get_meta_int(c: sqlite3.Connection, key: str, default: int = 0) -> int:
