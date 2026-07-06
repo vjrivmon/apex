@@ -51,7 +51,13 @@ BLOCKING_ISSUES = {
     ISSUE_MOCK_DATA,
     ISSUE_NO_E2E,
     ISSUE_EMOJI,
+    ISSUE_NO_SO_CHECK,
+    ISSUE_NO_CROSS_PROJECT,
 }
+
+# Fases donde consultar hub.db (cross-project) es obligatorio: son las de
+# DECISIÓN de stack/diseño/arquitectura. Regla absoluta #18.
+_CROSS_PROJECT_PHASES = {0, 2, 3, 5}
 
 EMOJI_RE = re.compile(
     "[\U0001F300-\U0001FAFF]"      # pictogramas y símbolos
@@ -228,6 +234,15 @@ def run_deterministic_checks(evidence: Evidence) -> dict[str, bool]:
     if phase >= 1:
         checks["os_detected"] = bool(evidence.decisions_metadata.get("detected_os"))
 
+    # Cross-project obligatorio en las fases de DECISIÓN (stack/diseño/scaffold):
+    # 0 socrático/mercado, 2 diseño, 3 spec, 5 scaffold. El agente DEBE haber
+    # consultado hub.db (apex_search_cross_project / apex_phase_entry_check) para
+    # no repetir errores de otros proyectos. El flag lo escribe el handler MCP.
+    # Si hub.db no está disponible, no se puede exigir → el check no aplica.
+    if phase in _CROSS_PROJECT_PHASES and evidence.decisions_metadata.get("hub_available", True):
+        checks["cross_project_consulted"] = bool(
+            evidence.decisions_metadata.get("cross_project_consulted"))
+
     if phase >= 2 and evidence.frontend_files:
         checks["no_emojis_in_frontend"] = not _emojis_present(
             evidence.frontend_files, evidence.project_root)
@@ -254,6 +269,7 @@ _CHECK_TO_ISSUE = {
     "no_emojis_in_frontend": ISSUE_EMOJI,
     "schema_contracts": ISSUE_NO_SCHEMA,
     "e2e_for_web_ui": ISSUE_NO_E2E,
+    "cross_project_consulted": ISSUE_NO_CROSS_PROJECT,
 }
 
 

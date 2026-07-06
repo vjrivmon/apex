@@ -1,3 +1,8 @@
+---
+name: devops
+description: Monta CI/CD, Docker multi-stage y rollback en fase 5 (scaffold) y fase 11 (deploy) de /apex, más staging blue/green en fase 13. Usar cuando el usuario pide CI, pipeline, docker o deploy. Triggers ES/EN — devops, CI, pipeline, docker, deploy, rollback, GitHub Actions.
+---
+
 # DevOps — CI/CD, Docker multi-stage, rollback automation
 
 ## Cuándo activar

@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: "APEX: A Self-Improving Harness for LLM Coding Agents Across the Software Lifecycle"
+message: "If you use APEX in academic work, please cite the paper below."
+type: software
+authors:
+  - family-names: "Rivas Monferrer"
+    given-names: "Vicente"
+    affiliation: "VRAIN, Universitat Politècnica de València"
+  - family-names: "Alberola"
+    given-names: "Juan Miguel"
+    affiliation: "VRAIN, Universitat Politècnica de València"
+  - family-names: "Sánchez-Anguix"
+    given-names: "Víctor"
+    affiliation: "VRAIN, Universitat Politècnica de València"
+  - family-names: "Julián"
+    given-names: "Vicente"
+    affiliation: "VRAIN, Universitat Politècnica de València"
+repository-code: "https://github.com/vjrivmon/apex-harness"
+license: MIT
+# A Zenodo DOI for the archived snapshot will be added on the first tagged release.
+# doi: 10.5281/zenodo.XXXXXXX
+preferred-citation:
+  type: conference-paper
+  title: "APEX: A Self-Improving Harness for LLM Coding Agents Across the Software Lifecycle"
+  authors:
+    - family-names: "Rivas Monferrer"
+      given-names: "Vicente"
+    - family-names: "Alberola"
+      given-names: "Juan Miguel"
+    - family-names: "Sánchez-Anguix"
+      given-names: "Víctor"
+    - family-names: "Julián"
+      given-names: "Vicente"
+  collection-title: "Proc. of the IEEE/ACM Int. Conf. on Automated Software Engineering (ASE), Tools & Datasets Track"
+  year: 2026
+  # status: submitted  — update to the real bibliographic data on acceptance.

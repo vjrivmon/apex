@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APEX — Flujo Completo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #e8e8e8;
+    font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Canvas pan/zoom ── */
+  #viewport {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+  }
+  #viewport.grabbing { cursor: grabbing; }
+
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 8px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  #toolbar button {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    color: #e8e8e8;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #toolbar button:hover { background: #3a3a3a; }
+  #toolbar span { color: #666; font-size: 12px; min-width: 52px; text-align: center; }
+
+  /* ── Legend ── */
+  #legend {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 16px;
+    z-index: 100;
+    width: 200px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  #legend h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #666; margin-bottom: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12px; color: #ccc; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── Title ── */
+  #title-badge {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+  }
+  #title-badge h1 { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.03em; }
+  #title-badge p { font-size: 12px; color: #555; margin-top: 3px; }
+
+  /* ── Nodes ── */
+  .node {
+    position: absolute;
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+    backdrop-filter: blur(2px);
+  }
+  .node:hover {
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.15), 0 8px 24px rgba(0,0,0,0.5);
+    transform: translateY(-1px);
+    z-index: 10;
+  }
+  .node.selected {
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.6);
+    z-index: 20;
+  }
+
+  .node-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+    margin-bottom: 4px;
+  }
+  .node-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 6px;
+  }
+  .node-desc {
+    font-size: 11px;
+    opacity: 0.65;
+    line-height: 1.4;
+  }
+  .node-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    margin-top: 8px;
+    opacity: 0.85;
+  }
+
+  /* ── Group containers ── */
+  .group {
+    position: absolute;
+    border-radius: 14px;
+    border: 1.5px solid;
+    pointer-events: none;
+  }
+  .group-label {
+    position: absolute;
+    top: -11px;
+    left: 18px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 10px;
+    border-radius: 20px;
+  }
+
+  /* ── SVG arrows ── */
+  #arrows {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* ── Detail panel ── */
+  #detail {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.95);
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 16px;
+    padding: 28px;
+    width: 420px;
+    max-width: 90vw;
+    z-index: 200;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  #detail.open {
+    opacity: 1;
+    pointer-events: all;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  #detail h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  #detail .d-phase { font-size: 11px; color: #666; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.1em; }
+  #detail .d-body { font-size: 13px; line-height: 1.65; color: #bbb; }
+  #detail .d-tools { margin-top: 16px; }
+  #detail .d-tools h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #555; margin-bottom: 8px; }
+  #detail .d-tool-tag {
+    display: inline-block;
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: #8ab4f8;
+    margin: 3px 3px 3px 0;
+  }
+  #detail .d-role {
+    margin-top: 14px;
+    background: #222;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #aaa;
+  }
+  #detail .d-role strong { color: #e8e8e8; }
+  #detail-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: #2a2a2a;
+    border: none;
+    color: #888;
+    border-radius: 6px;
+    width: 28px; height: 28px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #detail-close:hover { background: #333; color: #e8e8e8; }
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 150;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #overlay.open { opacity: 1; pointer-events: all; }
+
+  /* ── Color themes ── */
+  .c-purple { background: #1e1030; border-color: #7c3aed; color: #ddd6fe; }
+  .c-purple .node-label { color: #a78bfa; }
+  .c-purple .node-badge { background: #2d1b69; color: #c4b5fd; }
+
+  .c-blue { background: #0f1e35; border-color: #2563eb; color: #bfdbfe; }
+  .c-blue .node-label { color: #60a5fa; }
+  .c-blue .node-badge { background: #1e3a5f; color: #93c5fd; }
+
+  .c-teal { background: #0d2420; border-color: #0d9488; color: #99f6e4; }
+  .c-teal .node-label { color: #2dd4bf; }
+  .c-teal .node-badge { background: #134e4a; color: #5eead4; }
+
+  .c-orange { background: #1f1508; border-color: #d97706; color: #fde68a; }
+  .c-orange .node-label { color: #fbbf24; }
+  .c-orange .node-badge { background: #451a03; color: #fcd34d; }
+
+  .c-red { background: #200a0a; border-color: #dc2626; color: #fca5a5; }
+  .c-red .node-label { color: #f87171; }
+  .c-red .node-badge { background: #450a0a; color: #fca5a5; }
+
+  .c-green { background: #0a1f0e; border-color: #16a34a; color: #bbf7d0; }
+  .c-green .node-label { color: #4ade80; }
+  .c-green .node-badge { background: #052e16; color: #86efac; }
+
+  .c-gray { background: #151515; border-color: #404040; color: #d1d5db; }
+  .c-gray .node-label { color: #9ca3af; }
+  .c-gray .node-badge { background: #1f1f1f; color: #9ca3af; }
+
+  .c-yellow { background: #1a1500; border-color: #ca8a04; color: #fef08a; }
+  .c-yellow .node-label { color: #facc15; }
+  .c-yellow .node-badge { background: #422006; color: #fde047; }
+
+  /* group borders */
+  .g-purple { border-color: rgba(124,58,237,0.3); background: rgba(124,58,237,0.04); }
+  .g-purple .group-label { background: rgba(124,58,237,0.2); color: #a78bfa; }
+
+  .g-blue { border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.04); }
+  .g-blue .group-label { background: rgba(37,99,235,0.2); color: #60a5fa; }
+
+  .g-teal { border-color: rgba(13,148,136,0.3); background: rgba(13,148,136,0.04); }
+  .g-teal .group-label { background: rgba(13,148,136,0.2); color: #2dd4bf; }
+
+  .g-orange { border-color: rgba(217,119,6,0.3); background: rgba(217,119,6,0.04); }
+  .g-orange .group-label { background: rgba(217,119,6,0.2); color: #fbbf24; }
+
+  .g-red { border-color: rgba(220,38,38,0.3); background: rgba(220,38,38,0.04); }
+  .g-red .group-label { background: rgba(220,38,38,0.2); color: #f87171; }
+
+  .g-green { border-color: rgba(22,163,74,0.3); background: rgba(22,163,74,0.04); }
+  .g-green .group-label { background: rgba(22,163,74,0.2); color: #4ade80; }
+
+  .g-gray { border-color: rgba(64,64,64,0.5); background: rgba(64,64,64,0.04); }
+  .g-gray .group-label { background: rgba(64,64,64,0.3); color: #9ca3af; }
+</style>
+</head>
+<body>
+
+<div id="title-badge">
+  <h1>APEX</h1>
+  <p>Arquitectura del flujo /apex — 14 fases + gate + roles</p>
+</div>
+
+<div id="legend">
+  <h3>Leyenda</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> Entrada / detección</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div> Diseño / spec</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0d9488"></div> Implementación</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Revisión / QA</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div> Gate bloqueante</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Deploy / producción</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ca8a04"></div> Ciclo vivo</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#404040"></div> Capa transversal</div>
+</div>
+
+<div id="viewport">
+  <div id="canvas">
+    <svg id="arrows"></svg>
+  </div>
+</div>
+
+<div id="toolbar">
+  <button id="btn-fit">Encuadrar</button>
+  <button id="btn-minus">−</button>
+  <span id="zoom-label">100%</span>
+  <button id="btn-plus">+</button>
+</div>
+
+<div id="overlay"></div>
+<div id="detail">
+  <button id="detail-close">×</button>
+  <div class="d-phase" id="d-phase"></div>
+  <h2 id="d-title"></h2>
+  <div class="d-body" id="d-body"></div>
+  <div class="d-tools" id="d-tools-wrap">
+    <h4>MCP Tools usadas</h4>
+    <div id="d-tools"></div>
+  </div>
+  <div class="d-role" id="d-role"></div>
+</div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+// Grid: 4 columnas × N filas. NW=nodo ancho, RH=row gap vertical
+// Y0=80: primer nodo empieza aquí (debajo del grupo label)
+const C0=80, C1=620, C2=1160, C3=1700, NW=440, RH=270, Y0=120;
+
+const GROUPS = [
+  // Entrada: rows 0-1  (y=100 .. 100+RH+160=490)
+  { id:'g-entry',  label:'Entrada',        x:C0-30, y:70,          w:NW+60, h:RH*2+120,   cls:'g-purple' },
+  // Diseño: rows 3-5  (y=100+3*RH=790 .. 100+5*RH+160=1410)
+  { id:'g-design', label:'Diseño & Spec',  x:C0-30, y:Y0+RH*3-40, w:NW+60, h:RH*3+120,   cls:'g-blue'   },
+  // Impl: rows 0-3  (y=100 .. 100+3*RH+160=1030)
+  { id:'g-impl',   label:'Implementación', x:C1-30, y:70,          w:NW+60, h:RH*4+120,   cls:'g-teal'   },
+  // QA: rows 0-2  (y=100 .. 100+2*RH+180=820)
+  { id:'g-qa',     label:'Calidad & Seg',  x:C2-30, y:70,          w:NW+60, h:RH*3+120,   cls:'g-orange'  },
+  // Deploy: rows 0-3
+  { id:'g-deploy', label:'Deploy & Vida',  x:C3-30, y:70,          w:NW+60, h:RH*4+120,   cls:'g-green'   },
+  // Transversal: rows 7-8
+  { id:'g-cross',  label:'Capa transversal (siempre activa)', x:C0-30, y:Y0+RH*7-40, w:(NW+60)*4+90, h:RH*2+120, cls:'g-gray' },
+];
+
+// Layout grid:
+//  Col A (Entrada+Diseño): x=C0
+//  Col B (Impl):           x=C1
+//  Col C (QA+Seg):         x=C2
+//  Col D (Deploy+Vida):    x=C3
+// Rows spaced RH=230px apart, y_start=100
+
+const NODES = [
+  // ── COL A — ENTRADA (filas 0,1) ──
+  // Detección ocupa mitad derecha de la fila 0 junto a n0
+  {
+    id:'n-detect', x:C0, y:Y0+RH*2, w:NW, h:160, cls:'c-purple',
+    label:'Detección', title:'Caso A / B / C',
+    desc:'Nuevo · Existente sin APEX · Existente con APEX',
+    badge:'router',
+    detail:{body:'APEX detecta el estado del proyecto: A=proyecto nuevo, B=código existente sin .apex/ (usa reverse-scan si >50 archivos), C=proyecto con .apex/ activo. El flujo cambia según el caso.',tools:['apex_reverse_scan','apex_reverse_plan','apex_onboard_apply','apex_get_context'],role:null}
+  },
+  {
+    id:'n0', x:C0, y:Y0, w:NW, h:160, cls:'c-purple',
+    label:'Fase 0', title:'Socrático',
+    desc:'Escuchar, investigar mercado, cuestionar (4 rondas + reflexión)',
+    badge:'4 rondas',
+    detail:{body:'El agente actúa como entrevistador socrático. Hace preguntas que cuestionan suposiciones, investiga el mercado con búsquedas reales y no permite avanzar hasta que el "por qué" del proyecto esté claro. 4 rondas de profundización.',tools:['apex_init_project','apex_add_decision','apex_search_cross_project'],role:null}
+  },
+  {
+    id:'n1', x:C0, y:Y0+RH, w:NW, h:160, cls:'c-purple',
+    label:'Fase 1', title:'Tipo de solución',
+    desc:'CLI · bot · MCP · app · agente · evaluar SO',
+    badge:'stack decision',
+    detail:{body:'Se decide la forma del producto: CLI, bot de Telegram, servidor MCP, app web, agente autónomo, etc. Se verifica el SO (uname -s) antes de proponer stack dependiente de plataforma.',tools:['apex_add_decision','apex_set_phase'],role:null}
+  },
+
+  // ── COL A — DISEÑO & SPEC (filas 3,4,5) ──
+  {
+    id:'n2', x:C0, y:Y0+RH*3, w:NW, h:160, cls:'c-blue',
+    label:'Fase 2', title:'Diseño',
+    desc:'C4 + DESIGN.md + wireframes + research 3 competidores',
+    badge:'apex-architect',
+    detail:{body:'Diagrama C4 del sistema. DESIGN.md estándar Google Labs (Brand, Color, Type, Components, Accessibility). Research de 3+ competidores reales con chromium dump-dom. Validación WCAG AA.',tools:['apex_design_md_init','apex_design_md_validate','apex_research_competitor','apex_add_decision'],role:'apex-architect'}
+  },
+  {
+    id:'n3', x:C0, y:Y0+RH*4, w:NW, h:160, cls:'c-blue',
+    label:'Fase 3', title:'Spec',
+    desc:'Modelo de datos + checkpoints deployables + tokens DESIGN.md',
+    badge:'apex-architect',
+    detail:{body:'Reflexión profunda. Modelo de datos completo. Spec con checkpoints deployables (no monolítica). Los componentes de UI referencian tokens reales del DESIGN.md, no descripciones textuales.',tools:['apex_add_component','apex_add_decision','apex_wiki_add'],role:'apex-architect'}
+  },
+  {
+    id:'n4', x:C0, y:Y0+RH*5, w:NW, h:160, cls:'c-blue',
+    label:'Fase 4', title:'Edge cases',
+    desc:'ANTES del código, TODOS los posibles, sin límite',
+    badge:'apex-qa',
+    detail:{body:'Esta fase ocurre ANTES de escribir una sola línea de código. El agente apex-qa enumera todos los edge cases posibles: inputs inválidos, estados de carrera, fallos de red, límites de BD, permisos, concurrencia.',tools:['apex_add_decision','apex_wiki_add'],role:'apex-qa'}
+  },
+
+  // ── COL B — IMPLEMENTACIÓN (filas 0,1,2,3) ──
+  {
+    id:'n5', x:C1, y:Y0, w:NW, h:160, cls:'c-teal',
+    label:'Fase 5', title:'Scaffold',
+    desc:'Estructura hexagonal + git init + config + compila',
+    badge:'apex-implementer',
+    detail:{body:'REGLA ABSOLUTA: git init + primer commit es el primer sub-paso, ANTES de escribir código. Estructura hexagonal: core/domain, core/ports, infrastructure, application. Verificar que compila sin errores.',tools:['apex_add_component','apex_set_phase','apex_grader_evaluate'],role:'apex-implementer'}
+  },
+  {
+    id:'n6', x:C1, y:Y0+RH, w:NW, h:160, cls:'c-teal',
+    label:'Fase 6', title:'Core',
+    desc:'Domain + ports + casos de uso + agentes SMA',
+    badge:'apex-implementer',
+    detail:{body:'Entidades de dominio, interfaces (ports), casos de uso. Si el proyecto es un SMA, aquí se crean los agentes y el orquestador. Sin datos mock. Sin lógica en la capa de infrastructure todavía.',tools:['apex_add_component','apex_complete_step','apex_grader_evaluate','apex_prototype_init'],role:'apex-implementer'}
+  },
+  {
+    id:'n7', x:C1, y:Y0+RH*2, w:NW, h:160, cls:'c-teal',
+    label:'Fase 7', title:'Infraestructura',
+    desc:'BD + LLM + scraping + adapters',
+    badge:'apex-implementer',
+    detail:{body:'Implementación de los adapters: BD (SQLite/Supabase), proveedor LLM (Ollama/Claude), scrapers, APIs externas. Los adapters implementan los ports definidos en Fase 6.',tools:['apex_add_component','apex_complete_step','apex_grader_evaluate'],role:'apex-implementer'}
+  },
+  {
+    id:'n8', x:C1, y:Y0+RH*3, w:NW, h:160, cls:'c-orange',
+    label:'Fase 8', title:'Integración',
+    desc:'Conectar todo · Streamlit para validar · audit diff',
+    badge:'apex-reviewer',
+    detail:{body:'Se conectan todos los adapters con los casos de uso. Se usa Streamlit o similar para validar E2E que el frontend consume datos REALES del backend. El agente apex-reviewer audita el diff completo y reporta findings con severidad.',tools:['apex_grader_evaluate','apex_add_error','apex_add_decision'],role:'apex-reviewer'}
+  },
+
+  // ── COL C — CALIDAD & SEG (filas 0,1,2) ──
+  {
+    id:'n9', x:C2, y:Y0, w:NW, h:160, cls:'c-orange',
+    label:'Fase 9', title:'Testing',
+    desc:'Unit 80% + integration + E2E Playwright + edge cases',
+    badge:'apex-qa',
+    detail:{body:'Cobertura ≥80%. Tests unitarios, de integración (BD real, no mocks), E2E con Playwright navegando todas las pantallas. Se verifican los edge cases de Fase 4. El grader valida que las transiciones de state_machines se honran.',tools:['apex_grader_evaluate','apex_advisor_review'],role:'apex-qa'}
+  },
+  {
+    id:'n10', x:C2, y:Y0+RH, w:NW, h:160, cls:'c-orange',
+    label:'Fase 10', title:'Seguridad',
+    desc:'Validation + auth + headers + rate limit + audit OWASP',
+    badge:'apex-reviewer',
+    detail:{body:'Lint OWASP/STRIDE. Validación de inputs en todas las fronteras del sistema. Auth implementada. Headers de seguridad. Rate limiting. El agente apex-reviewer produce tabla de issues con severidad.',tools:['apex_security_gate','apex_add_error','apex_grader_evaluate'],role:'apex-reviewer'}
+  },
+  {
+    id:'n105', x:C2, y:Y0+RH*2, w:NW, h:180, cls:'c-red',
+    label:'Fase 10.5', title:'AgentArmor Gate',
+    desc:'8 capas · BLOQUEA deploy si alguna != passed',
+    badge:'GATE BLOQUEANTE',
+    detail:{body:'Gate obligatorio antes del deploy. 8 capas AgentArmor: L1 Input validation, L2 Output sanitization, L3 Tool authorization, L4 Prompt injection defense, L5 Data exfiltration prevention, L6 Rate limiting, L7 Audit logging, L8 Incident response. Si cualquier capa != passed, apex_set_phase(11) queda bloqueado.',tools:['apex_security_gate'],role:null}
+  },
+
+  // ── COL D — DEPLOY & VIDA (filas 0,1,2,3) ──
+  {
+    id:'n11', x:C3, y:Y0, w:NW, h:160, cls:'c-green',
+    label:'Fase 11', title:'Deploy',
+    desc:'Docker + CI/CD + health + rollback + SSL + go-live',
+    badge:'apex-devops',
+    detail:{body:'Solo accesible tras pasar el AgentArmor Gate (10.5). El agente apex-devops aplica templates de scaffold_devops: Dockerfile multi-stage, docker-compose.prod.yml, GH Actions (ci, deploy-staging, deploy-prod, release-please), Prometheus + Grafana + Loki + alertas.',tools:['apex_scaffold_devops','apex_grader_evaluate'],role:'apex-devops'}
+  },
+  {
+    id:'n12', x:C3, y:Y0+RH, w:NW, h:160, cls:'c-yellow',
+    label:'Fase 12', title:'Iteración',
+    desc:'Features · bugs · mejoras — fase siempre in_progress',
+    badge:'ciclo vivo',
+    detail:{body:'La única fase que nunca se marca completed. Es el ciclo vivo del producto: nuevas features, bugfixes, mejoras UX. Cada iteración puede reiniciar ciclos parciales sin recorrer todo desde Fase 0.',tools:['apex_get_context','apex_add_decision','apex_complete_step','apex_goal_loop'],role:null}
+  },
+  {
+    id:'n13', x:C3, y:Y0+RH*2, w:NW, h:160, cls:'c-green',
+    label:'Fase 13', title:'Scaling',
+    desc:'Profiling + caching + monitoring + dashboard',
+    badge:'métricas',
+    detail:{body:'Profiling de bottlenecks reales (no premature optimization). Caching estratégico. Dashboard de observabilidad en Grafana. Alertas de latencia y error rate.',tools:['apex_get_context','apex_add_decision'],role:null}
+  },
+  {
+    id:'n14', x:C3, y:Y0+RH*3, w:NW, h:160, cls:'c-green',
+    label:'Fase 14', title:'Mantenimiento',
+    desc:'CI/CD + backups + docs auto + migraciones + deprecación',
+    badge:'largo plazo',
+    detail:{body:'Plan de mantenimiento a largo plazo: rotación de secretos, backups automáticos, docs auto-generada, plan de migración de BD, plan de deprecación de features.',tools:['apex_get_context','apex_add_decision'],role:null}
+  },
+
+  // ── CAPA TRANSVERSAL (fila 8, debajo de todo) ──
+  {
+    id:'nc-advisor', x:C0, y:Y0+RH*7, w:NW, h:170, cls:'c-gray',
+    label:'Advisor (S15)', title:'apex-advisor',
+    desc:'Subagent Opus · cards forgotten_tool, phase_drift, handoff · throttle 8 calls',
+    badge:'preventivo',
+    detail:{body:'Subagent Opus que revisa la sesión cada N tool calls (default 8). Emite cards de tipo: forgotten_tool, phase_drift (handoff huérfano >30 min), recommend_skill_handoff, grader_overdue. Circuit breaker: ≥3 calls/min lo apaga.',tools:['apex_advisor_review','apex_record_advice','apex_dismiss_advice','apex_log_trace'],role:'apex-advisor (Opus)'}
+  },
+  {
+    id:'nc-grader', x:C1, y:Y0+RH*7, w:NW, h:170, cls:'c-gray',
+    label:'Grader (S8)', title:'Grader outcome-based',
+    desc:'Checks deterministas + LLM judge · bloquea apex_set_phase si should_block',
+    badge:'calidad',
+    detail:{body:'Grader que evalúa si una fase está realmente terminada. Checks deterministas: git commit existe, tests pasan, no emojis, no datos mock, Pydantic correcto. Si should_block=true, el hook phase-gate.py impide avanzar a la siguiente fase.',tools:['apex_grader_evaluate'],role:null}
+  },
+  {
+    id:'nc-doctor', x:C2, y:Y0+RH*7, w:NW, h:170, cls:'c-gray',
+    label:'Doctor (S13)', title:'Apex-doctor',
+    desc:'Auto-mejora al cierre de día · 3 analizadores · propuestas idempotentes',
+    badge:'auto-mejora',
+    detail:{body:'Se dispara por frases de cierre ("lo dejo aquí") o por edad de sesión >3.5h. 3 analizadores: A1 override_clusters, A2 grader_block_patterns, A3 stale_handoffs. Throttle 1h. Propuestas idempotentes vía signature UNIQUE.',tools:['apex_doctor_run'],role:null}
+  },
+  {
+    id:'nc-pocock', x:C3, y:Y0+RH*7, w:NW, h:170, cls:'c-gray',
+    label:'Flujo Pocock (S15)', title:'Skill handoff',
+    desc:'grill-with-docs → prototype → grill-with-docs · snapshot de contexto',
+    badge:'cambio de modo',
+    detail:{body:'Cuando grill-with-docs detecta lógica con >5 reglas de negocio, hace handoff a /prototype (Textual TUI + Mermaid stateDiagram). Prototype modela la máquina de estados, la valida vía BFS y devuelve el control.',tools:['apex_handoff_skill','apex_prototype_init','apex_resume_skill_handoff'],role:null}
+  },
+  // segunda fila transversal
+  {
+    id:'nc-roles', x:C0, y:Y0+RH*8, w:NW, h:170, cls:'c-gray',
+    label:'Roles (S12)', title:'Virtual office',
+    desc:'5 subagents nativos · mapping fase → rol · telemetría role_invocations',
+    badge:'especialización',
+    detail:{body:'5 subagents instalados en ~/.claude/agents/: apex-architect (fases 2-3), apex-qa (fases 4 y 9), apex-implementer (fases 5-7), apex-reviewer (fases 8 y 10), apex-devops (fase 11).',tools:['apex_install_roles','apex_recommend_role','apex_invoke_role'],role:null}
+  },
+  {
+    id:'nc-hub', x:C1, y:Y0+RH*8, w:NW, h:170, cls:'c-gray',
+    label:'Hub cross-project', title:'apex-hub',
+    desc:'24 proyectos · 322 decisiones · 184 errores · search cross-project',
+    badge:'conocimiento',
+    detail:{body:'Dashboard central en ~/RoadToDevOps/apex-hub/. hub.db agrega context.db de todos los proyectos. apex_search_cross_project permite buscar decisiones y errores antes de tomar decisiones locales.',tools:['apex_search_cross_project','apex_get_context'],role:null}
+  },
+  {
+    id:'nc-forge', x:C2, y:Y0+RH*8, w:NW, h:170, cls:'c-gray',
+    label:'Skill Forge (S11)', title:'Auto-detector de skills',
+    desc:'3 detectores · propone skills cuando ve patrones repetidos',
+    badge:'evolución',
+    detail:{body:'3 detectores: D1 grader_blocks (mismo issue bloqueante en >=3 fases), D2 tool_patterns (secuencia de 3 tools repetida >=5 veces), D3 cross_project_repeats (decisión en >=2 proyectos).',tools:['apex_skill_forge_scan','apex_skill_forge_approve','apex_skill_forge_reject','apex_ingest_library_skills'],role:null}
+  },
+];
+
+// ── EDGES ─────────────────────────────────────────────────────────────────────
+const EDGES = [
+  // entrada → diseño
+  { from:'n0', to:'n-detect' },
+  { from:'n-detect', to:'n1' },
+  { from:'n1', to:'n2' },
+  { from:'n2', to:'n3' },
+  { from:'n3', to:'n4' },
+  // diseño → impl
+  { from:'n4', to:'n5' },
+  { from:'n5', to:'n6' },
+  { from:'n6', to:'n7' },
+  { from:'n7', to:'n8' },
+  // impl → qa
+  { from:'n8', to:'n9' },
+  { from:'n9', to:'n10' },
+  { from:'n10', to:'n105' },
+  // gate → deploy
+  { from:'n105', to:'n11', color:'#dc2626' },
+  { from:'n11', to:'n12' },
+  { from:'n11', to:'n13' },
+  { from:'n12', to:'n14' },
+  { from:'n13', to:'n14' },
+];
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('canvas');
+const svg = document.getElementById('arrows');
+
+// Render groups
+GROUPS.forEach(g => {
+  const el = document.createElement('div');
+  el.className = `group ${g.cls}`;
+  el.style.cssText = `left:${g.x}px;top:${g.y}px;width:${g.w}px;height:${g.h}px`;
+  el.innerHTML = `<span class="group-label">${g.label}</span>`;
+  canvas.appendChild(el);
+});
+
+// Render nodes
+const nodeMap = {};
+NODES.forEach(n => {
+  const el = document.createElement('div');
+  el.className = `node ${n.cls}`;
+  el.id = n.id;
+  el.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.w}px`;
+  el.innerHTML = `
+    <div class="node-label">${n.label}</div>
+    <div class="node-title">${n.title}</div>
+    <div class="node-desc">${n.desc}</div>
+    <span class="node-badge">${n.badge}</span>
+  `;
+  el.addEventListener('click', e => { e.stopPropagation(); openDetail(n); });
+  canvas.appendChild(el);
+  nodeMap[n.id] = { el, data: n };
+});
+
+// Build node lookup by id
+const nodeById = {};
+NODES.forEach(n => { nodeById[n.id] = n; });
+
+// Render edges — pure data coordinates, no DOM measurements needed
+requestAnimationFrame(() => {
+  // compute canvas bounds
+  let maxX = 0, maxY = 0;
+  NODES.forEach(n => { maxX = Math.max(maxX, n.x + n.w + 60); maxY = Math.max(maxY, n.y + (n.h||160) + 60); });
+  GROUPS.forEach(g => { maxX = Math.max(maxX, g.x + g.w + 60); maxY = Math.max(maxY, g.y + g.h + 60); });
+  svg.setAttribute('width', maxX);
+  svg.setAttribute('height', maxY);
+  svg.style.width = maxX + 'px';
+  svg.style.height = maxY + 'px';
+
+  let defsHtml = '<defs>';
+  let pathsHtml = '';
+
+  EDGES.forEach(e => {
+    const fn = nodeById[e.from];
+    const tn = nodeById[e.to];
+    if (!fn || !tn) return;
+
+    const fh = fn.h || 160;
+    const th = tn.h || 160;
+
+    // Center points
+    const fCX = fn.x + fn.w / 2;
+    const tCX = tn.x + tn.w / 2;
+    const fCY = fn.y + fh / 2;
+    const tCY = tn.y + th / 2;
+
+    const dx = tCX - fCX;
+    const dy = tCY - fCY;
+
+    let x1, y1, x2, y2, path;
+    const CURVE = 60; // bezier handle length
+
+    if (Math.abs(dx) < 80) {
+      // Same column — vertical connection: bottom → top
+      x1 = fCX;      y1 = fn.y + fh;
+      x2 = tCX;      y2 = tn.y;
+      path = `M${x1},${y1} C${x1},${y1+CURVE} ${x2},${y2-CURVE} ${x2},${y2}`;
+    } else if (dx > 0) {
+      // Going right — exit right side, enter left side
+      x1 = fn.x + fn.w;  y1 = fCY;
+      x2 = tn.x;          y2 = tCY;
+      const cx = (x1 + x2) / 2;
+      path = `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+    } else {
+      // Going left — exit left, enter right
+      x1 = fn.x;          y1 = fCY;
+      x2 = tn.x + tn.w;  y2 = tCY;
+      const cx = (x1 + x2) / 2;
+      path = `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+    }
+
+    const color = e.color || '#444';
+    const dash  = e.dashed ? 'stroke-dasharray="6,4"' : '';
+    const mid   = `arrow-${e.from}-${e.to}`;
+
+    defsHtml += `<marker id="${mid}" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="${color}" opacity="0.8"/>
+    </marker>`;
+    pathsHtml += `<path d="${path}" stroke="${color}" stroke-width="1.5" fill="none" ${dash} opacity="0.55" marker-end="url(#${mid})"/>`;
+  });
+
+  svg.innerHTML = defsHtml + '</defs>' + pathsHtml;
+  fitCanvas();
+});
+
+// ── PAN / ZOOM ────────────────────────────────────────────────────────────────
+let scale = 1, tx = 0, ty = 0;
+let dragging = false, startX, startY, startTx, startTy;
+const viewport = document.getElementById('viewport');
+
+function setTransform() {
+  canvas.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
+}
+
+viewport.addEventListener('mousedown', e => {
+  dragging = true;
+  startX = e.clientX; startY = e.clientY;
+  startTx = tx; startTy = ty;
+  viewport.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  tx = startTx + (e.clientX - startX);
+  ty = startTy + (e.clientY - startY);
+  setTransform();
+});
+window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('grabbing'); });
+
+viewport.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const rect = viewport.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  tx = mx - (mx - tx) * delta;
+  ty = my - (my - ty) * delta;
+  scale = Math.max(0.2, Math.min(3, scale * delta));
+  setTransform();
+}, { passive: false });
+
+// Touch support
+let lastDist = 0;
+viewport.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragging = true;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    startTx = tx; startTy = ty;
+  } else if (e.touches.length === 2) {
+    lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+});
+viewport.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && dragging) {
+    tx = startTx + (e.touches[0].clientX - startX);
+    ty = startTy + (e.touches[0].clientY - startY);
+    setTransform();
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const delta = dist / lastDist;
+    scale = Math.max(0.2, Math.min(3, scale * delta));
+    lastDist = dist;
+    setTransform();
+  }
+}, { passive: false });
+viewport.addEventListener('touchend', () => { dragging = false; });
+
+document.getElementById('btn-plus').onclick = () => { scale = Math.min(3, scale * 1.2); setTransform(); };
+document.getElementById('btn-minus').onclick = () => { scale = Math.max(0.2, scale / 1.2); setTransform(); };
+
+function fitCanvas() {
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  // find bounding box of all nodes
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  NODES.forEach(n => {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.w);
+    maxY = Math.max(maxY, n.y + 200);
+  });
+  const cw = maxX - minX + 80;
+  const ch = maxY - minY + 80;
+  scale = Math.min(vw / cw, vh / ch, 1);
+  tx = (vw - cw * scale) / 2 - minX * scale + 40 * scale;
+  ty = (vh - ch * scale) / 2 - minY * scale + 40 * scale;
+  setTransform();
+}
+document.getElementById('btn-fit').onclick = fitCanvas;
+
+// ── DETAIL PANEL ──────────────────────────────────────────────────────────────
+function openDetail(n) {
+  document.getElementById('d-phase').textContent = n.label;
+  document.getElementById('d-title').textContent = n.title;
+  document.getElementById('d-body').textContent = n.detail.body;
+
+  const toolsWrap = document.getElementById('d-tools-wrap');
+  const toolsDiv = document.getElementById('d-tools');
+  if (n.detail.tools && n.detail.tools.length) {
+    toolsDiv.innerHTML = n.detail.tools.map(t => `<span class="d-tool-tag">${t}</span>`).join('');
+    toolsWrap.style.display = 'block';
+  } else {
+    toolsWrap.style.display = 'none';
+  }
+
+  const roleDiv = document.getElementById('d-role');
+  if (n.detail.role) {
+    roleDiv.style.display = 'block';
+    roleDiv.innerHTML = `Rol agente: <strong>${n.detail.role}</strong>`;
+  } else {
+    roleDiv.style.display = 'none';
+  }
+
+  document.getElementById('detail').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+document.getElementById('detail-close').onclick = closeDetail;
+document.getElementById('overlay').onclick = closeDetail;
+document.getElementById('viewport').onclick = closeDetail;
+</script>
+</body>
+</html>

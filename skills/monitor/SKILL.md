@@ -1,3 +1,8 @@
+---
+name: monitor
+description: Establece observabilidad (health extendido, logs agregados, Prometheus/Grafana, SLOs, alertas) antes del primer deploy en fase 11 y en escalado/mantenimiento (13-14) de /apex. Triggers ES/EN — monitor, observabilidad, health, monitoring, alertas, SLO, dashboard, observability.
+---
+
 # Monitor — Observabilidad que alerta antes de que se rompa
 
 ## Cuándo activar

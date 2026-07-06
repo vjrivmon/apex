@@ -81,6 +81,14 @@ Cuando se resuelva un término, actualiza `CONTEXT.md` ahí mismo. No los acumul
 
 No acoples `CONTEXT.md` a detalles de implementación. Sólo incluye términos que tengan sentido para un experto del dominio.
 
+### Orden del bucle: patch ANTES de la siguiente pregunta
+
+El orden es estricto: recibe la respuesta → actualiza el archivo (`CONTEXT.md` / decisión) → recién entonces haz la siguiente pregunta. Nunca al revés. Si preguntas primero y anotas después, el doc se desincroniza y pierdes respuestas. Tras el esqueleto inicial, **parchea** secciones concretas (`old_string`/`new_string` preservando las palabras del usuario), no reescribas el archivo entero.
+
+### Las listas del usuario son conjuntos, no rankings
+
+Cuando el usuario responde con una lista ("A, B, C, D") a "¿qué X cubrimos?", eso es un CONJUNTO no ordenado, no una prioridad. Nunca infieras rango del orden en que las escribió. Si necesitas orden, pregúntalo explícitamente: "¿cuál de estas es la #1?". (Antipatrón real: el usuario lista y el agente escribe "1. A, 2. B…" inventando un ranking.)
+
 ### Ofrecer ADRs con moderación
 
 Sólo ofrece crear un ADR cuando los tres son ciertos:

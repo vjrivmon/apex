@@ -1,3 +1,8 @@
+---
+name: socratic
+description: Cuestiona una idea nueva de proyecto o feature en fase 0 de /apex, antes de diseñar o escribir código, para filtrar ideas débiles y aflorar supuestos. Triggers ES/EN — socrático, socratic, nueva idea, cuestionar idea, validar concepto, challenge idea.
+---
+
 # Tutor Socrático — Cuestionador de Ideas
 
 ## Cuándo activar

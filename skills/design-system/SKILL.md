@@ -1,3 +1,8 @@
+---
+name: design-system
+description: Define tokens semánticos, tipografía, espaciado, iconografía y protocolo de verificación en fase 2 de /apex, una vez la identidad está acordada. Para el manual de marca usar brand-identity. Triggers ES/EN — design system, sistema de diseño, tokens, tipografía, espaciado, design tokens.
+---
+
 # DesignSystem — Identidad visual profesional y consistente
 
 > **Composición con otras skills**:

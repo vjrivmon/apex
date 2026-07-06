@@ -1,3 +1,8 @@
+---
+name: reverse-engineer
+description: Ingeniería inversa de un proyecto grande (>50 archivos) con código pero sin .apex/, tratando el código como fuente de verdad por encima de README/CLAUDE.md. Para repos pequeños usar onboard-existing. Triggers ES/EN — ingeniería inversa, reverse engineer, entender codebase, mapear proyecto, reverse-scan, legacy.
+---
+
 # reverse-engineer — Ingeniería inversa de proyectos existentes
 
 ## Cuándo invocar

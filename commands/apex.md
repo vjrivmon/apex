@@ -1,3 +1,8 @@
+---
+description: Sistema de desarrollo guiado por 14 fases + gate 10.5 con enforcement vinculante (grader, gates de fase y de seguridad). Usar para arrancar o continuar CUALQUIER proyecto de software bajo APEX. Triggers ES/EN — apex, /apex, desarrollo guiado, nueva feature, continuar proyecto, guided development.
+argument-hint: "[descripción de la tarea o vacío para retomar la fase actual]"
+---
+
 # /apex — Sistema de desarrollo guiado por fases
 
 Router. Cada fase vive en su propio archivo bajo `commands/phases/`. Este
@@ -5,7 +10,22 @@ comando NO contiene la logica de cada fase — la carga bajo demanda
 (progressive disclosure) leyendo solo el archivo que corresponde al estado
 actual del proyecto.
 
-Reglas transversales en `commands/rules/`.
+## PASO -1 — Resolver la raíz del repo APEX (obligatorio)
+
+Este comando vive en el repo APEX, pero se ejecuta en el CWD del proyecto
+guiado (que NO contiene `commands/phases/*` ni `skills/*`). Antes de leer
+cualquier archivo de fase/regla/skill, resuelve la raíz absoluta:
+
+```bash
+APEX_ROOT="$(readlink -f ~/.claude/commands/apex.md | xargs dirname | xargs dirname)"
+echo "APEX_ROOT=$APEX_ROOT"   # p.ej. /home/vicente/RoadToDevOps/apex
+```
+
+A partir de aquí, TODA lectura de fase/regla/skill usa ruta absoluta:
+`Read "$APEX_ROOT/commands/phases/NN-*.md"`, `Read "$APEX_ROOT/skills/<x>/SKILL.md"`.
+Las rutas relativas (`commands/phases/...`) NO resuelven fuera del repo APEX.
+
+Reglas transversales en `$APEX_ROOT/commands/rules/`.
 
 ## PASO CERO — Cargar herramientas MCP
 
@@ -167,8 +187,14 @@ El gate NO es una fase nueva, es un checkpoint entre fases 10 y 11.
 | 14   | `phases/14-maintenance.md`           | CI/CD + backups + docs auto + migraciones + plan deprecacion         |
 
 Cada fase tiene sub-pasos SECUENCIALES y OBLIGATORIOS ejecutados EN ORDEN.
-Nunca declarar una fase como `completed` sin TODOS sus sub-pasos
-verificados.
+
+**Criterio de cierre (vinculante, no opcional):** para cerrar una fase debes
+llamar `apex_grader_evaluate(phase=N, ...)` y obtener un verdict NO bloqueante.
+Un **gate** (hook `phase-gate.py`) rechaza `apex_set_phase(..., completed)` si no
+hay verdict o si el verdict bloquea — el cierre "a ojo" no existe. Igual, un
+**gate** rechaza escribir código de producción antes de fase 5, y otro rechaza
+entrar a fase 11 sin las capas de seguridad L1-L8 en `passed`. Todos aceptan
+`force=True` con `force_reason` (queda registrado como error).
 
 ---
 
@@ -296,15 +322,31 @@ modo origen.
 
 ---
 
+## Postura (no negociable, todas las sesiones)
+
+APEX existe para que el desarrollo sea **el mismo proceso en cada sesión**,
+no uno distinto según el humor de la conversación. Por eso:
+
+- **No cedas tu criterio verificado ante presión.** Si comprobaste algo
+  (`uname`, `ss`, un ToS, un test que falla, una regla APEX) y el usuario
+  empuja sin refutarlo ("hazlo sin rechistar", "no me pongas excusas"),
+  mantén la posición y reexpón la evidencia UNA vez. No respondas "tienes
+  razón" a algo que el usuario no ha rebatido. Regla absoluta 21.
+- **Separa cambio-de-objetivo de saltarse-un-paso.** Un requisito nuevo se
+  acata; presionar para brincar un gate/sub-paso NO. Regla 22.
+- **Consistencia > complacencia.** El resultado que APEX previene es
+  precisamente "cada vez algo distinto". Mantén el hilo, el tono y los
+  gates aunque genere fricción momentánea.
+
 ## Reglas transversales
 
 Antes de cualquier fase, tener leidas en contexto:
 
-- `commands/rules/absolute-rules.md` — 20 reglas absolutas. Violar = fase
-  falla.
-- `commands/rules/errors-to-avoid.md` — Errores documentados
+- `$APEX_ROOT/commands/rules/absolute-rules.md` — 22 reglas absolutas
+  (21-22 gobiernan la postura bajo presión). Violar = fase falla.
+- `$APEX_ROOT/commands/rules/errors-to-avoid.md` — Errores documentados
   cross-project.
-- `commands/rules/ux-verification.md` — Playwright + `/apex:idea` flow.
+- `$APEX_ROOT/commands/rules/ux-verification.md` — Playwright + `/apex:idea` flow.
 
 ---
 
@@ -315,11 +357,18 @@ Antes de cualquier fase, tener leidas en contexto:
 - **Fases (`phases/*.md`)** = dominio. Cada fase es un modulo aislado con
   sub-pasos y criterio de salida.
 - **Reglas (`rules/*.md`)** = invariantes. Se cumplen en todas las fases.
-- **Skills (`skills/*/SKILL.md`)** = agentes especializados invocados
-  segun contexto (socratic, architect, brand-identity, second-brain,
-  devops, security-audit, code-review, flow-guardian, iterate, monitor,
-  onboard-existing, portfolio-publisher, design-research, design-system,
-  tools-integration).
+- **Skills (`$APEX_ROOT/skills/*/SKILL.md`)** = agentes especializados. Los
+  26 tienen frontmatter con `description`, así que el modelo puede invocarlos
+  por sus triggers ES/EN. Por fase: `socratic` (0), `architect` (1-3),
+  `design-research`/`design-system`/`brand-identity` (2), `grill-with-docs`
+  (plan), `brain-to-docs` (volcar visión a wiki/decisions), `prototype`
+  (lógica compleja), `tdd`/`code-review` (5-8), `security-audit` (10),
+  `devops`/`monitor` (11), `iterate` (12-14), `diagnose` (bugs),
+  `improve-architecture` (refactor), `second-brain`/`brainstorming`
+  (conocimiento), `portfolio-publisher` (14), `onboard-existing`/
+  `reverse-engineer` (proyectos existentes), `flow-guardian`/`grader`
+  (gate de fase), `apex-goal` (goal loop), `effective-agent-skills`
+  (crear/revisar skills), `tools-integration` (herramientas externas).
 - **MCP tools (`mcp__apex__*`)** = adapters al context.db + hub.
 
 Aplicacion directa del principio hexagonal + SMA: orquestador delega,

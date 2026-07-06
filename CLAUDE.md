@@ -1,6 +1,6 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-07 (post Sprint 15)
+> Fuente de verdad del estado del proyecto. Última actualización: 2026-07-03 (post Sprint 26 + auditoría de enforcement /apex)
 
 ## Qué es APEX
 
@@ -89,7 +89,7 @@ en `~/RoadToDevOps/apex-hub/`).
     `/api/hub/search-cross-project` en apex-hub
   - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
 
-- [x] **MCP server** completo con 49 tools (Sprints 8-15 cierran esta deuda)
+- [x] **MCP server** completo con 54 tools (Sprints 8-15 cierran esta deuda)
 
 - [x] **Sprint 15 — The Advisor Strategy + reasoning_traces + /prototype** (2026-05-07)
   - **S15.A** (commit `fa65891`): construye la capa preventiva (Advisor
@@ -471,8 +471,8 @@ a la rama `archive/legacy-web` en un chore futuro.
 | Usage data reader (Sprint 13.9) | lib/usage_data_reader.py — `~/.claude/usage-data/` cruce con grader vía heurística temporal | 8 tests |
 | Apex-doctor A5+A6 (Sprint 13.9) | grader_false_positives + friction_recurrence | 12 tests |
 | Wiki Scaffold | Python puro (Markdown)             | Verificado    |
-| Skills        | Markdown (SKILL.md)                | 24 skills (incl. 4 Matt Pocock S14 + /prototype S15) |
-| MCP server    | Python + mcp.server                | 49 tools      |
+| Skills        | Markdown (SKILL.md)                | 26 skills (incl. 4 Matt Pocock S14 + /prototype S15 + effective-agent-skills/brain-to-docs de davidondrej) |
+| MCP server    | Python + mcp.server                | 54 tools      |
 | Advisor (Sprint 15) | lib/advisor.py + subagent apex-advisor (Opus) | build_bundle ≤2500tk, throttle 8 calls, circuit breaker 3/min |
 | Reasoning traces (Sprint 15) | lib/reasoning_traces.py (4 categorías Hermes 3) | logging por fase, ShareGPT export |
 | Skill handoff (Sprint 15) | lib/skill_handoff.py + huérfanos >30 min | flujo Pocock intra-sesión |
@@ -490,7 +490,7 @@ a la rama `archive/legacy-web` en un chore futuro.
 | DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
 | Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
 | Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 484 pasando   |
+| Tests totales | pytest                             | 695 pasando   |
 | Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
 | Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
 

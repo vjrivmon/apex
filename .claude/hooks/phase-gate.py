@@ -96,6 +96,46 @@ def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
         return None
 
 
+def _security_gate_blocks(project_dir: Path) -> tuple[bool, str]:
+    """True si .apex/security/ existe pero alguna capa no esta `passed`.
+
+    Stdlib puro (sin yaml): lee el frontmatter y busca la linea `status:`.
+    Si el dir no existe, no bloquea (proyecto sin AgentArmor). Fail-open
+    ante errores de lectura.
+    """
+    sec_dir = project_dir / ".apex" / "security"
+    if not sec_dir.is_dir():
+        # Fail-CLOSED (auditoría 2026-07-03, C3): llegar a fase 11 (deploy)
+        # sin evidencia AgentArmor bloquea. Un proyecto que despliega DEBE
+        # tener las capas L1-L8. Override con force=True.
+        return True, "sin .apex/security/ (scaffold AgentArmor primero)"
+    layer_files = sorted(sec_dir.glob("L*-*.md"))
+    if not layer_files:
+        return True, "sin capas L*-*.md en .apex/security/"
+    not_passed = []
+    for f in layer_files:
+        try:
+            text = f.read_text(encoding="utf-8")
+        except Exception:
+            not_passed.append(f"{f.stem}(ilegible)")
+            continue
+        status = "pending"
+        if text.startswith("---"):
+            try:
+                end = text.index("---", 3)
+                for line in text[3:end].splitlines():
+                    if line.strip().lower().startswith("status:"):
+                        status = line.split(":", 1)[1].strip().strip('"\'').lower()
+                        break
+            except ValueError:
+                status = "failed"
+        if status != "passed":
+            not_passed.append(f"{f.stem.split('-')[0]}({status})")
+    if not_passed:
+        return True, ", ".join(not_passed)
+    return False, ""
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -115,6 +155,28 @@ def main() -> int:
     if phase_number is None or new_status is None:
         return 0
 
+    # Gate 10.5 (AgentArmor): no entrar a fase 11 (deploy) si alguna capa
+    # de seguridad no esta passed. Independiente del gate del grader.
+    try:
+        _entering_11 = (int(float(phase_number)) == 11
+                        and new_status == "in_progress")
+    except (TypeError, ValueError):
+        _entering_11 = False
+    if _entering_11:
+        _cwd = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+        _blocks, _detail = _security_gate_blocks(_cwd)
+        if _blocks:
+            print(
+                "phase-gate.py BLOQUEA apex_set_phase (gate de seguridad 10.5):\n"
+                f"  Capas no passed: {_detail}\n"
+                "\n"
+                "Resolucion: completa .apex/security/L*-*.md (status: passed) "
+                "y corre apex_security_gate.\n"
+                "Override: pasa force=True con force_reason='...'.",
+                file=sys.stderr,
+            )
+            return 2
+
     blocking_phase = None
     if new_status == "completed":
         blocking_phase = int(phase_number)
@@ -129,7 +191,27 @@ def main() -> int:
         return 0
 
     verdict = _get_latest_verdict(db_path, blocking_phase)
-    if not verdict or not verdict["should_block"]:
+
+    # Fail-CLOSED (auditoría 2026-07-03, C2): CERRAR una fase (completed) exige
+    # un verdict NO bloqueante del grader. Sin verdict → el grader nunca corrió
+    # → bloqueamos y lo exigimos. Es la diferencia entre un gate opt-in (el
+    # agente decide llamar al grader) y uno vinculante. Las transiciones a
+    # in_progress siguen fail-open (solo sugieren rol): el gate muerde al
+    # CERRAR, no al abrir.
+    if new_status == "completed" and verdict is None:
+        print(
+            "phase-gate.py BLOQUEA apex_set_phase (grader no ejecutado):\n"
+            f"  No hay verdict del grader para la fase {blocking_phase}.\n"
+            "  No se puede cerrar una fase sin evaluarla.\n"
+            "\n"
+            "Resolución: corre apex_grader_evaluate(phase="
+            f"{blocking_phase}, ...) y vuelve a intentar.\n"
+            "Override: force=True con force_reason='...' (queda registrado).",
+            file=sys.stderr,
+        )
+        return 2
+
+    if verdict is None or not verdict["should_block"]:
         # Sprint 12: si la transición es a in_progress y la nueva fase
         # tiene rol asociado, sugiere invocarlo (no bloqueante).
         if new_status == "in_progress":

@@ -1,3 +1,8 @@
+---
+name: architect
+description: Propone el tipo correcto de solución y decide arquitectura/stack en fases 1-3 de /apex, tras el socrático y antes del diseño. No todo es "app web con dashboard". Triggers ES/EN — arquitectura, architect, tipo de solución, decidir stack, diseño de sistema, solution type.
+---
+
 # SolutionTypeAdvisor — Propone el tipo correcto de solución
 
 ## Cuándo activar

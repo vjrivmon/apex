@@ -1,0 +1,400 @@
+<title>APEX · Auditoría de enforcement /apex</title>
+<style>
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#14161b; --bg2:#191c22; --card:#1d2129; --ink:#e8e6e0; --ink-soft:#a4a8b2;
+    --line:#2b303a; --accent:#f0a830; --accent-ink:#1a1206;
+    --crit:#e0645a; --crit-bg:#2a1917; --high:#e6a33a; --high-bg:#271f11; --med:#4fb0a5; --med-bg:#122421;
+    --chip:#232833; --chip-ink:#c7cbd4;
+  } }
+  :root {
+    --bg:#efece4; --bg2:#e7e3d8; --card:#faf8f2; --ink:#23262d; --ink-soft:#5c616c;
+    --line:#dcd7c9; --accent:#c07818; --accent-ink:#fff;
+    --crit:#b23a2e; --crit-bg:#f3e2de; --high:#a56b12; --high-bg:#f1e7d3; --med:#2f7d72; --med-bg:#dcece8;
+    --chip:#eae6db; --chip-ink:#454a54;
+  }
+  :root[data-theme="dark"] {
+    --bg:#14161b; --bg2:#191c22; --card:#1d2129; --ink:#e8e6e0; --ink-soft:#a4a8b2;
+    --line:#2b303a; --accent:#f0a830; --accent-ink:#1a1206;
+    --crit:#e0645a; --crit-bg:#2a1917; --high:#e6a33a; --high-bg:#271f11; --med:#4fb0a5; --med-bg:#122421;
+    --chip:#232833; --chip-ink:#c7cbd4;
+  }
+  :root[data-theme="light"] {
+    --bg:#efece4; --bg2:#e7e3d8; --card:#faf8f2; --ink:#23262d; --ink-soft:#5c616c;
+    --line:#dcd7c9; --accent:#c07818; --accent-ink:#fff;
+    --crit:#b23a2e; --crit-bg:#f3e2de; --high:#a56b12; --high-bg:#f1e7d3; --med:#2f7d72; --med-bg:#dcece8;
+    --chip:#eae6db; --chip-ink:#454a54;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .mono { font-family:"SF Mono",ui-monospace,"Cascadia Code",Menlo,Consolas,monospace; }
+  .wrap { max-width:940px; margin:0 auto; padding:clamp(1.5rem,4vw,3.5rem) clamp(1rem,3vw,2rem); }
+
+  header.top { border-bottom:2px solid var(--ink); padding-bottom:1.4rem; margin-bottom:2rem; }
+  .eyebrow { font-size:.72rem; letter-spacing:.22em; text-transform:uppercase; color:var(--accent);
+    font-weight:700; margin:0 0 .5rem; }
+  h1 { font-size:clamp(1.7rem,4.5vw,2.7rem); line-height:1.08; margin:0 0 .6rem; letter-spacing:-.02em;
+    text-wrap:balance; font-weight:800; }
+  .lede { font-size:1.05rem; color:var(--ink-soft); margin:0; max-width:60ch; }
+  .lede b { color:var(--ink); font-weight:600; }
+
+  .readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin:2rem 0 1rem; }
+  .stat { background:var(--card); padding:1rem 1.1rem; }
+  .stat .n { font-size:1.9rem; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+    display:block; line-height:1; }
+  .stat .l { font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft);
+    margin-top:.35rem; display:block; }
+  .stat.c .n { color:var(--crit); } .stat.h .n { color:var(--high); } .stat.m .n { color:var(--med); }
+
+  .pipeline { font-size:.82rem; color:var(--ink-soft); margin:0 0 2.4rem;
+    display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+  .pipeline .mono { color:var(--ink); font-weight:600; }
+  .pipeline .arw { color:var(--accent); }
+
+  .section-label { font-size:.74rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-soft);
+    font-weight:700; margin:0 0 1rem; padding-bottom:.5rem; border-bottom:1px solid var(--line); }
+
+  .cards { display:flex; flex-direction:column; gap:.9rem; }
+  .card { display:flex; background:var(--card); border:1px solid var(--line); border-radius:11px;
+    overflow:hidden; }
+  .stripe { width:5px; flex:none; }
+  .sev-critical .stripe { background:var(--crit); }
+  .sev-high .stripe { background:var(--high); }
+  .sev-medium .stripe { background:var(--med); }
+  .card-body { padding:1.1rem 1.3rem 1.2rem; flex:1; min-width:0; }
+  .card-head { display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap; margin-bottom:.55rem; }
+  .cid { font-family:"SF Mono",ui-monospace,monospace; font-size:.78rem; font-weight:700; color:var(--accent);
+    letter-spacing:.03em; }
+  .card-head h3 { font-size:1.08rem; margin:0; font-weight:700; letter-spacing:-.01em; flex:1; min-width:12rem; }
+  .sev-tag { font-size:.68rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    padding:.2rem .5rem; border-radius:5px; white-space:nowrap; }
+  .sev-tag-critical { background:var(--crit-bg); color:var(--crit); }
+  .sev-tag-high { background:var(--high-bg); color:var(--high); }
+  .sev-tag-medium { background:var(--med-bg); color:var(--med); }
+  .count { font-size:.78rem; color:var(--ink-soft); font-variant-numeric:tabular-nums;
+    font-family:"SF Mono",ui-monospace,monospace; }
+  .desc { margin:0 0 .8rem; font-size:.92rem; color:var(--ink); }
+  .files { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.85rem; }
+  .chip { font-family:"SF Mono",ui-monospace,monospace; font-size:.73rem; background:var(--chip);
+    color:var(--chip-ink); padding:.15rem .5rem; border-radius:5px; }
+  .fix { border-top:1px dashed var(--line); padding-top:.75rem; display:flex; gap:.7rem; align-items:baseline; }
+  .fix-label { font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
+    color:var(--accent-ink); background:var(--accent); padding:.18rem .5rem; border-radius:5px;
+    flex:none; }
+  .fix p { margin:0; font-size:.87rem; color:var(--ink-soft); }
+
+  footer { margin-top:2.5rem; padding-top:1.2rem; border-top:1px solid var(--line);
+    font-size:.8rem; color:var(--ink-soft); }
+  footer .mono { color:var(--ink); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">APEX · Auditoría ultracode · 2026-07-03</p>
+    <h1>Por qué /apex no se ciñe</h1>
+    <p class="lede">Auditoría adversarial multi-agente del mecanismo de enforcement de <b>/apex</b>,
+    con la lente del rubric <b>writing-great-skills</b> de Pocock. La causa raíz de "Claude Code
+    tiene demasiada libertad" no es de wording: es que <b>la fuente de verdad y el artefacto que corre
+    son ficheros distintos</b>, y que el gate es <b>opt-in por el propio agente al que debe restringir</b>.</p>
+  </header>
+
+  <div class="readout">
+    <div class="stat"><span class="n">60</span><span class="l">Hallazgos verificados</span></div>
+    <div class="stat"><span class="n">18</span><span class="l">Causas raíz distintas</span></div>
+    <div class="stat c"><span class="n">7</span><span class="l">Críticas</span></div>
+    <div class="stat h"><span class="n">8</span><span class="l">Altas</span></div>
+    <div class="stat m"><span class="n">3</span><span class="l">Medias</span></div>
+  </div>
+  <p class="pipeline">
+    <span class="mono">6 cazadores</span><span class="arw">→</span>
+    <span class="mono">53 crudos</span><span class="arw">→</span>
+    <span>dedup <span class="mono">52</span></span><span class="arw">→</span>
+    <span>verificación adversarial <span class="mono">48 sobreviven</span> (4 refutados)</span><span class="arw">→</span>
+    <span>crítico <span class="mono">+12</span></span>
+    <span style="margin-left:auto">59 agentes · 3.3M tokens</span>
+  </p>
+
+  <p class="section-label">18 causas raíz · ordenadas por severidad</p>
+  <div class="cards">
+    
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C1</span>
+          <h3>La copia global stale es lo que se ejecuta</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×6</span>
+        </header>
+        <p class="desc">El /apex que Claude Code corre en cada proyecto es una copia fisica de 772L del 15-abr en ~/.claude/commands/, no el router de 329L del repo. Divergen hace meses. Cada fix al repo tiene efecto CERO en runs reales. La global no menciona grader, gate, roles ni doctor.</p>
+        <div class="files"><span class="chip">apex.md</span><span class="chip">apex.md (repo router)</span><span class="chip">apex_audit.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Make the running /apex command point at the maintained repo router so the enforcement tools are in scope (symlink ~/.claude/commands/apex.md to the repo, or a build step that copies it). But per the fail-open nature of phase-gate.py (missing grader verdict =&gt; transition allowed, line 190-191), do NOT rely on command prose remembering to call the grader: make the grader/close gate fail-closed in phase-gate.py — when transitioning a phase to &#x27;completed&#x27; (or the next phase to in_progress) and NO verdict exists for the phase being closed, block with an instruction to run apex_grader_evaluate first, rather than returning 0. Keep the force=True escape hatch. This arms enforcement independently of which command text is loaded.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C18</span>
+          <h3>Varios (schema 10.5, tool-discovery, silent skip)</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×5</span>
+        </header>
+        <p class="desc">set_phase(10.5) viola el schema integer/max-14, el gate obligatorio no se puede registrar. init salta silenciosamente la instalacion de hooks si ya hay settings.json. ToolSearch(apex) se pide como prosa, nada verifica que cargo.</p>
+        <div class="files"><span class="chip">apex.md</span><span class="chip">apex_server.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Merge instead of skip: read the existing settings.json, deep-merge the APEX hook arrays (dedup by command string), write back. If a conflicting matcher exists, surface it loudly in the tool result (&#x27;AVISO: no pude registrar phase-gate, ya hay un PreToolUse en apex_set_phase — resuelve manualmente&#x27;). Never return &#x27;ya existe&#x27; as if enforcement is in place.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C2</span>
+          <h3>El gate de fase falla-abierto (opt-in)</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×8</span>
+        </header>
+        <p class="desc">phase-gate.py deja pasar cualquier transicion cuando NO hay verdict del grader (if not verdict: return 0). El agente solo llama apex_grader_evaluate si quiere. En 10 de 15 fases no hay checks deterministas, asi que nunca hay verdict y nunca bloquea. El guardian es opt-in por el actor que debe restringir.</p>
+        <div class="files"><span class="chip">00-socratic.md (and 01,03,04,07,09,10,13,14)</span><span class="chip">apex_server.py</span><span class="chip">phase-gate.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Invert the default to fail-closed for status=&#x27;completed&#x27; transitions in BOTH enforcement layers, not just the hook: (1) In phase-gate.py main(), when new_status == &#x27;completed&#x27; and no verdict exists for blocking_phase, exit 2 with a message telling the agent to run apex_grader_evaluate first. (2) In apex_server.py apex_set_phase handler (line ~1835), add a symmetric branch: if new_status == &#x27;completed&#x27; and verdict is None and not force, return the BLOCKED message instead of falling through to db.set_phase. Keep the existing force=True/force_reason escape hatch (which already logs an override apex_add_error). Allow status=&#x27;in_progress&#x27; transitions without a verdict (the previous-phase gate still applies to those via blocking_phase = phase-1). Fixing only the hook is insufficient because the MCP handler has the same fail-open guard and would still allow the transition if the hook were bypassed or absent (e.g. the hook only installs in guided projects, not at user level).</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C3</span>
+          <h3>El gate 10.5 de seguridad tiene agujeros</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">_security_gate_blocks devuelve False cuando .apex/security/ no existe (proyecto nuevo, deploy libre). Solo dispara en set_phase(11); un deploy por Bash lo evita. El status: passed es frontmatter que el propio agente escribe.</p>
+        <div class="files"><span class="chip">phase-gate.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Make phase-11 entry fail-closed for the missing/empty security dir case in BOTH enforcement layers (the claim only cites the hook, but mcp/apex_server.py:78-91 shares the identical gap — fixing only the hook leaves the MCP handler fail-open). On entering phase 11 (status in_progress), if `.apex/security/` is missing OR contains fewer than 8 L*-*.md layer files, BLOCK (exit 2 in the hook / error TextContent in the handler) with an instruction to run phase 10.5 / apex_security_gate(scaffold=True) first, unless force=True with a documented force_reason (which already logs a critical apex_add_error). Keep fail-open ONLY for genuine read errors (unreadable files, locked DB), not for the absent-directory case. Apply symmetrically so the hook and handler agree.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C4</span>
+          <h3>Sin guarda de progresion secuencial</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">apex_set_phase permite saltar de fase 2 a 8 sin verificar las intermedias. Marcar in_progress solo mira el verdict de la fase ANTERIOR. El onboarding B.2 marca fases completed sin grader.</p>
+        <div class="files"><span class="chip">apex.md</span><span class="chip">apex_server.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>In both the apex_set_phase handler (mcp/apex_server.py) and the phase-gate.py PreToolUse hook, before allowing a transition to phase N (in_progress or completed), load all phases via get_all_phases() and block if any phase in 0..N-1 is not in {completed, skipped}. The `skipped` status already exists in the enum and schema — reuse it: require it to be set explicitly (with a documented reason recorded as an error/decision, mirroring the existing force_reason override path) so skips are auditable rather than silent. Keep the existing grader-verdict and security-gate checks; this adds the missing monotonic-progression predicate they never covered.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C5</span>
+          <h3>init no escribe binding local (CLAUDE.md)</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">apex_init_project crea .apex/, wiki y hooks, pero NO escribe un CLAUDE.md en el proyecto. Las 20 reglas absolutas nunca entran en el contexto always-on. Ningun SessionStart anuncia que el proyecto es APEX ni que se corra /apex.</p>
+        <div class="files"><span class="chip">apex_server.py</span><span class="chip">session-start.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>In apex_init_project, after create_wiki and before/after _install_project_hooks, write a project-root CLAUDE.md idempotently — do NOT clobber an existing one; if it exists, append a delimited APEX block (e.g. between `&lt;!-- APEX:BEGIN --&gt;`/`&lt;!-- APEX:END --&gt;` markers) and skip if the block is already present. The block must (a) state the project is APEX-guided, (b) inline the 20 absolute rules verbatim from commands/rules/absolute-rules.md with their leading imperative words (SIEMPRE/NUNCA) intact — do NOT rely on a relative pointer, since the guided project&#x27;s filesystem lacks commands/rules/, and (c) instruct the agent to run /apex and ToolSearch(\&quot;apex\&quot;) at the start of every session. Since guided projects lack commands/rules/, either inline the rule text directly (preferred — keeps it in the always-loaded layer) or copy absolute-rules.md into .apex/rules/ at init and reference the absolute path. Mirror the existing idempotency pattern already used by _install_project_hooks (exists-and-not-force → skip; force → overwrite). Add a test asserting a CLAUDE.md containing rule-leading words exists after init and that a second init does not duplicate the block.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-critical">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C6</span>
+          <h3>Fases y skills no llegan al proyecto guiado</h3>
+          <span class="sev-tag sev-tag-critical">Crítico</span>
+          <span class="count" title="hallazgos verificados en este cluster">×2</span>
+        </header>
+        <p class="desc">El router delega a commands/phases/NN.md y skills/*/SKILL.md con rutas relativas al repo apex. El filesystem del proyecto guiado NO contiene esos archivos, los reads fallan desde un CWD ajeno.</p>
+        <div class="files"><span class="chip">apex.md</span><span class="chip">apex_server.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Two viable installs; pick one and make it part of apex_init_project (or a dedicated one-time step mirroring apex_install_roles): (A) Copy the phase-referenced skills into the project&#x27;s `.apex/skills/` and rewrite every phase pointer from `skills/&lt;name&gt;/SKILL.md` to `$CLAUDE_PROJECT_DIR/.apex/skills/&lt;name&gt;/SKILL.md`; or (B) install them namespaced to `~/.claude/skills/apex-&lt;name&gt;/` so Claude Code loads them globally (avoids collisions with the existing apex-memory-recall etc.). Skills that must be autonomously reachable also need YAML frontmatter (15 of 24 currently lack it: architect, socratic, devops, security-audit, design-system, brand-identity, iterate, monitor, onboard-existing, reverse-engineer, second-brain, tools-integration, code-review, design-research, brainstorming). Add a startup check in the router (commands/apex.md) that verifies each referenced skill resolves and warns loudly if not. Note this overlaps with the sibling finding that guided projects lack the commands/ directory entirely — a full fix must relocate BOTH the phase files and the skills out of repo-relative paths.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C10</span>
+          <h3>Checks del grader debiles / stale</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">El grader trata tests y contratos de schema faltantes como NO bloqueantes (fase 9 pasa con 0 tests). Un verdict PASS se reusa para siempre: evidence_hash se guarda pero nunca se compara. No hay checks nuevos para fases 9,10,12.</p>
+        <div class="files"><span class="chip">context_db.py</span><span class="chip">grader.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Make BLOCKING_ISSUES phase-aware rather than a flat set. In evaluate_deterministic, promote ISSUE_NO_TESTS to blocking when evidence.phase &gt;= 9 (its stated exit criterion in apex.md:161) and ISSUE_NO_SCHEMA to blocking when evidence.phase &gt;= 7. Concretely, replace the flat `any(i in BLOCKING_ISSUES ...)` with a helper is_blocking(issue, phase) that consults a per-phase escalation map, keeping these issues advisory at earlier phases and binding at the phase where they are the exit criterion. Additionally consider defaulting apex_grader_evaluate to mode=&#x27;full&#x27; (or having phase 9 explicitly request full mode) so the LLM judge is not silently skipped, though the deterministic fix above is what gives the tests criterion teeth regardless of LLM availability.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C11</span>
+          <h3>El comando /apex no tiene frontmatter</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×1</span>
+        </header>
+        <p class="desc">Ni el router ni la copia global tienen frontmatter YAML (description, argument-hint). Claude Code no tiene metadata para invocarlo de forma consistente.</p>
+        <div class="files"><span class="chip">apex.md</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Add frontmatter with a `description` that lets the model reach it (&#x27;Guided phased development; invoke before writing code in an APEX project&#x27;). Consider `allowed-tools` scoping per-phase, or at minimum document that phase gating must precede Write/Edit.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C12</span>
+          <h3>Fases 0-4 sin entry gate</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×1</span>
+        </header>
+        <p class="desc">Justo las fases donde mas deriva reporta el usuario (socratico, solution-type, design, spec, edge-cases) no tienen ningun gate de entrada.</p>
+        <div class="files"><span class="chip">00-socratic.md</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Wire apex_phase_entry_check into phases 0-4 too, and give each a machine-verifiable exit artifact the entry check of the NEXT phase can assert exists (e.g. phase 2 must have produced a validated DESIGN.md; phase 3 a SPEC with referenced tokens; phase 4 an EDGE-CASES.md with &gt;=N entries). Gate on artifact presence, not prose.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C13</span>
+          <h3>Arquitectura: prosa+MCP-opcional no puede ser binding</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×1</span>
+        </header>
+        <p class="desc">Fallo de diseno de fondo: comando de prosa + tool MCP opcional + PreToolUse sobre una tool de bookkeeping NUNCA puede ser vinculante. El agente puede ignorar la prosa y no llamar la tool. Requiere cambio arquitectonico, no de wording.</p>
+        <div class="files"><span class="chip">phase-gate.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Move enforcement onto the acting surface: add PreToolUse hooks on Write/Edit/Bash that consult the current phase from context.db and BLOCK edits inconsistent with the active phase (e.g. no source writes before phase 5 scaffold is entered; no deploy commands before 10.5 passed). Gate the effects, not the bookkeeping. This is the architectural change — a phase-aware guard on Write/Edit/Bash — not a wording change.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C14</span>
+          <h3>Skills huerfanos y solapados</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×5</span>
+        </header>
+        <p class="desc">architect (fase 1) y security-audit (fase 10) no los referencia ninguna fase. design-system/design-research/brand-identity solapan mucho. grader y flow-guardian se pisan. La lista de skills del router es prosa sin triggers.</p>
+        <div class="files"><span class="chip">01-solution-type.md</span><span class="chip">02-design.md</span><span class="chip">SKILL.md</span><span class="chip">apex.md</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Add a &quot;## Skills recomendadas&quot; section to phase 01 pointing at the architect skill (invoke before [1b] to frame solution-type by frequency-of-use / user-profile fit) and to phase 10 pointing at the security-audit skill (invoke before the manual [10a]-[10e] checklist), reusing the exact `- **`skill-name`** — ...` pattern phases 09/12 already use. Also add YAML frontmatter (name + description with ES/EN triggers) to both skills/architect/SKILL.md and skills/security-audit/SKILL.md so Claude Code&#x27;s native skill index can fire them autonomously. Note phase 10&#x27;s redundancy with apex_security_gate/10.5 is partial (it covers secret-scanning but not the skill&#x27;s broader OWASP ASI Top-10 / AgentArmor-layer reasoning), so the pointer still adds value there.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C16</span>
+          <h3>Rutas hardcodeadas / DB equivocada</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">El hook user-level hardcodea ~/RoadToDevOps/apex. El settings.json instalado hardcodea el .venv y hooks de apex, no portable. phase-gate.py puede leer la DB equivocada sin CLAUDE_PROJECT_DIR.</p>
+        <div class="files"><span class="chip">apex_server.py</span><span class="chip">phase-gate.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Do not trust cwd. The MCP set_phase call already knows the project root; pass it (or the resolved db path) into the tool_input so the hook reads tool_input, not the environment. Alternatively have the hook refuse (exit 2) if it cannot unambiguously locate the SAME .apex the set_phase call targets, rather than silently allowing.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C7</span>
+          <h3>16 de 24 skills sin frontmatter</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×2</span>
+        </header>
+        <p class="desc">16 skills core (architect, socratic, iterate, devops...) no tienen name/description, asi que el modelo nunca puede invocarlos autonomamente. Solo los 8 de S14/S15 lo tienen.</p>
+        <div class="files"><span class="chip">SKILL.md</span><span class="chip">SKILL.md (+ architect, iterate, devops, monitor, onboard-existing, tools-integration, reverse-engineer, second-brain, portfolio-publisher, design-research, design-system, brand-identity, code-review, security-audit, brainstorming)</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>For every legacy skill that should be model-invoked (architect, socratic, code-review, security-audit, devops, monitor, brainstorming, design-research, design-system, brand-identity, onboard-existing, iterate, reverse-engineer, second-brain, tools-integration, portfolio-publisher), add YAML frontmatter with `name` and an English+Spanish `description` containing concrete trigger phrases that mirror the existing &#x27;Cuándo activar&#x27; bodies — exactly the pattern the 8 Sprint-14/15 skills already follow (see skills/tdd/SKILL.md). Note the one existing exception: brand-identity is already reachable via an explicit resolvable path from commands/phases/02-design.md:136, so for genuinely phase-internal skills the alternative is to reference them ONLY by such an explicit `skills/&lt;name&gt;/SKILL.md` path from the owning phase and delete the misleading &#x27;Cuándo activar&#x27; heading. Do not leave a skill with a &#x27;Cuándo activar&#x27; section but no frontmatter and no path reference, since that state is unreachable by either mechanism (15 of the 16 legacy skills are currently in exactly this state).</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-high">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C8</span>
+          <h3>Criterios de cierre difusos (premature completion)</h3>
+          <span class="sev-tag sev-tag-high">Alto</span>
+          <span class="count" title="hallazgos verificados en este cluster">×3</span>
+        </header>
+        <p class="desc">El criterio de cierre es prosa no verificable: todos los sub-pasos verificados, 30 edge cases, coverage 80% que el agente se auto-atribuye. Sin check maquina, el agente se declara hecho antes de tiempo.</p>
+        <div class="files"><span class="chip">04-edge-cases.md</span><span class="chip">apex.md</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Make &quot;verified&quot; a concrete machine-readable predicate. Introduce a per-phase sub-step registry (either parse the [Na] markers from commands/phases/NN-*.md at phase entry, or seed a phase_substeps table) and a completion record keyed by (phase, substep_id) — distinct from the free-form next_steps table that apex_complete_step currently writes to. Then extend BOTH enforcement points (phase-gate.py and the MCP apex_set_phase handler) to refuse the status=&quot;completed&quot; transition unless every declared sub-step for that phase has a completion row, i.e. an exhaustive &quot;every sub-step accounted for&quot; check. Because this compounds with the fail-open grader (no verdict =&gt; transition allowed), the same change should also treat a missing grader verdict as blocking-by-default (fail-closed) for the completed transition, with the existing force=True escape hatch remaining the only bypass and being logged as apex_add_error.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-medium">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C15</span>
+          <h3>Reglas sin leading words</h3>
+          <span class="sev-tag sev-tag-medium">Medio</span>
+          <span class="count" title="hallazgos verificados en este cluster">×2</span>
+        </header>
+        <p class="desc">Las 20 reglas absolutas son prosa plana sin vocabulario ancla, con duplicacion. Pocock: un leading word repetido ancla comportamiento con pocos tokens.</p>
+        <div class="files"><span class="chip">absolute-rules.md</span><span class="chip">apex.md</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Refactor absolute-rules.md into 4-6 leading-word clusters and reuse the token everywhere it is currently re-paraphrased: GATE (grader pass, security 10.5, phase-entry), EVIDENCE (log every decision/error/component via apex_*), DESIGN-ARTIFACT (no visual decision without a mockup; &gt;=2 design tools), CROSS-PROJECT (retrieval before structural decisions), VERIFY-BEFORE-SHOW (Playwright before presenting UI), plus a small STYLE cluster (ES tildes, editorial width, no emojis-as-icons). Then have apex.md and each phase exit criterion reference the cluster token instead of re-paraphrasing the sentence (kills the apex.md:170-171 and phase-exit duplication). Collapse errors-to-avoid.md into the same clusters since it is a near-total restatement, and fix the CLAUDE.md:64 count (&quot;11 errores&quot; -&gt; actual 17, or drop the hardcoded number). Consider deleting or demoting the low-marginal-value ordering rules (#6, #16) that the sequential-step format already enforces. Note this is a documentation-DRY/consistency fix: these rules are never runtime-injected (only cited in prose), so there is no enforcement change, only reduced drift risk.</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-medium">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C17</span>
+          <h3>Deriva de conteos en la doc</h3>
+          <span class="sev-tag sev-tag-medium">Medio</span>
+          <span class="count" title="hallazgos verificados en este cluster">×7</span>
+        </header>
+        <p class="desc">CLAUDE.md dice 54/49/42/38/37 tools en sitios distintos; router lista 37 de 54; header post Sprint 15 pero van S16-20; 14 fases vs indice 0 a 14; roles.py se contradice sobre apex-devops.</p>
+        <div class="files"><span class="chip">CLAUDE.md</span><span class="chip">README.md</span><span class="chip">apex.md</span><span class="chip">apex_server.py</span><span class="chip">roles.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Refresh the header on each sprint close, or drop the date line entirely and point to git history for the current state. Regenerate the Hooks stack-table cell mechanically from `ls .claude/hooks/*.py` (count = 11: advice-injector, advisor-outcome-watch, advisor-trigger, context-watch, end-of-day-doctor, phase-gate, post-tool-archive, session-start, skill-forge-watch, trace-prompt, weekly-design-lint) and use exact filenames (weekly-design-lint, not design-lint). Designate commands/rules/errors-to-avoid.md (17 entries) as the single canonical error list and have CLAUDE.md and the global apex.md reference it by path instead of maintaining divergent copies (currently 11 and 18).</p></div>
+      </div>
+    </article>
+
+    <article class="card sev-medium">
+      <div class="stripe"></div>
+      <div class="card-body">
+        <header class="card-head">
+          <span class="cid">C9</span>
+          <h3>force=True es auto-certificacion sin friccion</h3>
+          <span class="sev-tag sev-tag-medium">Medio</span>
+          <span class="count" title="hallazgos verificados en este cluster">×2</span>
+        </header>
+        <p class="desc">Cada gate tiene un escape force=True que el propio agente pasa, con un force_reason de texto libre que nadie valida. El agente se auto-aprueba el bypass.</p>
+        <div class="files"><span class="chip">apex_server.py</span></div>
+        <div class="fix"><span class="fix-label">Fix</span><p>Two-tier fix. Tier 1 (cheap, immediate): reject force when force_reason is empty/whitespace instead of substituting &quot;(sin razón documentada)&quot; and proceeding — return an error TextContent from apex_set_phase and have phase-gate.py return 2 (block) when `args.get(&quot;force&quot;)` is set but force_reason is blank, rather than `return 0`. Make force_reason actually required-on-force by validating it in code (schema `required` can&#x27;t express the conditional, so enforce it in the handler). Tier 2 (real out-of-band gate): require an env var like APEX_ALLOW_OVERRIDE set by the human, or a force_reason that must match a human-provided token persisted in context.db, so the model cannot self-issue the override. Without Tier 2 the gate remains advisory-to-the-caller; Tier 1 only raises the cost of a silent bypass.</p></div>
+      </div>
+    </article>
+  </div>
+
+  <footer>
+    Cada tarjeta agrupa hallazgos verificados que comparten causa raíz (<span class="mono">×N</span> = hallazgos en el cluster).
+    Severidad tras corrección del verificador adversarial. Superficie: <span class="mono">commands/apex.md</span>,
+    <span class="mono">rules/</span>, 17 fases, <span class="mono">apex_init_project</span> + hooks, 24 skills, <span class="mono">grader.py</span>, <span class="mono">phase-gate.py</span>.
+  </footer>
+</div>

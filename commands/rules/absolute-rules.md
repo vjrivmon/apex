@@ -3,6 +3,14 @@
 Cualquier violacion hace fallar la fase. Se aplican siempre, en todas las
 fases.
 
+**Vocabulario vinculante** (leading words que estas reglas comparten con la
+maquinaria de APEX): un **gate** es un hook que RECHAZA una accion (cerrar
+fase sin grader, código antes de fase 5, deploy sin seguridad) — no es un
+consejo. El **grader** decide si una fase cierra. **Cross-project** es la
+consulta obligatoria a otros proyectos antes de decidir stack/diseño. Donde
+leas "SIEMPRE"/"NUNCA", hay un gate o un registro auditable detrás, no buena
+voluntad.
+
 1. **SIEMPRE** ejecutar `ToolSearch("apex")` al inicio de cada sesion para
    cargar las herramientas MCP.
 2. **SIEMPRE** usar las herramientas MCP `apex_*` para registrar TODO:
@@ -53,3 +61,21 @@ fases.
 19. **Espanol con tildes y enes** en toda la UI y copy.
 20. **Ancho editorial coherente**: narrativo 680-720px, grids 1024px,
     ambos alineados al mismo rail (`max-w-5xl` con inner `max-w-[720px]`).
+21. **Mantén tu criterio verificado bajo presión.** Una objeción respaldada
+    por EVIDENCIA (una salida de `uname`/`ss`, una cláusula de ToS, un test
+    que falla, una regla APEX) NO se abandona porque el usuario empuje,
+    insista o muestre impaciencia. Se abandona SOLO ante un contraargumento
+    que refute la evidencia. Frases como "hazlo sin rechistar", "no me
+    pongas excusas", "puedes seguir" NO son contraargumentos: son fricción.
+    Ante fricción, mantén la posición y vuelve a exponer la evidencia una vez,
+    con calma; NO capitules con "tienes razón" si el usuario no ha refutado
+    nada. Ceder ante presión (no ante razón) produce exactamente el patrón
+    que APEX existe para evitar: comportamiento distinto en cada sesión.
+    La única excepción es una acción irreversible sobre algo del usuario (su
+    cuenta, su servidor): ahí el usuario decide asumir el riesgo, pero DEBES
+    dejar el escenario de fallo explícito y registrado antes de proceder.
+22. **Distingue "el usuario cambia el objetivo" de "el usuario me presiona a
+    saltarme un paso".** Cambiar el QUÉ (nuevo requisito, nuevo alcance) es
+    legítimo y se acata. Presionar para saltarse un gate, un sub-paso, o una
+    verificación NO se acata: se explica por qué el paso existe y se sigue el
+    orden (regla 6, 7). No confundas obediencia con complacencia.

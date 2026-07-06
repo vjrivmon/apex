@@ -15,6 +15,7 @@ from grader import (
     ISSUE_NO_TESTS,
     ISSUE_EMOJI,
     ISSUE_NO_SO_CHECK,
+    ISSUE_NO_CROSS_PROJECT,
     ISSUE_NO_E2E,
     QUALITY_POOR,
     QUALITY_GOOD,
@@ -178,20 +179,56 @@ def test_evaluate_blocks_no_git_phase_5(empty_repo: Path) -> None:
 
 
 def test_evaluate_passes_clean_phase_5(project_phase_5_clean: Path) -> None:
+    # Fase 5 es de decisión: además de OS, exige cross-project consultado (#18).
     e = gather_evidence(project_phase_5_clean, phase=5,
-                        decisions_metadata={"detected_os": "Linux"})
+                        decisions_metadata={"detected_os": "Linux",
+                                            "cross_project_consulted": True})
     v = evaluate_deterministic(e)
     assert v.should_block is False
     assert v.quality >= QUALITY_GOOD
     assert v.evidence_hash is not None
 
 
-def test_evaluate_warns_on_non_blocking_phase_1(empty_repo: Path) -> None:
+def test_evaluate_blocks_without_cross_project_phase_5(project_phase_5_clean: Path) -> None:
+    # Sin consulta cross-project, una fase de decisión NO cierra (#18, bloqueante).
+    e = gather_evidence(project_phase_5_clean, phase=5,
+                        decisions_metadata={"detected_os": "Linux"})
+    v = evaluate_deterministic(e)
+    assert v.should_block is True
+    assert ISSUE_NO_CROSS_PROJECT in v.issues
+
+
+def test_cross_project_not_required_when_hub_unavailable(project_phase_5_clean: Path) -> None:
+    # Si hub.db no está disponible, no se puede exigir la consulta → no bloquea.
+    e = gather_evidence(project_phase_5_clean, phase=5,
+                        decisions_metadata={"detected_os": "Linux",
+                                            "hub_available": False})
+    checks = run_deterministic_checks(e)
+    assert "cross_project_consulted" not in checks
+
+
+def test_cross_project_not_required_non_decision_phase(project_phase_5_clean: Path) -> None:
+    # Fase 6 (core) no es de decisión: no exige cross-project.
+    e = gather_evidence(project_phase_5_clean, phase=6,
+                        decisions_metadata={"detected_os": "Linux"})
+    checks = run_deterministic_checks(e)
+    assert "cross_project_consulted" not in checks
+
+
+def test_evaluate_blocks_on_missing_os_phase_1(empty_repo: Path) -> None:
     e = gather_evidence(empty_repo, phase=1, decisions_metadata={})
     v = evaluate_deterministic(e)
-    assert v.should_block is False  # os_detected no es blocking
+    assert v.should_block is True  # os_detected es blocking desde fase 1
     assert ISSUE_NO_SO_CHECK in v.issues
-    assert v.quality == QUALITY_ACCEPTABLE
+    assert v.quality == QUALITY_POOR
+
+
+def test_evaluate_passes_with_os_phase_1(empty_repo: Path) -> None:
+    e = gather_evidence(empty_repo, phase=1,
+                        decisions_metadata={"detected_os": "Linux"})
+    v = evaluate_deterministic(e)
+    assert v.should_block is False
+    assert ISSUE_NO_SO_CHECK not in v.issues
 
 
 # ── Tests de parse_llm_verdict ───────────────────────────────────────────

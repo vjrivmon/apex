@@ -229,3 +229,73 @@ class TestSearch:
         run(db.add_decision("stack", "Python FastAPI", "Backend-first"))
         results = run(db.search("backend"))
         assert len(results) >= 1
+
+
+class TestFtsIdempotency:
+    """Sprint S21 — el indice FTS debe ser idempotente y respetar
+    decisiones invalidadas (hallazgo critico de la auditoria 2026-06-26)."""
+
+    def _fts_count(self, db, source, source_id):
+        async def q():
+            async with db._conn() as conn:
+                rows = await conn.execute_fetchall(
+                    "SELECT COUNT(*) FROM context_fts WHERE source=? AND source_id=?",
+                    (source, str(source_id)))
+                return rows[0][0]
+        return run(q())
+
+    def test_invalidated_decision_drops_out_of_search(self, db):
+        run(db.initialize())
+        did = run(db.add_decision("stack", "MongoDB elegido", "documentos"))
+        assert any("MongoDB" in r["content"] for r in run(db.search("MongoDB")))
+        run(db.invalidate_decision(did, reason="cambiamos a Postgres"))
+        # ya no debe aparecer en search ni en search_hybrid
+        assert not any("MongoDB" in r["content"] for r in run(db.search("MongoDB")))
+        assert not any("MongoDB" in r["content"]
+                       for r in run(db.search_hybrid("MongoDB")))
+        assert self._fts_count(db, "decision", did) == 0
+
+    def test_wiki_reedit_does_not_duplicate_fts_row(self, db):
+        run(db.initialize())
+        run(db.add_wiki_page("entities/x", "X", "primera version"))
+        run(db.add_wiki_page("entities/x", "X", "segunda version"))
+        # INSERT OR REPLACE en wiki_pages + _index_fts idempotente => 1 fila
+        assert self._fts_count(db, "wiki", "entities/x") == 1
+        # y refleja el contenido nuevo, no el viejo
+        res = run(db.search("segunda"))
+        assert any("segunda" in r["content"] for r in res)
+        assert not any("primera" in r["content"] for r in run(db.search("primera")))
+
+    def test_cleanup_fts_repairs_legacy_duplicates_and_invalidated(self, db):
+        run(db.initialize())
+        # Simular dano heredado: dos decisiones, una invalidada SIN pasar por
+        # el path nuevo (insertamos a mano filas FTS duplicadas y obsoletas).
+        keep = run(db.add_decision("stack", "Redis cache", "rapido"))
+
+        async def corrupt():
+            async with db._conn() as conn:
+                # duplicado de la decision vigente
+                await conn.execute(
+                    "INSERT INTO context_fts (content, source, source_id) "
+                    "VALUES ('Redis cache dup', 'decision', ?)", (str(keep),))
+                # decision invalidada cuyo FTS quedo huerfano
+                await conn.execute(
+                    "INSERT INTO decisions (phase, category, decision, reasoning, "
+                    "alternatives, valid_from, invalid_from) "
+                    "VALUES (NULL, 'stack', 'Memcached', 'viejo', '', "
+                    "datetime('now'), datetime('now'))")
+                rid = (await conn.execute_fetchall(
+                    "SELECT id FROM decisions WHERE decision='Memcached'"))[0][0]
+                await conn.execute(
+                    "INSERT INTO context_fts (content, source, source_id) "
+                    "VALUES ('Memcached', 'decision', ?)", (str(rid),))
+                await conn.commit()
+        run(corrupt())
+
+        assert self._fts_count(db, "decision", keep) == 2  # dup presente
+        report = run(db.cleanup_fts())
+        assert report["dedup"] >= 1
+        assert report["invalidated"] >= 1
+        assert self._fts_count(db, "decision", keep) == 1  # dedup ok
+        assert not any("Memcached" in r["content"]
+                       for r in run(db.search("Memcached")))  # invalidada fuera

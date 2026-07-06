@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import platform
 import sys
 from pathlib import Path
 
@@ -73,6 +74,24 @@ from security_gate import (
     write_report as _write_security_report,
     scaffold_templates as _scaffold_security_templates,
 )
+
+
+def _security_gate_blocks() -> bool:
+    """True si el gate 10.5 NO pasa al entrar a fase 11 (deploy).
+
+    Fail-CLOSED (auditoría 2026-07-03, C3): llegar a deploy SIN `.apex/security/`
+    también bloquea — un proyecto que despliega debe tener evidencia AgentArmor.
+    Antes (Sprint 26) el dir ausente no bloqueaba (fail-open). Override con
+    force=True. Best-effort: ante error inesperado de lectura, no bloquea para
+    no colgar el flujo por un bug de la maquinaria.
+    """
+    try:
+        root = _find_project_root()
+        if not (root / ".apex" / "security").is_dir():
+            return True
+        return not _check_security_gate(root).passed
+    except Exception:
+        return False
 from reverse_engineer import (
     scan_project as _reverse_scan,
     render_report_md as _render_reverse_report,
@@ -285,6 +304,155 @@ def _find_project_root() -> Path:
     return cwd
 
 
+# Hooks que se instalan en proyectos guiados. Se excluyen a proposito:
+#   - session-start.py: ya esta registrado a nivel usuario (~/.claude),
+#     registrarlo aqui duplicaria la inyeccion de contexto cross-project.
+#   - weekly-design-lint.py: solo tiene sentido en proyectos de diseno;
+#     ensuciaria la wiki de proyectos no-UI.
+_PROJECT_HOOKS = {
+    "PreToolUse": [
+        ("mcp__apex__apex_set_phase", ["phase-gate.py"]),
+        ("Write|Edit|MultiEdit", ["code-before-phase5-gate.py"]),
+    ],
+    "PostToolUse": [("", [
+        "post-tool-archive.py", "skill-forge-watch.py",
+        "advisor-trigger.py", "trace-prompt.py",
+    ])],
+    "UserPromptSubmit": [("", [
+        "context-watch.py", "end-of-day-doctor.py",
+        "advice-injector.py", "advisor-outcome-watch.py",
+    ])],
+}
+
+
+def _build_project_settings() -> dict:
+    """settings.json para un proyecto guiado: apunta al venv y a los hooks
+    del repo apex por ruta absoluta, para que el harness corra fuera del
+    propio repo apex sin duplicar scripts ni necesitar un venv local."""
+    py = str(_apex_root / ".venv" / "bin" / "python3")
+    hooks_dir = _apex_root / ".claude" / "hooks"
+
+    def _cmd(script: str) -> dict:
+        return {"type": "command",
+                "command": f"{py} {hooks_dir / script}"}
+
+    hooks: dict = {}
+    for event, groups in _PROJECT_HOOKS.items():
+        hooks[event] = [
+            {"matcher": matcher, "hooks": [_cmd(s) for s in scripts]}
+            for matcher, scripts in groups
+        ]
+    return {"hooks": hooks}
+
+
+def _install_project_hooks(root: Path, force: bool = False) -> str:
+    """Escribe <root>/.claude/settings.json con el registro de hooks APEX.
+
+    Idempotente: si ya existe y no es force, no lo toca. Si el dir es el
+    propio repo apex, no hace nada (ya tiene su settings.json canonico).
+    """
+    if root.resolve() == _apex_root.resolve():
+        return "settings.json: omitido (es el repo apex)"
+    settings_path = root / ".claude" / "settings.json"
+    if settings_path.exists() and not force:
+        return f"settings.json: ya existe en {settings_path} (usa force para sobrescribir)"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(_build_project_settings(), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8")
+    n = sum(len(s) for groups in _PROJECT_HOOKS.values() for _, s in groups)
+    return f"settings.json: {n} hooks registrados en {settings_path}"
+
+
+_CLAUDE_MD_BEGIN = "<!-- APEX:BEGIN -->"
+_CLAUDE_MD_END = "<!-- APEX:END -->"
+
+
+def _apex_claude_md_block(project_name: str) -> str:
+    """Bloque APEX para el CLAUDE.md del proyecto guiado.
+
+    Auditoría 2026-07-03 (C5): CLAUDE.md es el ÚNICO fichero que Claude Code
+    carga incondicionalmente cada turno. Si init no lo escribe, las reglas
+    absolutas viven solo tras un context pointer que el agente puede no seguir.
+    Este bloque las inlinea en el layer always-on, con `gate` como leading word.
+    """
+    return f"""{_CLAUDE_MD_BEGIN}
+## APEX — Proyecto guiado (no editar este bloque a mano)
+
+Este proyecto (**{project_name}**) se desarrolla con APEX. En CADA sesión:
+
+1. Ejecuta `ToolSearch("apex")` y luego `/apex` — retoma la fase actual.
+2. Las fases 0-14 son SECUENCIALES. Un **gate** bloquea cerrar una fase sin
+   pasar el grader (`apex_grader_evaluate`) y escribir código antes de fase 5.
+   Estos gates son vinculantes (hooks), no consejos.
+
+### Reglas absolutas (violarlas hace fallar la fase)
+
+- **SIEMPRE** registra decisiones/errores/componentes con las tools `apex_*`.
+  El contexto vive en `.apex/context.db`, no en tu memoria de sesión.
+- **NUNCA** generes código antes de fase 5 (0-4 son análisis y diseño). Un
+  **gate** lo bloquea.
+- **NUNCA** cierres una fase sin TODOS sus sub-pasos verificados por el grader.
+- **NUNCA** uses emojis como iconos. Lucide/Phosphor/Heroicons/SVG. (error x3 proyectos)
+- **NUNCA** describas un diseño visual con texto: mockup en herramienta de diseño.
+- **SIEMPRE** `uname -s` antes de proponer stack dependiente de plataforma.
+- **SIEMPRE** verifica frontend con Playwright ANTES de presentarlo.
+- **SIEMPRE** `apex_search_cross_project(query)` (o `apex_phase_entry_check`)
+  antes de decisiones de stack/diseño. En fases 0/2/3/5 es un **gate**: el
+  grader BLOQUEA cerrar la fase si no consultaste hub.db. No es opcional.
+- **NUNCA** preguntes qué sub-paso hacer primero: son secuenciales, sigue el orden.
+- **NUNCA** inventes decisiones de diseño: si hay duda, `AskUserQuestion`.
+- **Español con tildes y eñes** en toda UI y copy.
+- Arquitectura hexagonal + SMA por defecto; parte lo que crezca >400 líneas o haga 3 cosas.
+
+### Postura bajo presión (por qué el proceso es el mismo cada sesión)
+
+- **No cedas tu criterio verificado ante presión.** Si comprobaste algo
+  (`uname`, `ss`, un ToS, un test que falla, una regla APEX) y el usuario
+  empuja sin refutarlo ("hazlo sin rechistar", "no me pongas excusas"),
+  mantén la posición y reexpón la evidencia UNA vez. No digas "tienes razón"
+  a algo que nadie ha rebatido. Ceder ante presión (no ante razón) es
+  exactamente lo que produce "cada sesión algo distinto".
+- **Cambiar el objetivo se acata; saltarse un gate/sub-paso NO.** Un requisito
+  nuevo es legítimo; brincar una verificación no lo es.
+- Excepción: acción irreversible sobre algo tuyo (cuenta, servidor) → tú
+  decides asumir el riesgo, pero el agente deja el escenario de fallo explícito.
+
+El detalle completo de cada fase vive en el repo APEX; `/apex` lo carga bajo demanda.
+{_CLAUDE_MD_END}
+"""
+
+
+def _install_project_claude_md(root: Path, project_name: str,
+                               force: bool = False) -> str:
+    """Escribe/inyecta el bloque APEX en <root>/CLAUDE.md (idempotente).
+
+    - Sin CLAUDE.md → lo crea con el bloque.
+    - CLAUDE.md sin bloque APEX → antepone el bloque (preserva el resto).
+    - CLAUDE.md con bloque APEX → lo reemplaza si force, si no lo deja.
+    - En el propio repo apex: omitido (ya tiene su CLAUDE.md canónico).
+    """
+    if root.resolve() == _apex_root.resolve():
+        return "CLAUDE.md: omitido (es el repo apex)"
+    path = root / "CLAUDE.md"
+    block = _apex_claude_md_block(project_name)
+    if not path.exists():
+        path.write_text(block, encoding="utf-8")
+        return f"CLAUDE.md: creado con bloque APEX en {path}"
+    existing = path.read_text(encoding="utf-8")
+    if _CLAUDE_MD_BEGIN in existing:
+        if not force:
+            return "CLAUDE.md: ya tiene bloque APEX (usa force para regenerar)"
+        start = existing.index(_CLAUDE_MD_BEGIN)
+        end = existing.index(_CLAUDE_MD_END) + len(_CLAUDE_MD_END)
+        new = existing[:start] + block.rstrip("\n") + existing[end:]
+        path.write_text(new, encoding="utf-8")
+        return f"CLAUDE.md: bloque APEX regenerado en {path}"
+    # Existe pero sin bloque: anteponer, preservando el contenido del usuario.
+    path.write_text(block + "\n" + existing, encoding="utf-8")
+    return f"CLAUDE.md: bloque APEX antepuesto en {path}"
+
+
 _INITIALIZED_DB_PATHS: set[str] = set()
 
 
@@ -313,6 +481,39 @@ async def _ensure_db_schema(db: ApexContextDB) -> None:
 # --- Cross-project retrieval (lectura de apex-hub/data/hub.db) ---
 
 _HUB_DB = _HUB_DIR / "data" / "hub.db"
+
+# Palabras vacías que no discriminan y que, al ser AND implícito en FTS5,
+# vaciaban el resultado (p.ej. "errores" iba en cada query de fase y forzaba
+# que cada hit la contuviese literalmente).
+_FTS_STOPWORDS = {
+    "errores", "error", "de", "la", "el", "los", "las", "y", "o", "en",
+    "con", "para", "the", "a", "an", "of", "and", "or",
+}
+
+
+def _build_fts_or_query(query: str) -> str:
+    """Convierte una consulta multi-palabra en una disyunción FTS5 (OR).
+
+    FTS5 `MATCH "a b c"` es AND implícito: exige las tres palabras en la misma
+    fila, lo que devolvía 0 hits para queries como
+    "scaffold hexagonal estructura errores". Tokenizamos, quitamos stopwords y
+    caracteres especiales de FTS5, y unimos con OR para que cualquier término
+    relevante haga match (rank ordena por relevancia). Best-effort: si tras
+    filtrar no queda nada, cae al término más largo del original.
+    """
+    import re
+
+    raw_tokens = re.findall(r"[0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", query.lower())
+    tokens = [t for t in raw_tokens if len(t) >= 3 and t not in _FTS_STOPWORDS]
+    if not tokens:
+        # Nada útil tras filtrar: usa el token más largo del original (o vacío).
+        tokens = sorted(raw_tokens, key=len, reverse=True)[:1]
+    if not tokens:
+        return ""
+    # Dedup preservando orden.
+    seen: set = set()
+    uniq = [t for t in tokens if not (t in seen or seen.add(t))]
+    return " OR ".join(uniq)
 
 
 def _search_cross_project(query: str, limit: int = 8, exclude_project: str | None = None) -> dict:
@@ -349,12 +550,17 @@ def _search_cross_project(query: str, limit: int = 8, exclude_project: str | Non
         # FTS5 sobre hub_search: source_type ∈ {error, decision, component, wiki, session}
         # Nota: no usamos alias (`hs.`) porque FTS5 rechaza referencias a columnas
         # UNINDEXED a través de alias de tabla.
+        # AND implícito de FTS5 vaciaba el resultado; usamos disyunción OR.
+        or_q = _build_fts_or_query(fts_q)
+        if not or_q:
+            return {**empty, "hub_available": True}
+
         sql = (
             "SELECT project_id, source_type, source_id, "
             "snippet(hub_search, 3, '[', ']', '...', 24) AS snip, rank "
             "FROM hub_search WHERE hub_search MATCH ?"
         )
-        params: list = [fts_q]
+        params: list = [or_q]
         if exclude_project:
             sql += " AND project_id != ?"
             params.append(exclude_project)
@@ -364,7 +570,7 @@ def _search_cross_project(query: str, limit: int = 8, exclude_project: str | Non
         try:
             rows = [dict(r) for r in conn.execute(sql, params)]
         except sqlite3.OperationalError:
-            # Sintaxis FTS5 inválida → reintento como frase
+            # Sintaxis FTS5 inválida → reintento como frase exacta del original
             try:
                 rows = [dict(r) for r in conn.execute(sql, [f'"{fts_q}"', *params[1:]])]
             except sqlite3.OperationalError:
@@ -410,6 +616,26 @@ def _search_cross_project(query: str, limit: int = 8, exclude_project: str | Non
         }
     finally:
         conn.close()
+
+
+async def _mark_cross_project_consulted(db, phase: int | None) -> None:
+    """Registra en project_meta que se consultó hub.db para la fase actual.
+
+    El grader (fase 0,2,3,5) exige este flag para cerrar la fase — regla
+    absoluta #18. Best-effort: si falla el registro, no rompe el retrieval.
+    """
+    if phase is None:
+        try:
+            cur = await db.get_current_phase()
+            phase = cur["number"] if cur else None
+        except Exception:
+            phase = None
+    if phase is None:
+        return
+    try:
+        await db.set_meta(f"cross_project_consulted_phase_{int(phase)}", "true")
+    except Exception:
+        pass
 
 
 def _recurrent_errors_cross_project(limit: int = 5, exclude_project: str | None = None) -> list[dict]:
@@ -475,6 +701,8 @@ async def list_tools() -> list[Tool]:
                     "description": {"type": "string", "description": "Descripción breve"},
                     "solution_type": {"type": "string", "description": "Tipo de solución (cli/bot/mcp/app/agent/streamlit)"},
                     "domain": {"type": "string", "description": "Dominio del proyecto (ej: supermercados, educación)"},
+                    "install_hooks": {"type": "boolean", "default": True, "description": "Registra los hooks APEX en .claude/settings.json del proyecto (default true)"},
+                    "force_hooks": {"type": "boolean", "default": False, "description": "Sobrescribe un .claude/settings.json existente"},
                 },
                 "required": ["name"],
             },
@@ -515,7 +743,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "category": {
                         "type": "string",
-                        "enum": ["architecture", "stack", "design", "data", "security", "deploy", "ux", "testing"],
+                        "enum": ["architecture", "stack", "design", "data", "security", "deploy", "ux", "testing", "solution_type", "detected", "launch", "maintenance", "performance"],
                         "description": "Categoría de la decisión",
                     },
                     "decision": {"type": "string", "description": "Qué se decidió (markdown)"},
@@ -1729,6 +1957,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             root = _find_project_root()
             await db.initialize()
             await db.set_meta("nombre", arguments["name"])
+            await db.set_meta("detected_os", platform.system() or "unknown")
             if arguments.get("description"):
                 await db.set_meta("descripción", arguments["description"])
             if arguments.get("solution_type"):
@@ -1736,7 +1965,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             # Crear wiki scaffold
             domain = arguments.get("domain", "")
             wiki_dir = create_wiki(str(root), arguments["name"], domain)
-            result = [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
+            # Instala el harness (hooks) en el proyecto guiado salvo opt-out.
+            hooks_msg = ""
+            if arguments.get("install_hooks", True):
+                _force = bool(arguments.get("force_hooks", False))
+                hooks_msg = "\n- " + _install_project_hooks(root, force=_force)
+                # C5: binding always-on. CLAUDE.md mete las 20 reglas en el
+                # contexto que Claude Code carga cada turno del proyecto guiado.
+                hooks_msg += "\n- " + _install_project_claude_md(
+                    root, arguments["name"], force=_force)
+            result = [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}{hooks_msg}")]
 
         elif name == "apex_set_phase":
             phase_n = arguments["phase_number"]
@@ -1750,7 +1988,45 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if blocking_phase is not None and blocking_phase >= 0:
                 verdict = await db.get_latest_verdict(blocking_phase)
 
-            if verdict and verdict.get("should_block") and not force:
+            # Guarda de progresión secuencial (auditoría 2026-07-03, C4): no se
+            # puede ABRIR una fase saltándose fases previas incompletas. Evita
+            # que el agente pase de fase 2 a 8 sin pasar por 3-7.
+            _seq_gap = None
+            if new_status == "in_progress" and not force and isinstance(phase_n, int) and phase_n > 0:
+                _all = await db.get_all_phases()
+                _by_num = {p["number"]: p for p in _all}
+                _skipped = [n for n in range(0, phase_n)
+                            if _by_num.get(n) and _by_num[n]["status"] not in ("completed", "in_progress")]
+                if _skipped:
+                    _seq_gap = _skipped
+
+            # Fail-CLOSED (auditoría 2026-07-03, C2): CERRAR una fase exige un
+            # verdict del grader. Sin verdict → el grader nunca corrió → se
+            # bloquea. Espeja al hook phase-gate.py; el dispatcher es la red de
+            # respaldo si el hook no está instalado.
+            _no_verdict_close = (new_status == "completed"
+                                 and blocking_phase is not None and blocking_phase >= 0
+                                 and verdict is None and not force)
+
+            if _seq_gap is not None:
+                msg_lines = [
+                    f"BLOQUEADO por progresión secuencial (C4):",
+                    f"  Para abrir la fase {phase_n} faltan fases previas sin empezar: {_seq_gap}",
+                    "",
+                    "Las fases son secuenciales. Cierra las previas antes de saltar.",
+                    "Para bypassear: apex_set_phase(..., force=True, force_reason='...').",
+                ]
+                result = [TextContent(type="text", text="\n".join(msg_lines))]
+            elif _no_verdict_close:
+                msg_lines = [
+                    f"BLOQUEADO: fase {blocking_phase} no tiene verdict del grader.",
+                    "  No se puede cerrar una fase sin evaluarla.",
+                    "",
+                    f"Para resolver: corre apex_grader_evaluate(phase={blocking_phase}, ...).",
+                    "Para bypassear: apex_set_phase(..., force=True, force_reason='...').",
+                ]
+                result = [TextContent(type="text", text="\n".join(msg_lines))]
+            elif verdict and verdict.get("should_block") and not force:
                 msg_lines = [
                     f"BLOQUEADO por grader (verdict #{verdict['id']} de fase {blocking_phase}):",
                     f"  Quality: {verdict['quality']}/4",
@@ -1761,7 +2037,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "Para resolver: ataca los issues y vuelve a llamar apex_grader_evaluate.",
                 ]
                 result = [TextContent(type="text", text="\n".join(msg_lines))]
+            elif (phase_n == 11 and new_status == "in_progress"
+                  and not force and _security_gate_blocks()):
+                # Gate 10.5 (AgentArmor): no se entra a fase 11 (deploy) si
+                # alguna capa L1-L8 no esta en `status: passed`.
+                _root = _find_project_root()
+                _report = _check_security_gate(_root)
+                _failed = ", ".join(
+                    f"{l.layer}({l.status})" for l in _report.failed_layers
+                ) or "(desconocidas)"
+                msg_lines = [
+                    "BLOQUEADO por gate de seguridad 10.5 (AgentArmor):",
+                    f"  Capas no passed: {_failed}",
+                    "",
+                    "Para resolver: completa las capas en .apex/security/L*-*.md "
+                    "(status: passed) y corre apex_security_gate para verificar.",
+                    "Para bypassear: apex_set_phase(..., force=True, "
+                    "force_reason='...').",
+                ]
+                result = [TextContent(type="text", text="\n".join(msg_lines))]
             else:
+                if (phase_n == 11 and new_status == "in_progress"
+                        and force and _security_gate_blocks()):
+                    # override documentado del gate de seguridad
+                    await db.add_error(
+                        source="claude",
+                        description="Override del gate de seguridad 10.5 al entrar a fase 11",
+                        lesson=force_reason or "(sin razon documentada)",
+                        phase=10,
+                        severity="critical",
+                    )
                 if verdict and verdict.get("should_block") and force:
                     # registra el override como error con la razón
                     await db.add_error(
@@ -2001,6 +2306,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 root = _find_project_root()
                 current_project = root.name.lower().replace(" ", "-")
             hits = _search_cross_project(query, limit=limit, exclude_project=current_project)
+            if hits["hub_available"]:
+                # Registra la consulta para satisfacer el gate del grader (#18).
+                await _mark_cross_project_consulted(db, None)
             if not hits["hub_available"]:
                 result = [TextContent(type="text", text=(
                     f"hub.db no disponible en {_HUB_DB}. Lanza apex-hub (python -m backend en "
@@ -2042,14 +2350,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             phase = arguments["phase"]
             context_hint = arguments.get("context_hint", "")
 
-            # Queries dirigidas por fase — no genéricas
+            # Queries dirigidas por fase. Multi-palabra: el retrieval las
+            # tokeniza y las une con OR (ver _build_fts_or_query), así que NO
+            # hace falta stuffing de "errores" — antes forzaba AND y vaciaba.
             _PHASE_QUERIES = {
-                5: ["scaffold hexagonal estructura errores", "git init secretos env"],
-                6: ["domain logic pure core errores", "entidades casos de uso tests"],
-                7: ["database adapter migraciones errores", "LLM adapter infraestructura"],
-                8: ["integration end-to-end errores", "mock datos hardcoded frontend"],
-                9: ["tests coverage playwright errores", "edge cases regresion"],
-                10: ["seguridad OWASP secretos errores", "rate limit headers auth"],
+                0: ["mercado competidores dominio", "value proposition problema real"],
+                2: ["diseño paleta tipografia stack", "arquitectura frontend backend"],
+                3: ["modelo datos spec entidades", "api contrato esquema"],
+                5: ["scaffold hexagonal estructura", "git secretos entorno"],
+                6: ["dominio logica core entidades", "casos uso tests"],
+                7: ["database adapter migraciones", "LLM adapter infraestructura"],
+                8: ["integration end-to-end", "mock datos hardcoded frontend"],
+                9: ["tests coverage playwright", "edge cases regresion"],
+                10: ["seguridad OWASP secretos", "rate limit headers auth"],
             }
 
             lines = [f"## Gate de entrada — Fase {phase}"]
@@ -2101,6 +2414,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         all_decisions.append(d)
 
             hub_ok = _HUB_DB.exists()
+            if hub_ok:
+                # El entry-check hace el retrieval por el agente: cuenta como
+                # consulta cross-project para el gate del grader (#18).
+                await _mark_cross_project_consulted(db, phase)
 
             # 3. Bloque visual auditable
             lines.append("### Lecciones cross-project aplicadas")
@@ -2337,8 +2654,22 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             try:
                 decisions_meta = {}
                 _os = await db.get_meta("detected_os")
+                if not _os:
+                    # Auto-heal: proyectos inicializados antes de que
+                    # apex_init_project escribiera detected_os no tienen el
+                    # valor. Sin esto, no_so_detection (bloqueante) los
+                    # dejaba atascados en cada fase. Lo escribimos ahora.
+                    _os = platform.system() or "unknown"
+                    try:
+                        await db.set_meta("detected_os", _os)
+                    except Exception:
+                        pass
                 if _os:
                     decisions_meta["detected_os"] = _os
+                # Flag cross-project (#18): ¿se consultó hub.db para esta fase?
+                decisions_meta["hub_available"] = _HUB_DB.exists()
+                _cp = await db.get_meta(f"cross_project_consulted_phase_{phase_n}")
+                decisions_meta["cross_project_consulted"] = (_cp == "true")
             except Exception:
                 decisions_meta = {}
 

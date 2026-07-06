@@ -523,6 +523,9 @@ class ApexContextDB:
             await db.execute(
                 "UPDATE decisions SET invalid_from=datetime('now'), superseded_by=? WHERE id=?",
                 (superseded_by, decision_id))
+            # Sacar del indice FTS: una decision invalidada no debe seguir
+            # apareciendo en search()/search_hybrid().
+            await self._delete_fts(db, "decision", decision_id)
             # Registrar en log (no en errors, para evitar nested connection)
             if reason:
                 await db.execute(
@@ -1208,13 +1211,67 @@ class ApexContextDB:
 
     async def _index_fts(self, db: aiosqlite.Connection, content: str,
                          source: str, source_id) -> None:
+        sid = str(source_id) if source_id else ""
         try:
+            # Idempotente: borra la fila previa de este (source, source_id)
+            # antes de insertar, para que re-editar una wiki o re-indexar una
+            # decision no acumule duplicados en el indice FTS.
+            await db.execute(
+                "DELETE FROM context_fts WHERE source=? AND source_id=?",
+                (source, sid))
             await db.execute(
                 "INSERT INTO context_fts (content, source, source_id) VALUES (?, ?, ?)",
-                (content, source, str(source_id) if source_id else ""))
+                (content, source, sid))
             await db.commit()
         except Exception:
             pass
+
+    async def _delete_fts(self, db: aiosqlite.Connection,
+                          source: str, source_id) -> None:
+        """Saca una fila del indice FTS (ej: decision invalidada)."""
+        sid = str(source_id) if source_id else ""
+        try:
+            await db.execute(
+                "DELETE FROM context_fts WHERE source=? AND source_id=?",
+                (source, sid))
+            await db.commit()
+        except Exception:
+            pass
+
+    async def cleanup_fts(self) -> dict:
+        """Repara indices FTS ya contaminados (pase one-shot sobre BDs viejas).
+
+        Dos clases de basura acumulada antes de hacer _index_fts idempotente:
+        1. Filas duplicadas con la misma (source, source_id) -> deja solo la
+           mas reciente (mayor rowid).
+        2. Filas FTS de decisiones ya invalidadas (invalid_from IS NOT NULL)
+           que seguian apareciendo en search().
+
+        Devuelve {"dedup": n, "invalidated": m}.
+        """
+        dedup = invalidated = 0
+        async with self._conn() as db:
+            # 1. Dedup: por cada (source, source_id) con >1 fila, borra todas
+            #    menos el rowid maximo.
+            rows = await db.execute_fetchall(
+                "SELECT source, source_id, COUNT(*) c, MAX(rowid) keep "
+                "FROM context_fts GROUP BY source, source_id HAVING c > 1")
+            for source, source_id, _c, keep in rows:
+                cur = await db.execute(
+                    "DELETE FROM context_fts "
+                    "WHERE source=? AND source_id=? AND rowid<>?",
+                    (source, source_id, keep))
+                dedup += cur.rowcount or 0
+            # 2. Decisiones invalidadas que siguen en FTS.
+            inv = await db.execute_fetchall(
+                "SELECT id FROM decisions WHERE invalid_from IS NOT NULL")
+            for (did,) in inv:
+                cur = await db.execute(
+                    "DELETE FROM context_fts WHERE source='decision' AND source_id=?",
+                    (str(did),))
+                invalidated += cur.rowcount or 0
+            await db.commit()
+        return {"dedup": dedup, "invalidated": invalidated}
 
     # ── Grader verdicts (Sprint 8) ──
 

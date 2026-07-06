@@ -13,7 +13,7 @@ Para features, bugs y mejoras post-deploy.
 - **[12c]** Si es **bug**: Diagnosticar (reproducir, localizar, causa raiz).
   Fix minimo (cambiar lo menos posible). Test que cubra el bug (rojo sin
   fix, verde con fix). Registrar con
-  `apex_add_error(error="...", solution="...", lesson="...")`.
+  `apex_add_error(source="claude", description="...", lesson="...", severity="...")`.
 - **[12d]** Si es **mejora/refactor**: Medir ANTES (tiempo, memoria, lineas,
   complejidad). Optimizar. Medir DESPUES y comparar. Solo mergear si la
   mejora es medible.

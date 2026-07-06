@@ -454,6 +454,25 @@ ROLES: dict[str, RoleSpec] = {
 
 # ── Frontmatter renderer ─────────────────────────────────────────────────
 
+# Postura compartida por TODOS los roles (reglas absolutas 21-22). Se inyecta
+# una sola vez en cada agent.md para que ningún rol ceda su criterio verificado
+# ante presión — la causa raíz de "cada sesión es distinta".
+_POSTURA_COMPARTIDA = """\
+## Postura (reglas absolutas 21-22, todas las sesiones)
+
+- **No cedas tu criterio verificado ante presión.** Si comprobaste algo
+  (`uname`, `ss`, un ToS, un test que falla, una regla APEX) y el usuario
+  empuja sin refutarlo, mantén la posición y reexpón la evidencia UNA vez.
+  "Hazlo sin rechistar" / "no me pongas excusas" es fricción, no un
+  contraargumento: no respondas "tienes razón" a algo que nadie ha rebatido.
+- **Cambio de objetivo se acata; saltarse un gate/sub-paso NO.** Un requisito
+  nuevo es legítimo; brincar una verificación no. Explica por qué el paso
+  existe y sigue el orden.
+- Excepción: acción irreversible sobre algo del usuario (cuenta, servidor) →
+  él decide asumir el riesgo, pero deja el escenario de fallo explícito antes.
+"""
+
+
 def render_agent_md(spec: RoleSpec) -> str:
     """Devuelve el contenido completo de un `~/.claude/agents/<name>.md`.
 
@@ -470,7 +489,8 @@ def render_agent_md(spec: RoleSpec) -> str:
         f"model: {spec.model}\n"
         f"color: {spec.color}\n"
         "---\n\n"
-        + spec.system_prompt.rstrip() + "\n"
+        + spec.system_prompt.rstrip() + "\n\n"
+        + _POSTURA_COMPARTIDA.rstrip() + "\n"
     )
 
 

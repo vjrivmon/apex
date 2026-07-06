@@ -140,6 +140,73 @@ def test_search_cross_project_excludes_current_project(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Regresión: el bug AND→OR (los términos de la query están repartidos en
+# filas DISTINTAS, como en el hub.db real). Con AND implícito el retrieval
+# devolvía 0 hits; con OR debe encontrar la fila relevante.
+# ---------------------------------------------------------------------------
+
+def _make_hub_db_split_terms(path: Path) -> None:
+    """hub.db donde NINGUNA fila contiene todas las palabras de la query.
+
+    Reproduce el caso real: cada error habla de una cosa. La query de fase
+    'scaffold hexagonal estructura errores' no matchea ninguna fila con AND,
+    pero 'scaffold' sí matchea una con OR.
+    """
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE errors (id INTEGER PRIMARY KEY, project_id TEXT,
+            description TEXT, lesson TEXT, severity TEXT, recurrence_count INTEGER,
+            phase INTEGER);
+        CREATE VIRTUAL TABLE hub_search USING fts5(
+            project_id UNINDEXED, source_type UNINDEXED, source_id UNINDEXED,
+            content, tokenize='porter ascii');
+        INSERT INTO errors VALUES
+            (1, 'focusnow', 'Frontend con datos mock hardcodeados', 'Nunca mock', 'critical', 3, 8),
+            (2, 'meridian', 'No hubo scaffold hexagonal inicial', 'Estructura por capas', 'high', 1, 5);
+        INSERT INTO hub_search VALUES
+            ('focusnow', 'error', 1, 'frontend datos mock hardcodeados integracion'),
+            ('meridian', 'error', 2, 'scaffold backend por capas sin acoplar');
+    """)
+    conn.commit()
+    conn.close()
+
+
+def test_and_query_would_return_zero_but_or_finds_it(tmp_path, monkeypatch):
+    """El bug real: query multi-palabra cuyos términos están en filas distintas."""
+    hub_db = tmp_path / "hub.db"
+    _make_hub_db_split_terms(hub_db)
+    import apex_server as srv
+    monkeypatch.setattr(srv, "_HUB_DB", hub_db)
+
+    # Con AND (comportamiento viejo) esto daría 0; con OR debe encontrar meridian.
+    hits = srv._search_cross_project("scaffold hexagonal estructura errores", limit=5)
+    assert hits["hub_available"] is True
+    assert len(hits["errors"]) >= 1
+    assert any("scaffold" in e["description"].lower() for e in hits["errors"])
+
+
+def test_or_query_finds_mock_error_split_row(tmp_path, monkeypatch):
+    """La lección de mock hardcoded se recupera aunque 'mock' sea 1 de 4 términos."""
+    hub_db = tmp_path / "hub.db"
+    _make_hub_db_split_terms(hub_db)
+    import apex_server as srv
+    monkeypatch.setattr(srv, "_HUB_DB", hub_db)
+
+    hits = srv._search_cross_project("mock datos hardcoded frontend", limit=5)
+    assert any("mock" in e["description"].lower() for e in hits["errors"])
+
+
+def test_build_fts_or_query_strips_stopwords_and_joins_or():
+    import apex_server as srv
+    assert srv._build_fts_or_query("scaffold hexagonal estructura errores") == \
+        "scaffold OR hexagonal OR estructura"
+    # 'errores' (stopword) y 'de'/'la' se filtran; dedup preserva orden.
+    assert srv._build_fts_or_query("la caja de la caja") == "caja"
+    # Query vacía → cadena vacía (el caller la trata como sin hits).
+    assert srv._build_fts_or_query("   ") == ""
+
+
+# ---------------------------------------------------------------------------
 # Tests del bloque visual (formato auditable)
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,191 @@
+%%% -*-BibTeX-*-
+%%% Do NOT edit. File created by BibTeX with style
+%%% ACM-Reference-Format-Journals [18-Jan-2012].
+
+\begin{thebibliography}{11}
+
+%%% ====================================================================
+%%% NOTE TO THE USER: you can override these defaults by providing
+%%% customized versions of any of these macros before the \bibliography
+%%% command.  Each of them MUST provide its own final punctuation,
+%%% except for \shownote{}, \showDOI{}, and \showURL{}.  The latter two
+%%% do not use final punctuation, in order to avoid confusing it with
+%%% the Web address.
+%%%
+%%% To suppress output of a particular field, define its macro to expand
+%%% to an empty string, or better, \unskip, like this:
+%%%
+%%% \newcommand{\showDOI}[1]{\unskip}   % LaTeX syntax
+%%%
+%%% \def \showDOI #1{\unskip}           % plain TeX syntax
+%%%
+%%% ====================================================================
+
+\ifx \showCODEN    \undefined \def \showCODEN     #1{\unskip}     \fi
+\ifx \showDOI      \undefined \def \showDOI       #1{#1}\fi
+\ifx \showISBNx    \undefined \def \showISBNx     #1{\unskip}     \fi
+\ifx \showISBNxiii \undefined \def \showISBNxiii  #1{\unskip}     \fi
+\ifx \showISSN     \undefined \def \showISSN      #1{\unskip}     \fi
+\ifx \showLCCN     \undefined \def \showLCCN      #1{\unskip}     \fi
+\ifx \shownote     \undefined \def \shownote      #1{#1}          \fi
+\ifx \showarticletitle \undefined \def \showarticletitle #1{#1}   \fi
+\ifx \showURL      \undefined \def \showURL       {\relax}        \fi
+% The following commands are used for tagged output and should be
+% invisible to TeX
+\providecommand\bibfield[2]{#2}
+\providecommand\bibinfo[2]{#2}
+\providecommand\natexlab[1]{#1}
+\providecommand\showeprint[2][]{arXiv:#2}
+
+\bibitem[{Anthropic}(2024)]%
+        {anthropic2024mcp}
+\bibfield{author}{\bibinfo{person}{{Anthropic}}.}
+  \bibinfo{year}{2024}\natexlab{}.
+\newblock \bibinfo{title}{Introducing the {Model Context Protocol}}.
+\newblock
+  \bibinfo{howpublished}{\url{https://www.anthropic.com/news/model-context-protocol}}.
+\newblock
+\newblock
+\shownote{Accessed 2026-05}.
+
+
+\bibitem[{Anthropic}(2025)]%
+        {anthropic2025cc}
+\bibfield{author}{\bibinfo{person}{{Anthropic}}.}
+  \bibinfo{year}{2025}\natexlab{}.
+\newblock \bibinfo{title}{{Claude Code}}.
+\newblock
+  \bibinfo{howpublished}{\url{https://docs.anthropic.com/en/docs/claude-code}}.
+\newblock
+\newblock
+\shownote{Accessed 2026-05}.
+
+
+\bibitem[Banerjee et~al\mbox{.}(2026)]%
+        {banerjee2026severa}
+\bibfield{author}{\bibinfo{person}{Debangshu Banerjee},
+  \bibinfo{person}{Changming Xu}, \bibinfo{person}{Eugene Ie},
+  \bibinfo{person}{Ming Zhang}, \bibinfo{person}{Daiyi Peng},
+  \bibinfo{person}{Chu-Cheng Lin}, {and} \bibinfo{person}{Gagandeep Singh}.}
+  \bibinfo{year}{2026}\natexlab{}.
+\newblock \bibinfo{title}{{SEVerA}: Verified Synthesis of Self-Evolving
+  Agents}.
+\newblock \bibinfo{howpublished}{arXiv:2603.25111}.
+\newblock
+\showeprint[arxiv]{2603.25111}~[cs.LG]
+
+
+\bibitem[Fang et~al\mbox{.}(2025)]%
+        {fang2025selfevolve}
+\bibfield{author}{\bibinfo{person}{Jinyuan Fang}, \bibinfo{person}{Yanwen
+  Peng}, \bibinfo{person}{Xi Zhang}, \bibinfo{person}{Yingxu Wang},
+  \bibinfo{person}{Xinhao Yi}, \bibinfo{person}{Guibin Zhang},
+  \bibinfo{person}{Yi Xu}, \bibinfo{person}{Bin Wu}, \bibinfo{person}{Siwei
+  Liu}, \bibinfo{person}{Zihao Li}, \bibinfo{person}{Zhaochun Ren},
+  \bibinfo{person}{Nikos Aletras}, \bibinfo{person}{Xi Wang},
+  \bibinfo{person}{Han Zhou}, {and} \bibinfo{person}{Zaiqiao Meng}.}
+  \bibinfo{year}{2025}\natexlab{}.
+\newblock \bibinfo{title}{A Comprehensive Survey of Self-Evolving {AI} Agents:
+  A New Paradigm Bridging Foundation Models and Lifelong Agentic Systems}.
+\newblock \bibinfo{howpublished}{arXiv:2508.07407}.
+\newblock
+\showeprint[arxiv]{2508.07407}~[cs.AI]
+
+
+\bibitem[{LangChain}(2024)]%
+        {langgraph2024}
+\bibfield{author}{\bibinfo{person}{{LangChain}}.}
+  \bibinfo{year}{2024}\natexlab{}.
+\newblock \bibinfo{title}{{LangGraph}}.
+\newblock
+  \bibinfo{howpublished}{\url{https://github.com/langchain-ai/langgraph}}.
+\newblock
+\newblock
+\shownote{Accessed 2026-05}.
+
+
+\bibitem[Liu et~al\mbox{.}(2026)]%
+        {liu2026divecc}
+\bibfield{author}{\bibinfo{person}{Jiacheng Liu}, \bibinfo{person}{Xiaohan
+  Zhao}, \bibinfo{person}{Xinyi Shang}, {and} \bibinfo{person}{Zhiqiang Shen}.}
+  \bibinfo{year}{2026}\natexlab{}.
+\newblock \bibinfo{title}{Dive into {Claude Code}: The Design Space of Today's
+  and Future {AI} Agent Systems}.
+\newblock \bibinfo{howpublished}{arXiv:2604.14228}.
+\newblock
+\showeprint[arxiv]{2604.14228}~[cs.SE]
+
+
+\bibitem[Nakajima(2023)]%
+        {babyagi2023}
+\bibfield{author}{\bibinfo{person}{Yohei Nakajima}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \bibinfo{title}{{BabyAGI}}.
+\newblock
+  \bibinfo{howpublished}{\url{https://github.com/yoheinakajima/babyagi}}.
+\newblock
+\newblock
+\shownote{Accessed 2026-05}.
+
+
+\bibitem[Nechepurenko and Shuvalov(2026)]%
+        {nechepurenko2026coord}
+\bibfield{author}{\bibinfo{person}{Maksym Nechepurenko} {and}
+  \bibinfo{person}{Pavel Shuvalov}.} \bibinfo{year}{2026}\natexlab{}.
+\newblock \bibinfo{title}{Coordination as an Architectural Layer for
+  {LLM}-Based Multi-Agent Systems}.
+\newblock \bibinfo{howpublished}{arXiv:2605.03310}.
+\newblock
+\showeprint[arxiv]{2605.03310}~[cs.MA]
+
+
+\bibitem[{Significant Gravitas}(2023)]%
+        {autogpt2023}
+\bibfield{author}{\bibinfo{person}{{Significant Gravitas}}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \bibinfo{title}{{AutoGPT}}.
+\newblock
+  \bibinfo{howpublished}{\url{https://github.com/Significant-Gravitas/AutoGPT}}.
+\newblock
+\newblock
+\shownote{Accessed 2026-05}.
+
+
+\bibitem[Wu et~al\mbox{.}(2023)]%
+        {wu2023autogen}
+\bibfield{author}{\bibinfo{person}{Qingyun Wu}, \bibinfo{person}{Gagan Bansal},
+  \bibinfo{person}{Jieyu Zhang}, \bibinfo{person}{Yiran Wu},
+  \bibinfo{person}{Beibin Li}, \bibinfo{person}{Erkang Zhu},
+  \bibinfo{person}{Li Jiang}, \bibinfo{person}{Xiaoyun Zhang},
+  \bibinfo{person}{Shaokun Zhang}, \bibinfo{person}{Jiale Liu},
+  \bibinfo{person}{Ahmed~Hassan Awadallah}, \bibinfo{person}{Ryen~W. White},
+  \bibinfo{person}{Doug Burger}, {and} \bibinfo{person}{Chi Wang}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \bibinfo{title}{{AutoGen}: Enabling Next-Gen {LLM} Applications via
+  Multi-Agent Conversation}.
+\newblock \bibinfo{howpublished}{arXiv:2308.08155}.
+\newblock
+\showeprint[arxiv]{2308.08155}~[cs.AI]
+
+
+\bibitem[Zhou et~al\mbox{.}(2026)]%
+        {zhou2026external}
+\bibfield{author}{\bibinfo{person}{Chenyu Zhou}, \bibinfo{person}{Huacan Chai},
+  \bibinfo{person}{Wenteng Chen}, \bibinfo{person}{Zihan Guo},
+  \bibinfo{person}{Rong Shan}, \bibinfo{person}{Yuanyi Song},
+  \bibinfo{person}{Tianyi Xu}, \bibinfo{person}{Yingxuan Yang},
+  \bibinfo{person}{Aofan Yu}, \bibinfo{person}{Weiming Zhang},
+  \bibinfo{person}{Congming Zheng}, \bibinfo{person}{Jiachen Zhu},
+  \bibinfo{person}{Zeyu Zheng}, \bibinfo{person}{Zhuosheng Zhang},
+  \bibinfo{person}{Xingyu Lou}, \bibinfo{person}{Changwang Zhang},
+  \bibinfo{person}{Zhihui Fu}, \bibinfo{person}{Jun Wang},
+  \bibinfo{person}{Weiwen Liu}, \bibinfo{person}{Jianghao Lin}, {and}
+  \bibinfo{person}{Weinan Zhang}.} \bibinfo{year}{2026}\natexlab{}.
+\newblock \bibinfo{title}{Externalization in {LLM} Agents: A Unified Review of
+  Memory, Skills, Protocols and Harness Engineering}.
+\newblock \bibinfo{howpublished}{arXiv:2604.08224}.
+\newblock
+\showeprint[arxiv]{2604.08224}~[cs.AI]
+
+
+\end{thebibliography}

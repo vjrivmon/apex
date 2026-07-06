@@ -74,12 +74,41 @@ misma env. Si ya disparó el hook y el usuario no actuó, el goal acabará
 disparándolo igual al siguiente `record_turn`. No es redundancia: el hook
 avisa en cada prompt, el goal lo aplica al cerrar el turno.
 
+## Cómo escribir un buen goal (contrato de 5 partes)
+
+Un goal vago quema turnos sin aportar más que un prompt normal. Antes de
+`start_goal`, define el contrato — es lo que hace el loop verificable:
+
+1. **Objetivo** — una frase, un resultado concreto.
+2. **Restricciones** — qué NO debe cambiar (API pública, libs, convenciones,
+   archivos fuera de alcance).
+3. **Comando de validación** — el shell exacto que prueba el progreso
+   (`PYTHONPATH=lib .venv/bin/pytest tests/ -q`, `pnpm test`, ...).
+4. **Condición de parada** — verificable: "para cuando X pase" O "cuando el
+   siguiente cambio requiera decisión humana/de producto".
+5. **Documentación** — una frase comprometiendo al agente a registrar cada
+   cambio en `wiki/` / decisiones (nunca ADRs nuevos sin aprobación del
+   usuario).
+
+**Prohíbe el reward-hacking explícitamente** en el goal: "No borres, saltes,
+debilites ni acotes tests para que el goal pase." Sin esto, el agente puede
+gamear la condición de parada. Prohíbe también el scope creep: "No refactorices
+código no relacionado. No añadas dependencias."
+
+**Truco de meta-prompting (el de mayor palanca)**: los goals escritos a mano
+sub-especifican. Pide a una segunda pasada (el propio agente con el código
+cargado) que (1) inspeccione el repo, (2) saque a la superficie supuestos,
+restricciones y edge cases ocultos, (3) emita el contrato de 5 partes. Ese
+goal afinado rinde un orden de magnitud mejor que el improvisado.
+
 ## Reglas
 
 - El juez **no ve el código**, sólo el goal + summary de últimos 5 turnos.
 - Si grader bloquea una fase, el goal no puede declararse "done".
 - Cualquier mensaje del usuario → pausar goal automáticamente.
 - Goals activos persisten cross-session.
+- **Siempre revisa el diff antes de mergear**: más autonomía = más código que
+  validar, no menos. El juez verifica el goal, no la calidad línea a línea.
 
 ## Próximos pasos (Sprints 9+)
 

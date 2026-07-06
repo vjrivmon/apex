@@ -210,7 +210,7 @@ class TestComputeOutcomes:
     def test_no_meta_returns_no_facet_yet(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         result = ao.compute_outcomes(
             db_path, project_path, usage_root=usage_root
@@ -222,7 +222,7 @@ class TestComputeOutcomes:
     def test_useful_full_path_inserts_outcome(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="sess-A", project_path=project_path,
@@ -247,7 +247,7 @@ class TestComputeOutcomes:
     def test_not_useful_via_outcome(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -266,7 +266,7 @@ class TestComputeOutcomes:
     def test_not_useful_via_satisfaction_frustrated(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -288,7 +288,7 @@ class TestComputeOutcomes:
     def test_unclear_when_outcome_unclear(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -309,7 +309,7 @@ class TestComputeOutcomes:
     def test_idempotent_second_run_skips(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -334,7 +334,7 @@ class TestComputeOutcomes:
     def test_force_recomputes_after_facet_change(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -378,7 +378,7 @@ class TestComputeOutcomes:
     def test_friction_keys_serialized_only_with_count_gt_0(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         _seed_advice(db_path, created_at=ts)
         _write_meta(
             usage_root, sid="s1", project_path=project_path,
@@ -402,7 +402,7 @@ class TestComputeOutcomes:
     def test_returns_compute_result_with_all_counts(
         self, db_path, usage_root, project_path
     ):
-        ts = datetime(2026, 5, 3, 10, tzinfo=timezone.utc)
+        ts = datetime.now(timezone.utc) - timedelta(days=1)
         # advice A: tiene meta + facet → computed
         _seed_advice(db_path, created_at=ts, title="A")
         _write_meta(

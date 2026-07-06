@@ -1,3 +1,8 @@
+---
+name: second-brain
+description: Orquesta el segundo cerebro de APEX (ingest, self-heal/lint, synthesis, wiki) para capturar conocimiento en la wiki del proyecto y promover señales a memoria. Triggers ES/EN — segundo cerebro, second brain, ingest, wiki, sintetizar conocimiento, knowledge base, memoria.
+---
+
 # SecondBrain — Orquestador del segundo cerebro
 
 ## Qué es esto
