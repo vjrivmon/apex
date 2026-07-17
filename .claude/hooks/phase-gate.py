@@ -62,8 +62,13 @@ def _suggest_role_for_phase(phase: int) -> None:
 
 
 def _find_context_db(start: Path) -> Path | None:
-    """Busca .apex/context.db hacia arriba."""
+    """Busca .apex/context.db hacia arriba. No trata ~/.apex como proyecto:
+    esa es la memoria global de errores graves, no el contexto de nadie
+    (bug 2026-07-17)."""
+    home = Path.home()
     for parent in [start, *start.parents]:
+        if parent == home:
+            break
         candidate = parent / ".apex" / "context.db"
         if candidate.exists():
             return candidate

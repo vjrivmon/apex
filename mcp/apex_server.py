@@ -39,6 +39,7 @@ _apex_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_apex_root / "lib"))
 
 import grader as _grader  # noqa: E402
+import global_memory as _global_mem  # noqa: E402
 import goal_loop as _goal  # noqa: E402
 import handoff as _handoff  # noqa: E402
 import token_filter as _tf  # noqa: E402
@@ -292,9 +293,23 @@ def _sync_to_obsidian(event_type: str, data: dict) -> None:
 # --- Detectar directorio del proyecto ---
 
 def _find_project_root() -> Path:
-    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/."""
+    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/.
+
+    NUNCA trata `~/.apex/` como proyecto: ese es el directorio de config global
+    de APEX (hub-port, hub.log, brand/...), no un proyecto — resolverlo
+    contaminaría cualquier carpeta suelta bajo el home con el contexto del
+    último `/apex` global (bug 2026-07-17: galia sin `.apex/` heredaba
+    osyris-ideas desde `~/.apex/context.db`).
+
+    Si el CWD no pertenece a ningún proyecto APEX, devuelve el CWD tal cual;
+    `_get_db()` es quien detecta la ausencia de `.apex/` real y avisa. Así el
+    contrato (siempre un Path) no cambia para los ~30 callers.
+    """
+    home = Path.home()
     cwd = Path.cwd()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break  # ~/.apex es config global, no un proyecto; no ascender más
         if (parent / ".apex").exists():
             return parent
         if (parent / ".git").exists():
@@ -456,10 +471,29 @@ def _install_project_claude_md(root: Path, project_name: str,
 _INITIALIZED_DB_PATHS: set[str] = set()
 
 
+class NotAnApexProjectError(RuntimeError):
+    """El CWD no pertenece a ningún proyecto APEX (no hay `.apex/` propio)."""
+
+
 def _get_db() -> ApexContextDB:
-    """Obtiene la instancia de context.db para el proyecto actual."""
+    """Obtiene la instancia de context.db para el proyecto actual.
+
+    Nunca devuelve la BD global (`~/.apex/context.db`): esa es memoria
+    inmutable de errores graves cross-project, no el contexto de un proyecto.
+    Si el directorio actual no tiene `.apex/` propio, lanza
+    NotAnApexProjectError en vez de servir contexto ajeno (bug 2026-07-17).
+
+    La comparación con el global se hace en tiempo de llamada (no cacheada)
+    para respetar cambios de HOME y ser testeable.
+    """
+    global_db = (Path.home() / ".apex" / "context.db").resolve()
     root = _find_project_root()
     db_path = root / ".apex" / "context.db"
+    if db_path.resolve() == global_db or not (root / ".apex").is_dir():
+        raise NotAnApexProjectError(
+            f"El directorio '{Path.cwd()}' no es un proyecto APEX (no tiene .apex/ propio). "
+            f"Ejecuta apex_init_project para inicializarlo, o cámbiate al directorio del proyecto."
+        )
     return ApexContextDB(str(db_path))
 
 
@@ -1981,12 +2015,20 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    db = _get_db()
-    await _ensure_db_schema(db)
     import time
     _t0 = time.monotonic()
 
     try:
+        # apex_init_project crea el `.apex/`: no puede exigirlo de antemano.
+        # Para todo lo demás, _get_db() falla claro si no hay proyecto APEX,
+        # y NUNCA resuelve a la BD global (~/.apex/context.db).
+        if name == "apex_init_project":
+            root = _find_project_root()
+            db = ApexContextDB(str(root / ".apex" / "context.db"))
+        else:
+            db = _get_db()
+            await _ensure_db_schema(db)
+
         if name == "apex_get_context":
             level = arguments.get("level", "timeline")
             if not (await _db_exists(db)):
@@ -1997,6 +2039,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "apex_init_project":
             root = _find_project_root()
+            db.db_path.parent.mkdir(parents=True, exist_ok=True)
             await db.initialize()
             await db.set_meta("nombre", arguments["name"])
             await db.set_meta("detected_os", platform.system() or "unknown")
@@ -2142,12 +2185,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = [TextContent(type="text", text=f"Decisión #{arguments['decision_id']} invalidada")]
 
         elif name == "apex_add_error":
+            _severity = arguments.get("severity", "medium")
             eid = await db.add_error(
                 arguments["source"], arguments["description"], arguments["lesson"],
-                phase=arguments.get("phase"), severity=arguments.get("severity", "medium"))
+                phase=arguments.get("phase"), severity=_severity)
             _project = await db.get_meta("nombre") or "unknown"
             _sync_to_obsidian("error", {"project": _project, "source": arguments["source"], "description": arguments["description"]})
-            result = [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}")]
+            # Errores GRAVES (critical|high) se propagan a la memoria global
+            # inmutable (~/.apex/context.db, append-only). Best-effort.
+            _to_global = _global_mem.record_grave_error(
+                _project, arguments["description"], arguments["lesson"],
+                severity=_severity, source=arguments["source"],
+                phase=arguments.get("phase"))
+            _gmsg = " · añadido a memoria global de errores graves" if _to_global else ""
+            result = [TextContent(type="text", text=f"Error #{eid} registrado [{arguments['source']}]: {arguments['description'][:80]}{_gmsg}")]
 
         elif name == "apex_add_component":
             await db.add_component(
@@ -2607,8 +2658,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 created.append(str(wiki_dir))
 
             # Crear/inicializar context.db del proyecto target
+            # (ApexContextDB ya está importado a nivel módulo, línea 65)
             target_db_path = apex_dir / "context.db"
-            from context_db import ApexContextDB
             target_db = ApexContextDB(str(target_db_path))
             await target_db.initialize()
 
@@ -3465,6 +3516,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         else:
             result = [TextContent(type="text", text=f"Herramienta desconocida: {name}")]
 
+    except NotAnApexProjectError as e:
+        _duration = int((time.monotonic() - _t0) * 1000)
+        await _debug_log(name, arguments, f"NOT_APEX_PROJECT: {str(e)}", _duration)
+        return [TextContent(type="text", text=str(e))]
     except Exception as e:
         _duration = int((time.monotonic() - _t0) * 1000)
         await _debug_log(name, arguments, f"ERROR: {str(e)}", _duration)

@@ -48,7 +48,10 @@ TIMEOUT_S = float(os.environ.get("APEX_ADVISOR_HOOK_TIMEOUT_S", "2.0"))
 
 
 def _find_project_root(cwd: Path) -> Path | None:
+    home = Path.home()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break  # ~/.apex es memoria global, no un proyecto (bug 2026-07-17)
         if (parent / ".apex" / "context.db").exists():
             return parent
     return None

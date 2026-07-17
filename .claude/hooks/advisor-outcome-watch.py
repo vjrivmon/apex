@@ -52,7 +52,10 @@ FRESHNESS_WARN_DAYS = 7
 
 
 def find_project_root(cwd: Path) -> Path | None:
+    home = Path.home()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break  # ~/.apex es memoria global, no un proyecto (bug 2026-07-17)
         if (parent / ".apex" / "context.db").exists():
             return parent
     return None
