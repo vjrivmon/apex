@@ -71,3 +71,6 @@ thoughts/
 docs/skill-eval-audit/workspace/runs/
 docs/skill-eval-audit/workspace/agent-skills-workspace/
 docs/skill-eval-audit/node_modules/
+
+# Métricas de hooks: se reescriben en cada ejecución, no son código.
+.apex/hook_metrics.jsonl
