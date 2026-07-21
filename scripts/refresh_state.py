@@ -199,7 +199,9 @@ def build_block(*, run_tests: bool = False) -> str:
     head = _run(["git", "log", "-1", "--format=%h %s"])
     rama = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     sucio = bool(_run(["git", "status", "--porcelain"]))
-    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Sólo la fecha, no la hora: un timestamp al minuto ensuciaba el árbol
+    # en cada sesión con un diff que no aporta información.
+    hoy = datetime.now().strftime("%Y-%m-%d")
 
     lineas = [
         BEGIN,

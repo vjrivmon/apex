@@ -26,7 +26,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ## Estado verificado
 
-> Generado por `scripts/refresh_state.py` el 2026-07-21 20:47. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
+> Generado por `scripts/refresh_state.py` el 2026-07-21. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
 
 | Métrica | Valor |
 |---|---|
@@ -36,7 +36,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 | Hooks | 12 en disco, 11 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
 | Rama | `main` (árbol sucio) |
-| HEAD | `efb1576 feat(s20): phase entry gates + cross-project retrieval + security substeps` |
+| HEAD | `5a37ca0 chore: no versionar .apex/hook_metrics.jsonl` |
 
 ### Artefactos por sprint
 
