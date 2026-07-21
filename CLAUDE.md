@@ -1,566 +1,246 @@
 # CLAUDE.md — APEX
 
-> Fuente de verdad del estado del proyecto. Última actualización: 2026-05-07 (post Sprint 15)
+> Fuente única del estado del proyecto. Fusiona lo que antes vivía repartido
+> entre este fichero y `BLUEPRINT.md`, que se contradecían entre sí.
+>
+> **Cómo está organizado:** los HECHOS (tests, tools, tablas, qué sprint tiene
+> código escrito) van en el bloque generado `APEX:STATE`, que produce
+> `scripts/refresh_state.py` contando el repo. No se editan a mano. Todo lo
+> demás es NARRATIVA — decisiones y su porqué — y esa sí se escribe a mano
+> porque no caduca.
 
 ## Qué es APEX
 
-Sistema de skills + MCP server para Claude Code que guía el ciclo completo
-de desarrollo de software. Usa una BD SQLite contextual por proyecto
+Sistema de skills + MCP server para Claude Code que guía el ciclo completo de
+desarrollo de software. Usa una BD SQLite contextual por proyecto
 (`.apex/context.db`) + un segundo cerebro (ingest/lint/synthesis) + un
-dashboard cross-project (`apex-hub`) para que Claude Code nunca pierda el
-hilo — ni al inicio ni en las fases intermedias.
+dashboard cross-project (`apex-hub`) para que Claude Code nunca pierda el hilo.
 
-**Arquitectura: puro CLI + MCP + skills.** El frontend/backend web legacy
-(commits previos a Sprint 7) vive en rama `archive/legacy-web` y NO se
-carga en el flujo actual. El único frontend es `apex-hub` (repo aparte
-en `~/RoadToDevOps/apex-hub/`).
+**Arquitectura: puro CLI + MCP + skills.** El frontend/backend web legacy vive
+en la rama `archive/legacy-web` y NO se carga en el flujo actual. El único
+frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ---
 
-## Estado Actual (post Sprint 7)
+<!-- APEX:STATE:BEGIN -->
 
-### Completado
+## Estado verificado
 
-- [x] **Context DB v2** (`lib/context_db.py`) con **hybrid retrieval** 70/30
-  - Temporal facts (valid_from / invalid_from, patrón Graphiti)
-  - Progressive disclosure (compact ~200tk / timeline ~800tk / full ~2000tk)
-  - Error memory bidireccional con recurrence_count
-  - Wiki pages en SQLite con FTS5
-  - `search_hybrid()` combina BM25 + keyword overlap
-  - 46 tests pasando
+> Generado por `scripts/refresh_state.py` el 2026-07-21 20:47. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
 
-- [x] **Wiki Scaffold + segundo cerebro** (`lib/wiki_scaffold.py`)
-  - Karpathy: `wiki/` con SCHEMA, index, log, entities/concepts/
-    comparisons/queries/raw + **synthesis/** nuevo
-  - Segundo cerebro: `.apex/brand/` (identity, design-system, strategy,
-    performance), `.apex/raw/` (research, socratic, papers, decisions-log),
-    `.apex/releases/` (drafts, staging, published)
+| Métrica | Valor |
+|---|---|
+| Tests | 730 pasando |
+| Tools MCP | 57 |
+| Skills (`skills/`) | 24 |
+| Hooks | 12 en disco, 11 registrados en el proyecto |
+| Tablas en `context.db` | 27 |
+| Rama | `main` (árbol sucio) |
+| HEAD | `efb1576 feat(s20): phase entry gates + cross-project retrieval + security substeps` |
 
-- [x] **Ingest pipeline** (`lib/ingest.py`) — 8 pasos
-  - Resuelve URLs con source_type, extrae signals, clasifica, genera
-    páginas wiki con frontmatter + cross-links + bias flags
+### Artefactos por sprint
 
-- [x] **Self-heal** (`lib/lint.py`) — 6 reglas
-  - Contradicciones, errores sin decisión, huérfanos, wiki stale, sin
-    wikilinks, next_steps mal bloqueados
+Señal mecánica: si el fichero existe, el trabajo se escribió. No dice
+si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 
-- [x] **Synthesis** (`lib/synthesis.py`) — density-triggered dream_deep
+| Sprint | Artefactos | Detalle |
+|---|---|---|
+| S12 roles | presente | lib/roles.py |
+| S13 doctor | presente | lib/apex_doctor.py, lib/wrapup_phrases.py |
+| S14 skills Pocock | presente | skills/tdd/SKILL.md, skills/diagnose/SKILL.md |
+| S15 advisor + traces | presente | lib/advisor.py, lib/reasoning_traces.py |
+| S16 advisor feedback | presente | lib/advisor_outcomes.py, lib/advisor_health.py |
+| S17 VirtualFS | presente | lib/vfs.py, lib/vfs_grep.py |
+| S18 Granite curator | ausente | ningún artefacto |
+| S19 Advent integration | ausente | ningún artefacto |
+| Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
 
-- [x] **Portfolio bridge** (`lib/portfolio_publish.py` → vr-web/content/cases/)
+### Módulos sin importadores
 
-- [x] **Scaffold DevOps** (`lib/scaffold_devops.py` + `templates/`)
-  - GH Actions (ci, deploy-staging, deploy-prod, release-please)
-  - Dockerfile multi-stage + docker-compose.prod.yml
-  - Prometheus + Grafana + Loki + alerts
+Código escrito que nadie usa. Suele ser trabajo a medias, no
+necesariamente muerto: verificar antes de borrar o cablear.
 
-- [x] **Security Gate** (`lib/security_gate.py` + `templates/apex-security/`)
-  - AgentArmor 8 capas mapeadas a fases
-  - Fase 10.5 bloquea fase 11 si alguna capa != passed
-  - Templates L1-L8 con checklist específico
+- `lib/db_compact.py`
+- `lib/db_utils.py`
+- `lib/hook_metrics.py`
+- `lib/vfs_grep.py`
 
-- [x] **Comando /apex** (`commands/apex.md`)
-  - 14 fases guiadas (0-socrático a 14-mantenimiento) + gate 10.5 AgentArmor
-  - Detecta proyecto nuevo vs existente
-  - 11 errores documentados a evitar
-
-- [x] **24 Skills** (19 post Sprint 8 + 4 del Sprint 14: grill-with-docs, tdd, diagnose, improve-architecture + 1 del Sprint 15: prototype)
-  - Core flow: `socratic`, `architect`, `flow-guardian` (v2 outcome-based),
-    `iterate`, `onboard-existing`, `reverse-engineer`, `tools-integration`
-  - Diseño: `design-system`, `design-research`, `brand-identity`
-  - Entrega: `portfolio-publisher`, `devops`, `monitor`
-  - Segundo cerebro: `second-brain`, `brainstorming`
-  - Seguridad: `security-audit` (AgentArmor)
-  - Revisión: `code-review`
-  - **Sprint 8 (nuevos)**: `grader` (outcome-based judge), `apex-goal`
-    (turn-budget loop)
-  - Eliminados (eran huérfanos vacíos): `implement`, `verify`
-
-- [x] **Sprint 8 — Grader + /goal + Bridge Hub** (2026-05-03)
-  - `lib/grader.py` (430L): checks deterministas (git, tests, OS, emojis,
-    Pydantic, Playwright) + LLM judge prompt builder + Anthropic SDK
-    wrapper opcional
-  - `lib/goal_loop.py` (240L): turn-budget loop con detección de
-    degeneración estilo Hermes /goal
-  - Tabla `grader_verdicts` en context.db con CRUD
-  - 2 tools MCP nuevas: `apex_grader_evaluate`, `apex_goal_loop`
-  - Hook `phase-gate.py` (PreToolUse) bloquea apex_set_phase si verdict
-    should_block
-  - Bridge APEX↔Hub: detección hub-v2-port, endpoint
-    `/api/hub/search-cross-project` en apex-hub
-  - Tests: 25 grader + 18 goal_loop (98 totales, todos verde)
-
-- [x] **MCP server** completo con 49 tools (Sprints 8-15 cierran esta deuda)
-
-- [x] **Sprint 15 — The Advisor Strategy + reasoning_traces + /prototype** (2026-05-07)
-  - **S15.A** (commit `fa65891`): construye la capa preventiva (Advisor
-    como subagent Opus) y la capa de combustible (reasoning_traces).
-    - `lib/advisor.py`: build_bundle (≤2500 tokens) con throttle (8 calls
-      mínimo entre reviews) + circuit breaker (≥3 calls/min lo apaga).
-      CRUD de `advisor_reviews` y `advisor_advice` (4 tipos: forgotten_tool,
-      phase_drift, recommend_skill_handoff, grader_overdue).
-    - `lib/reasoning_traces.py`: 4 categorías iniciales (subset Hermes 3),
-      logging por fase, retrieval, ShareGPT export, prompt-for-trace
-      injection en gates clave.
-    - `lib/skill_handoff.py`: cambio de modo intra-sesión con snapshot;
-      detección de huérfanos >30 min para emitir `phase_drift` cards.
-    - 5 tablas nuevas: `advisor_reviews`, `advisor_advice`,
-      `reasoning_traces`, `skill_handoffs`, `state_machines`.
-    - 6 tools MCP: `apex_advisor_review`, `apex_record_advice`,
-      `apex_dismiss_advice`, `apex_log_trace`, `apex_handoff_skill`,
-      `apex_resume_skill_handoff`. Subagent `apex-advisor` (Opus,
-      whitelist restringida sin Task/Bash). 3 hooks nuevos
-      (advisor-trigger, advice-injector, trace-prompt). Suite: 466 verde.
-  - **S15.7-9** (commit `33d59fc` + cierre Sprint 15): scaffold de
-    prototipos ejecutables y wiring del flujo Pocock.
-    - `lib/prototype.py` (~250L): `apex_prototype_init(feature_name,
-      states, transitions, initial_state, force=False)`. Validación de
-      regex slug, estados ≥2, transiciones referencian estados conocidos;
-      reachability vía BFS desde initial_state (estados huérfanos →
-      ValueError); idempotencia con flag `force` que UPDATE en vez de
-      duplicar. Genera Textual TUI con BINDINGS por evento (atajos
-      teclado a transiciones) + wiki Mermaid stateDiagram-v2 con tabla
-      de reglas. INSERT en `state_machines` para que el grader (fase 9)
-      verifique que el código real honra las transiciones.
-    - `skills/prototype/SKILL.md`: 4 triggers concretos (>5 reglas de
-      negocio, decision densa solo prosa, tests fallando que apuntan a
-      transiciones, `recommend_skill_handoff(target='prototype')`),
-      anti-patrones, puente APEX (Advisor + grader + handoff), deuda
-      explícita para S16 (replay, fuzzing, atajos profundos).
-    - 1 tool MCP nueva: `apex_prototype_init`. Total tools: **49**.
-    - `commands/apex.md` extendido con sección "Flujo Pocock" que
-      describe el patrón `grill-with-docs → handoff → prototype →
-      handoff de vuelta → grill-with-docs`, las 3 tools del flujo y
-      cómo el Advisor dispara `recommend_skill_handoff`.
-    - 18 tests nuevos (15 prototype + 3 wiring Pocock). Suite: **484
-      verde** (466 → 481 → 484). Cierra Sprint 15 completo.
-
-- [x] **Sprint 14 — Skills For Real Engineers (port Matt Pocock)** (2026-05-03)
-  - 4 skills nuevas adaptadas del repo `mattpocock/skills` (49k⭐, MIT) que
-    fijan las cuatro formas en que falla un agente de codificación: **plan
-    confuso**, **verbosidad innecesaria**, **código que parece terminado
-    pero rompe**, **entropía arquitectónica progresiva**.
-  - **`skills/grill-with-docs/`** (3 archivos, 223L): SKILL.md +
-    CONTEXT-FORMAT.md + ADR-FORMAT.md. Sesión de interrogatorio que
-    confronta el plan contra el modelo de dominio y actualiza
-    `CONTEXT.md` y ADRs inline. **Puente APEX**: prefiere
-    `wiki/decisions/` (formato `YYYY-MM-DD-slug.md`) sobre `docs/adr/`
-    cuando existe. Crea archivos perezosamente.
-  - **`skills/tdd/`** (6 archivos, 305L): SKILL.md + tests.md + mocking.md
-    + deep-modules.md + interface-design.md + refactoring.md. Bucle
-    red-green-refactor estricto, una rebanada vertical cada vez. Anti-
-    patrón explícito: rebanado horizontal (todos los tests primero, todo
-    el código después) produce tests basura insensibles a cambios reales.
-    Apoya el vocabulario en `wiki/entities/concepts/` y respeta
-    `wiki/decisions/`.
-  - **`skills/diagnose/`** (2 archivos, 162L): SKILL.md +
-    `scripts/hitl-loop.template.sh`. Bucle de diagnóstico de 6 fases:
-    feedback loop → reproduce → hipotetiza (3-5 ranqueadas y falsables) →
-    instrumenta (logs `[DEBUG-...]` etiquetados, una variable a la vez)
-    → fix + test de regresión → cleanup + post-mortem. **Puente APEX**:
-    al cerrar, llama a `apex_add_error` para que A1 `override_clusters`
-    detecte recurrencia.
-  - **`skills/improve-architecture/`** (4 archivos, 207L): SKILL.md +
-    LANGUAGE.md + DEEPENING.md + INTERFACE-DESIGN.md. Vocabulario
-    canónico (module, interface, depth, seam, adapter, leverage,
-    locality), test de borrado, regla "un adapter = seam hipotético, dos
-    = seam real". Pattern `Design It Twice` con 3+ sub-agentes paralelos.
-    **Puente APEX**: usa `wiki/decisions/` como ADRs y vocabulario de
-    `wiki/entities/concepts/` para nombrar módulos profundizados.
-  - **Adaptaciones**: prosa en español (estilo APEX), terminología técnica
-    en inglés (estándar de la industria), descripciones bilingües ES/EN
-    en frontmatter para maximizar triggers, sin emojis, todos los puentes
-    a `wiki/decisions/` documentados.
-  - **Total skills**: **23** (eran 19; +4 de Sprint 14). Sin migración de
-    schema, sin tools MCP nuevas, sin hooks nuevos. Documentación pura.
-  - **Sin tests nuevos**: skills son markdown estáticos consumidos por
-    Claude Code; no hay código Python que validar. Suite completa corre
-    en **399 verde** en 5.88s tras el sprint.
-
-- [x] **Sprint 13.9 — usage_data_signals (cruce con `/insights`)** (2026-05-03)
-  - `lib/usage_data_reader.py` (~165L): reader puro de
-    `~/.claude/usage-data/{facets,session-meta}/`. Dataclasses `UsageMeta`
-    (project_path, start_time, duration, tool_counts, tool_errors,
-    tool_error_categories, lines_added/removed) y `UsageFacets` (outcome,
-    claude_helpfulness, primary_success, friction_counts, friction_detail,
-    user_satisfaction_counts, brief_summary). Iteradores `iter_meta` con
-    filtro por `project_path`, `iter_facets` con filtro por `session_ids`.
-    Helper `find_session_for_timestamp(ts, project_path, slack_minutes=5)`
-    para asociar verdicts del grader con sesiones de Claude Code sin migrar
-    schema (`UsageMeta.contains_timestamp` cruza ts contra
-    `[start, start + duration + slack]`). Env `APEX_USAGE_DATA_ROOT` para
-    tests. Best-effort: si el dir no existe, devuelve `[]`.
-  - **A5 grader_false_positives** (`lib/apex_doctor.py`): cruza
-    `grader_verdicts` locales con `should_block=0` contra facets del
-    observer ajeno. Si el observer dice `outcome in {not_achieved,
-    partially_achieved}` O `claude_helpfulness in {unhelpful,
-    slightly_helpful}` O `user_satisfaction in {dissatisfied, frustrated}`,
-    el grader pasó algo que no debería. Asociación verdict↔sesión vía
-    heurística temporal (`created_at` del verdict vs `start_time + duration`
-    de session-meta) — evita migración invasiva. >=2 falsos positivos en
-    misma fase para emitir propuesta. Signature por fase
-    (`grader_false_positive:phase=N`).
-  - **A6 friction_recurrence** (`lib/apex_doctor.py`): agrega
-    `friction_counts` del observer cross-sesión filtradas a `project_path`.
-    Si una key (`buggy_code`, `wrong_approach`, `misunderstood_request`,
-    `excessive_changes`, ...) aparece total >=3 veces en >=2 sesiones
-    distintas del proyecto, propone afinarlo con
-    `apex_skill_forge_scan(force=True)` o reforzar la fase relevante.
-    Signature por friction key (`friction_recurrence:<key>`).
-  - **Constantes nuevas**: `A5_MIN_FALSE_POSITIVES=2`,
-    `A5_OUTCOMES_BAD={not_achieved, partially_achieved}`,
-    `A5_HELP_BAD={unhelpful, slightly_helpful}`,
-    `A5_SAT_BAD={dissatisfied, frustrated}`, `A5_LOOKBACK=200`,
-    `A6_MIN_FRICTION_OCCURRENCES=3`, `A6_MIN_FRICTION_SESSIONS=2`.
-  - **Idempotencia**: signatures canónicas, mismo `INSERT OR IGNORE` que
-    A1-A4 vía `record_proposal`. Re-correr el doctor sobre los mismos
-    datos no duplica propuestas.
-  - **Sin tool MCP nueva**: `apex_doctor_run` ya invoca `run_doctor()`,
-    que ahora incluye A5+A6 en el `all_props +=` chain. Total tools
-    sigue en **42**.
-  - **No migración de schema**: `grader_verdicts` no necesita columna
-    `session_id` porque la heurística temporal cubre el cruce. Trade-off:
-    si dos sesiones del usuario solapan en tiempo (raro, Claude Code
-    serializa una activa), podría asociar mal — aceptable para detección
-    de patrones agregados.
-  - **No requiere `/insights`**: A5/A6 son best-effort sobre archivos que
-    Claude Code ya escribe a `~/.claude/usage-data/` por su cuenta. Si
-    el usuario nunca corre `/insights`, los archivos pueden estar pero
-    no ser frescos — A5/A6 simplemente no fire.
-  - 20 tests nuevos (`tests/test_apex_doctor_usage.py`): reader (8 tests
-    cubriendo dir missing, project_path filter, JSON corrupto,
-    session_ids filter, timestamp matching dentro/fuera de rango y
-    cross-project), A5 (6 tests cubriendo BD limpia, threshold,
-    signature por fase, outcome unclear no cuenta, blocked verdicts
-    excluidos), A6 (4 tests: vacío, project_path filter, threshold,
-    threshold de sesiones únicas), integración con `run_doctor` y render
-    de markdown (2 tests). Total: **396 verde** en 6.2s.
-
-- [x] **Sprint 13 — Apex-doctor (auto-mejora dirigida por intención)** (2026-05-03)
-  - `lib/apex_doctor.py` (~530L): tres analizadores síncronos sobre
-    `context.db` + `.apex/handoff/`. **A1 override_clusters** detecta
-    errores con `recurrence_count>=3` o severidad `critical|high` (1
-    propuesta por error, no agrupado, para que la signature sea estable).
-    **A2 grader_block_patterns** agrupa issues bloqueantes que aparecen
-    en >=2 fases distintas (umbral más bajo que el D1 del skill_forge:
-    aquí la propuesta es afinar la regla del grader, no crear skill).
-    **A3 stale_handoffs** marca handoffs en `.apex/handoff/` con mtime
-    >7 días.
-  - **Idempotencia**: cada `DoctorProposal` lleva una `signature` canónica;
-    `doctor_proposals.signature UNIQUE` rechaza duplicados silenciosamente
-    vía `INSERT OR IGNORE`. Re-ejecutar el doctor sobre la misma evidencia
-    devuelve `proposals_count=0` sin tocar nada.
-  - **Throttle**: `MIN_RUN_GAP_SECONDS=3600` (1h) entre runs;
-    `is_throttled()` consulta `last_run_at()` y devuelve un `DoctorRun`
-    con `status='throttled'` + `skipped_reason` cuando aplica. `force=True`
-    lo salta.
-  - **Trigger semántico (no cron)**: hook nuevo
-    `.claude/hooks/end-of-day-doctor.py` (UserPromptSubmit). Dos
-    disparadores: (a) frase de cierre detectada vía
-    `lib/wrapup_phrases.py` (lista cerrada de 25 frases ES con normalización
-    NFD para acentos y matching case-insensitive con límites de palabra),
-    (b) edad de sesión >`APEX_DOCTOR_SESSION_AGE_HOURS` (default 3.5h)
-    medida desde `session_starts.started_at`. Ambos triggers etiquetan el
-    run en `doctor_runs.trigger`.
-  - **Acción del hook**: corre `apex_doctor.run_doctor()` con timeout
-    wall-clock 8s, escribe handoff via `lib/handoff.serialize_handoff()`,
-    e inyecta a stdout (additionalContext) un bloque con resumen + ruta del
-    MD + instrucción explícita de mencionar hallazgos al usuario. NO
-    bloquea: si falla, sólo emite aviso y deja seguir.
-  - **Schema nuevo**: tablas `doctor_runs(id, started_at, finished_at,
-    proposals_count, trigger, status)`, `doctor_proposals(id, run_id,
-    kind, signature UNIQUE, title, body, status, created_at)`,
-    `session_starts(session_id PK, started_at)`. Auto-migración via el
-    `_SCHEMA` constant + `_ensure_db_schema` ya existente.
-  - **MD report**: `render_run_md` separa propuestas por kind; con 0
-    hallazgos imprime "Sin hallazgos. APEX está limpio en estos
-    analizadores." (decisión de diseño: silencio total no, mensaje
-    explícito sí — petición Vicente).
-  - 1 tool MCP nueva: `apex_doctor_run(force=False, trigger='manual')`.
-    Total tools: **42**.
-  - 72 tests nuevos (`tests/test_apex_doctor.py` 38 + `test_wrapup_phrases.py`
-    34): schema migration, los 3 analizadores con datos sintéticos,
-    idempotencia, throttle 1h, session_starts CRUD + age, render MD vacío
-    vs con propuestas, lista cerrada normalizada, matching ES con
-    acentos/mayúsculas. Total: **350 verde** en 5.6s.
-
-- [x] **Sprint 12 — Virtual office (5 roles agentes)** (2026-05-03)
-  - `lib/roles.py` (~430L): registry `ROLES` con 5 specs (`apex-architect`,
-    `apex-implementer`, `apex-reviewer`, `apex-qa`, `apex-devops`). Cada
-    spec lleva nombre, descripción con `<example>` (consumido por Claude
-    Code para decidir cuándo invocar), whitelist de tools (incluye
-    `mcp__apex__*`), modelo (`sonnet`), color y system prompt extenso con
-    reglas absolutas alineadas a APEX (anti-emojis, español con tildes,
-    `wiki/decisions/` antes de proponer stack, no datos mock, etc.).
-  - **Mapping fase → rol**: 2-3 architect · 4 qa · 5-7 implementer · 8
-    reviewer · 9 qa · 10 reviewer · 11 devops. Fases 0-1, 10.5, 12 sin
-    rol (las maneja el orquestador main).
-  - **Subagents nativos**: los archivos `.md` se instalan en
-    `~/.claude/agents/apex-<role>.md` con frontmatter YAML (name, csv de
-    tools, model, color, description-one-line). Claude Code los lee al
-    arrancar y los expone vía `Task(subagent_type="apex-...")`. APEX no
-    ejecuta el subagent — sólo prepara el prompt; quien dispara el `Task`
-    es Claude Code main. Sin coste API: todo bajo suscripción MAX.
-  - **Telemetría**: tabla nueva `role_invocations(id, session_id, role,
-    phase, fired_at, context_summary, status)` con auto-migración via
-    `_ensure_db_schema`. Helpers `record_invocation`,
-    `update_invocation_status`, `get_invocations`.
-  - 3 tools MCP nuevas (total: **41**):
-    - `apex_install_roles(force, agents_root)` — escribe los 5 archivos.
-      Idempotente.
-    - `apex_recommend_role(phase)` — devuelve rol + razón + flag
-      `installed`.
-    - `apex_invoke_role(role, phase, context_summary,
-      extra_instructions, session_id)` — construye `{subagent_type,
-      description, prompt}` listos para `Task` y registra la invocación.
-  - **Hook `phase-gate.py` extendido**: tras pasar el grader, si la
-    transición es a `in_progress` y la fase tiene rol asociado, imprime
-    a stderr (no bloqueante) la recomendación de invocar el rol. Tabla
-    `_PHASE_ROLE_MAP` duplicada en el hook para evitar import circular.
-  - 45 tests nuevos (`tests/test_roles.py`): registry, frontmatter YAML,
-    install/idempotencia/force, mapping fase→rol, build_invocation con
-    todos los placeholders, CRUD de telemetría, schema migration en BD
-    limpia. Total: **278 verde** en 4.4s.
-
-- [x] **Sprint 11.3 — Library Ingest (skills externas)** (2026-05-03)
-  - `lib/library_ingest.py` (~700L): pipeline fetch → validate → propose para
-    skills externas. Dos fuentes: (a) **GitHub Search API** (repos populares
-    con `claude-skills` en nombre/topic + awesome-lists curadas, ordenados
-    por estrellas; descarga `SKILL.md` vía `raw.githubusercontent.com`) y
-    (b) **library-skills CLI** de tiangolo (`uvx library-skills --dry-run
-    --claude`) cuando el proyecto tiene `pyproject.toml`/`package.json`.
-  - **Validación determinista** que BLOQUEA antes de escribir ruido a disco:
-    frontmatter YAML obligatorio (`name`, `description`), longitud (max name
-    60 chars, max description 200, body 100B–50KB), y filtro de **secretos**
-    (regex anti-keys: `sk-ant-…`, `ghp_…`, `AKIA…`, `AIza…`, BEGIN PRIVATE
-    KEY, etc.). `validate_skill()` devuelve `(valid, issues)`; si invalid,
-    se acumula en `IngestResult.invalid` y no se propone.
-  - **Persistencia**: tabla `library_imports(slug, source, source_url, sha,
-    imported_at, status)` en `context.db` (auto-migración) para no
-    re-descargar el mismo SHA. Reusa `skill_forge_rejections` (Sprint 11.2)
-    para que no se proponga lo ya rechazado. Reusa `apex_skill_forge_approve`
-    /`apex_skill_forge_reject` (mismo dir `.apex/skill-proposals/`, mismo
-    formato de propuesta con bloque ```` ```markdown ```` de 4 backticks
-    para soportar SKILL.md con triple-backtick interno).
-  - **Counter cross-project**: `session-start.py` cuenta proyectos visitados
-    en `hub.db.global_meta.library_ingest_visit_set` (set JSON). Tras N=5
-    proyectos sin ingerir, inyecta recordatorio sugiriendo
-    `apex_ingest_library_skills(source="both")`. `reset_visit_counter` se
-    llama tras un ingest exitoso.
-  - **HTTP**: stdlib `urllib.request` (sin deps nuevas), timeout 10s wall-
-    clock, max body 50KB. Token GitHub via `GITHUB_TOKEN`/`GH_TOKEN` env.
-  - 1 tool MCP nueva: `apex_ingest_library_skills(source, query, min_stars,
-    limit_repos, max_skills_per_repo)`. Total tools: **38**.
-  - **Patch a skill_forge**: `_extract_skill_block` ahora soporta delimitador
-    de 4 backticks (proposals nuevas) y cae a 3 (compat con Sprint 11.2).
-  - 35 tests nuevos (frontmatter, validación, secretos, dedup, fixtures
-    HTTP locales, fixture CLI dry-run). Total: **233 verde** en 5.3s.
-  - **Fix de hook duplicado**: `apex/.claude/settings.json` registraba
-    `session-start.py` que también está en `~/.claude/settings.json`
-    (path absoluto). Quitado el duplicado del nivel proyecto: ahora la
-    inyección de lecciones cross-project ocurre **una sola vez** por
-    sesión (antes: doble bloque en `additionalContext`, ~2.5K tokens
-    desperdiciados por sesión + counter avanzando dos veces).
-
-- [x] **Sprint 11.2 — Skill Forge auto-detector** (2026-05-03)
-  - `lib/skill_forge.py` (~440L): tres detectores `scan_grader_blocks` (D1
-    >=3 fases con mismo issue bloqueante), `scan_tool_call_patterns` (D2
-    secuencias de 3 tools repetidas >=5 veces) y `scan_cross_project_repeats`
-    (D3 decisiones que aparecen en >=2 proyectos via `hub.db`).
-  - Builders de propuesta deterministas (slug = sha1(signature)[:8]),
-    output a `.apex/skill-proposals/<slug>.md`. Aprobación con
-    `apex_skill_forge_approve(slug)` que mueve a `~/.claude/skills/<slug>/`;
-    rechazo con `apex_skill_forge_reject(slug, reason)` que registra en
-    `skill_forge_rejections` para no proponer lo mismo.
-  - Schema: tablas `tool_call_log` (alimenta D2) y `skill_forge_rejections`
-    (auto-migración via `_ensure_db_schema`).
-  - Hook `.claude/hooks/skill-forge-watch.py` (PostToolUse): inserta una
-    fila en `tool_call_log` por cada call no-skip y dispara `scan_and_write`
-    cuando el tool es trigger (`apex_set_phase`/`apex_grader_evaluate`/
-    `apex_add_decision`/`apex_complete_step`) o cuando han pasado >=25 calls
-    desde el último scan (high-water mark en `project_meta.forge_last_scan_id`).
-    Timeout wall-clock 2s, NO bloquea, sólo stderr `[skill-forge] N propuesta(s) nueva(s): ...`.
-  - 3 tools MCP nuevas: `apex_skill_forge_scan`, `apex_skill_forge_approve`,
-    `apex_skill_forge_reject`. Total tools: **37**.
-  - 27 tests nuevos. Total: **198 verde** en 2.8s.
-
-- [x] **Sprint 11.1 — Browser trace CDP nativo** (2026-05-03)
-  - `lib/browser_trace.py` (~520L): launch_chrome con
-    `--remote-debugging-port`, `_CDPSession` send/fire/drain sobre
-    websockets nativo, captura de DOM final + network log + console +
-    lifecycle. Patrón send+recv-loop sin reader-task (más robusto frente
-    a quirks de Chrome 147 con `Page.navigate`).
-  - Fallback automático a Playwright si CDP falla (lanza `Trace`
-    con `error` en vez de raise).
-  - Helpers `trace_to_markdown`, `trace_to_jsonl`, `third_party_domains`.
-  - Tool MCP nueva: `apex_browser_trace` (capture_dom, save_jsonl,
-    use_fallback, include_dom_in_output).
-  - 17 tests: puros (modelos/serialización) + integración real contra
-    HTTP server local (1.5s con Chrome). Total: **171 verde**.
-  - Lección: Chrome 147 emite eventos network sólo si la red llega al
-    target — sin internet la pestaña queda en about:blank pese a que la
-    URL del target cambia. Tests usan loopback local, no `example.com`.
-
-- [x] **Sprint 10 — Phase 1-3 v2** (2026-05-03)
-  - `lib/design_md.py` (220L): scaffold DESIGN.md estándar Google Labs
-    (5 secciones obligatorias: Brand, Color, Type, Components,
-    Accessibility/Dark) + validador WCAG AA contraste text/bg.
-  - `lib/research.py` (180L): fetch_static (httpx) + fetch_spa
-    (chromium --dump-dom con virtual-time-budget=8000ms) + extract_signals
-    (title, H1, H2, nav, CTAs, paleta hex, fuentes). Sin obligar Scrapling.
-  - 3 tools MCP nuevas: `apex_design_md_init`, `apex_design_md_validate`,
-    `apex_research_competitor`.
-  - Fase 02-design.md endurecida: nuevo paso `[2f-bis]` exige DESIGN.md
-    commiteado validado, nuevo Bloque C de research mínimo de 3
-    competidores, paso `[2o]` valida antes de cerrar y `[2p]` invoca
-    grader.
-  - Fase 03-spec.md endurecida: paso `[3c-bis]` exige referenciar tokens
-    reales del DESIGN.md en lugar de descripciones textuales.
-  - 28 tests nuevos (17 design_md + 11 research). Total: **154 verde**.
-
-- [x] **Sprint 9 — Context hygiene** (2026-05-03)
-  - `lib/handoff.py` (213L): estimate_tokens_in_transcript (chars/4),
-    serialize_handoff a `.apex/handoff/{session_id}.md` con fase actual,
-    verdicts del grader bloqueando, goals activos, decisiones recientes.
-  - `lib/token_filter.py` (105L): should_archive (chars/líneas/patrones
-    pip/npm/dep-trees), summarize_for_context (head+omitidos+tail).
-  - `.claude/hooks/context-watch.py` (UserPromptSubmit): mide transcript
-    JSONL, si >40% del context limit (env APEX_HANDOFF_THRESHOLD,
-    default 0.40 sobre 200K), inyecta aviso al agente con instrucciones
-    para handoff.
-  - `.claude/hooks/post-tool-archive.py` (PostToolUse): stderr aviso
-    cuando output de Bash/Read/Playwright/GitHub supera 5000 chars
-    (env APEX_ARCHIVE_THRESHOLD_CHARS).
-  - Tabla `tool_output_archive` en context.db con CRUD.
-  - 4 tools MCP nuevas: `apex_handoff_write`, `apex_resume_session`,
-    `apex_archive_output`, `apex_get_archived`.
-  - 28 tests nuevos (14 handoff + 14 token_filter). Total: **126 verde**.
-  - Auto-migración del schema en BDs APEX existentes (commit `0bee3aa`):
-    `_ensure_db_schema` se llama una vez por path en cada vida del
-    proceso MCP. Aplica a las 10 BDs en `~/RoadToDevOps/*/.apex/`.
-
-### Legacy (rama `archive/legacy-web`, no se usa en CLI)
-
-El backend web (FastAPI + ChromaDB) y el frontend Next.js fueron
-explorados al inicio del proyecto pero **NO se usan en el flujo actual**.
-APEX en producción es puro CLI + MCP + skills + apex-hub. Los directorios
-`backend/` y `frontend/` siguen en main por inercia histórica; se moverán
-a la rama `archive/legacy-web` en un chore futuro.
-
-### Roadmap (sprints aprobados)
-
-- [x] **Sprint 11 — Living ecosystem** (~~11.1 browser-trace~~ ✓, ~~11.2 skill_forge~~ ✓, ~~11.3 library_ingest~~ ✓)
-- [x] **Sprint 12 — Virtual office** ✓ (5 roles: architect, implementer, reviewer, qa, devops como subagents nativos)
-- [x] **Sprint 13 — Apex-doctor** ✓ (auto-mejora dirigida por intención: hook UserPromptSubmit con triggers semánticos + edad de sesión, 3 analizadores)
-- [x] **Sprint 14 — Skills For Real Engineers** ✓ (4 skills port Matt Pocock: grill-with-docs, tdd, diagnose, improve-architecture)
-- [x] **Sprint 15 — Advisor + reasoning_traces + /prototype** ✓ (subagent apex-advisor Opus, 4 categorías traces, skill_handoff intra-sesión, prototype Textual TUI + Mermaid)
-- [ ] **Sprint 16 — Advisor feedback loop** — rating implícito vía facets + escape hatch manual (S16.1 ✓, S16.5 ✓, S16.2 ✓; resta S16.6 → S16.3 → S16.4 → S16.7 → S16.8)
-- [ ] **Sprint 17 — VirtualFS cross-project** — filesystem virtual sobre vector DB para compartir contexto entre proyectos
-- [ ] **Sprint 18 — Granite Curator opt-in** — curador de memoria con Granite vía `APEX_CURATOR_MODEL` env
-- [ ] **Sprint 19 — Advent Integration** — Tier 1+2+4 del análisis `docs/APEX-vs-ADVENT-improvements.md`: gitleaks template DevOps (Gap F crítico), `CLAUDE.md` APEX-aware (Gap D), slash commands `apex-decision/error/component/search` (Gap B), PreCompact hook (Gap M), `apex_export_session` (Gap L), project rules condicionales (Gap E), docs UX (Gaps A/I/N). Tier 3 (Gap K, GH Action APEX-aware) diferido. Blueprint en `.apex/sprints/sprint-19-advent-integration-blueprint.md`.
-- [ ] **Dreaming** — Promoción automática de señales a memoria permanente
-- [ ] **Embeddings locales** — nomic-embed-text para búsqueda semántica en wiki
-- [ ] **Integración Pencil MCP** — Diseños automáticos en fase 2
+<!-- APEX:STATE:END -->
 
 ---
 
-## Stack
-
-| Componente    | Tecnología                         | Estado        |
-| ------------- | ---------------------------------- | ------------- |
-| Context DB    | Python + aiosqlite + FTS5 + grader_verdicts + tool_output_archive + tool_call_log + skill_forge_rejections + library_imports + role_invocations + doctor_runs + doctor_proposals + session_starts + advisor_reviews + advisor_advice + reasoning_traces + skill_handoffs + state_machines | Verificado |
-| Usage data reader (Sprint 13.9) | lib/usage_data_reader.py — `~/.claude/usage-data/` cruce con grader vía heurística temporal | 8 tests |
-| Apex-doctor A5+A6 (Sprint 13.9) | grader_false_positives + friction_recurrence | 12 tests |
-| Wiki Scaffold | Python puro (Markdown)             | Verificado    |
-| Skills        | Markdown (SKILL.md)                | 24 skills (incl. 4 Matt Pocock S14 + /prototype S15) |
-| MCP server    | Python + mcp.server                | 49 tools      |
-| Advisor (Sprint 15) | lib/advisor.py + subagent apex-advisor (Opus) | build_bundle ≤2500tk, throttle 8 calls, circuit breaker 3/min |
-| Reasoning traces (Sprint 15) | lib/reasoning_traces.py (4 categorías Hermes 3) | logging por fase, ShareGPT export |
-| Skill handoff (Sprint 15) | lib/skill_handoff.py + huérfanos >30 min | flujo Pocock intra-sesión |
-| Prototype (Sprint 15) | lib/prototype.py (~250L) — Textual TUI + Mermaid + state_machines | 15 tests, BFS reachability, force overwrite |
-| Apex-doctor (Sprint 13) | lib/apex_doctor.py + lib/wrapup_phrases.py | 72 tests, 3 analizadores |
-| Roles (Sprint 12) | lib/roles.py (5 subagents)     | 45 tests      |
-| Hooks         | Python scripts                     | 10 (session, design-lint, phase-gate, context-watch, post-tool-archive, skill-forge-watch, end-of-day-doctor, advisor-trigger, advice-injector, trace-prompt) |
-| Library Ingest| lib/library_ingest.py (Sprint 11.3)| 35 tests, GitHub + library-skills CLI |
-| Skill Forge   | lib/skill_forge.py (Sprint 11.2)   | 27 tests, 3 detectores |
-| Browser trace | lib/browser_trace.py (Sprint 11.1) | 17 tests, CDP nativo |
-| Grader        | lib/grader.py (Sprint 8.1)         | 25 tests      |
-| /goal loop    | lib/goal_loop.py (Sprint 8.2)      | 18 tests      |
-| Handoff       | lib/handoff.py (Sprint 9.1)        | 14 tests      |
-| Token filter  | lib/token_filter.py (Sprint 9.2)   | 14 tests      |
-| DESIGN.md     | lib/design_md.py (Sprint 10.1)     | 17 tests      |
-| Research      | lib/research.py (Sprint 10.2)      | 11 tests      |
-| Hub bridge    | apex-hub `/api/live/event` + `/api/hub/search-cross-project` | Sprint 8.3 |
-| Tests totales | pytest                             | 484 pasando   |
-| Backend web   | FastAPI (legacy, no usado)         | archive/legacy-web |
-| Frontend web  | Next.js 15 (legacy, no usado)      | archive/legacy-web |
-
----
-
-## Cómo Ejecutar
-
-### Tests
+## Cómo ejecutar
 
 ```bash
+# Tests
 cd ~/RoadToDevOps/apex
 PYTHONPATH=lib .venv/bin/pytest tests/ -v
+
+# Regenerar el bloque de estado de este fichero
+.venv/bin/python scripts/refresh_state.py
+
+# Comprobar si está desfasado sin escribir (útil en hooks/CI)
+.venv/bin/python scripts/refresh_state.py --check
 ```
 
-### Backend (modo producción con Ollama)
-
-```bash
-cd ~/RoadToDevOps/apex/backend
-PYTHONPATH=. .venv/bin/uvicorn application.api:app --port 8020 --reload
-```
-
-### Frontend
-
-```bash
-cd ~/RoadToDevOps/apex/frontend
-npm run dev
-```
+`backend/` sigue en el árbol por inercia histórica desde el Sprint 7, declarado
+legacy y sin usar. `frontend/` ya no existe: se borró y las instrucciones que lo
+mencionaban estaban obsoletas.
 
 ---
 
-## Errores Conocidos a Evitar
+## Estado por área
 
-1. Construir frontend antes de verificar backend
-2. No investigar fuentes de datos antes de escribir scrapers
-3. Tomar decisiones de diseño sin consultar al usuario
-4. SPEC monolítica sin checkpoints
-5. Hardcoded data en frontend
-6. Sin tildes ni eñes en español
-7. CORS abierto y sin auth al inicio
-8. No generar edge cases antes del código
-9. Asumir siempre "app web con dashboard"
-10. No usar awesome-design-md como referencia visual
-11. Ir de prisa en vez de diseñar bien
+### Núcleo (verificado y en uso)
+
+- **Context DB v2** (`lib/context_db.py`) con hybrid retrieval **léxico**
+  (70% FTS5/BM25 + 30% keyword LIKE). Ojo: "hybrid" ahí NO significa
+  semántico — ambas piernas operan sobre caracteres. El retrieval denso vive
+  aparte, en la biblioteca de libros.
+- **Wiki scaffold + segundo cerebro** (`lib/wiki_scaffold.py`): `wiki/` estilo
+  Karpathy, `.apex/brand/`, `.apex/raw/`, `.apex/releases/`.
+- **Ingest pipeline** (`lib/ingest.py`), **self-heal** (`lib/lint.py`),
+  **synthesis** con `dream_deep` density-triggered (`lib/synthesis.py`).
+- **Scaffold DevOps** (`lib/scaffold_devops.py` + `templates/`).
+- **Security gate** (`lib/security_gate.py`): AgentArmor L1-L8, la fase 10.5
+  bloquea la 11.
+- **Grader** (`lib/grader.py`) + **/goal loop** (`lib/goal_loop.py`).
+- **Context hygiene**: `lib/handoff.py`, `lib/token_filter.py`.
+- **Roles** (`lib/roles.py`): 5 subagents nativos, mapeados a fases.
+- **Apex-doctor** (`lib/apex_doctor.py`): 6 analizadores (A1-A6), trigger
+  semántico por frases de cierre.
+- **Advisor** (`lib/advisor.py` + `advisor_outcomes/health/tuning`): capa
+  preventiva con feedback loop implícito vía facets.
+- **Memoria global** (`lib/global_memory.py`): `~/.apex/context.db` es memoria
+  append-only de errores GRAVES cross-project. NUNCA es el contexto de un
+  proyecto — `_get_db()` lanza si el cwd no tiene `.apex/` propio.
+
+### Biblioteca de libros (2026-07-21)
+
+Retrieval **denso** sobre los libros técnicos que lee Vicente. Es la primera
+pieza de APEX que busca por significado y no por caracteres.
+
+- `lib/book_chunker.py` — trocea `.md` respetando el árbol de headings. Sabe
+  que un `#` dentro de un fence es un comentario de Python, no una sección
+  (el corpus real tiene 5 de esos), y no separa una fila de tabla de su
+  cabecera. **No funde fragmentos de headings distintos**: la citabilidad
+  manda sobre el tamaño.
+- `lib/book_corpus.py` — `~/.apex/library.db`, un índice con columna de libro
+  (no un índice por libro: permite preguntar cruzando títulos). Reindexado
+  incremental por `content_sha`, borrado de capítulos desaparecidos, y
+  `sync_book()` que se llama antes de cada búsqueda para que sea imposible
+  buscar contra un índice viejo.
+- `lib/embeddings.py` — cliente ÚNICO de embeddings de APEX (nomic-embed-text
+  vía Ollama, 768d). Batch real: una petición por lote, no una por texto.
+- Tools: `apex_book_search`, `apex_book_index`, `apex_book_list`. Funcionan
+  **sin proyecto APEX** (retorno temprano antes del gate `_get_db()`).
+
+**Dato de diseño medido**: nomic-embed-text es mayoritariamente inglés. Las
+preguntas en español contra el corpus inglés aciertan 2/6; traducidas, 6/6.
+Por eso la `description` de la tool instruye a enviar la query en inglés. El
+usuario pregunta en español; la traducción ocurre por dentro.
+
+**Umbral 0.66**, calibrado sobre el corpus real: preguntas cubiertas por el
+libro puntúan 0.69-0.82, preguntas ajenas 0.45-0.58. Por debajo del umbral la
+tool no devuelve una lista vacía muda — devuelve el estado "no cubierto" con
+la instrucción explícita de decirlo en vez de rellenar con los pesos del
+modelo.
+
+### Deuda conocida
+
+Ver `.apex/sprints/DEUDA-2026-07-21.md` para el detalle con evidencia.
+
+- **VFS implementado pero inalcanzable**: `lib/vfs.py` + `lib/vfs_grep.py` con
+  75 tests verdes y **cero tools `apex_vfs_*` en el servidor**. Falta S17.6
+  (`vfs_sql_render.py`, referenciado en `vfs.py:23` pero inexistente), S17.7,
+  S17.8 y el wiring S17.9. Las tablas `vfs_render_cache` y `vfs_query_log`
+  están creadas sin CRUD.
+- **Errores cross-project: señal rota**. Los 279 errores de `hub.db` tienen
+  todos `recurrence_count = 1`, así que el `ORDER BY recurrence_count DESC`
+  de `session-start.py:59` no ordena nada y devuelve siempre los mismos 5.
+  Además el corte fijo de 5 en cada arranque repite lo obvio. Dirección
+  acordada: llevarlos al mismo mecanismo que la biblioteca (corpus
+  vectorizado, consultado bajo demanda y filtrado por relevancia real).
+- `code-before-phase5-gate.py` se instala en proyectos guiados pero no está
+  registrado en el propio APEX: APEX no se aplica su propio write-gate.
+- `lib/prototype.py:183` — los guards de transición se ignoran.
+- S16.8 (`skills/advisor-feedback/`) deferido por decisión de 2026-05-08.
 
 ---
 
-## Próximos Pasos (Priorizados)
+## Roadmap
 
-### P0 — Core (sin esto APEX no funciona en producción)
+El orden estricto S17 → S18 → S19 se decidió el 2026-05-08 en lugar de saltar
+a S19 por la urgencia de Gap F (gitleaks). Sigue vigente, con la salvedad de
+que S17 quedó a medias (código sin wiring) y de que se ejecutó trabajo
+posterior (S20/S21) sin registrarlo aquí en su momento.
 
-1. MCP server para context.db (Claude Code accede sin scripts)
-2. Hook de SessionStart que lee context.db automáticamente
-3. Probar flujo completo: /apex en proyecto nuevo de verdad
+| Sprint | Foco | Blueprint |
+|---|---|---|
+| S17 | VirtualFS cross-project (a medias: falta wiring MCP) | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
+| S18 | Granite Curator opt-in vía `APEX_CURATOR_MODEL` | (mismo fichero que S17) |
+| S19 | Advent Integration (Tier 1+2+4; gitleaks es prioridad cero) | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
 
-### P1 — Calidad
+Pendientes sin sprint asignado: embeddings sobre la wiki del proyecto
+(la infraestructura ya existe en `lib/embeddings.py`), integración Pencil MCP
+en fase 2.
 
-4. Dreaming: promoción de señales cortas a memoria permanente
-5. Skill de security audit (OWASP + STRIDE)
-6. Skill de code review (verificador)
-7. Embeddings locales para wiki (nomic-embed-text)
+---
 
-### P2 — Polish
+## Decisiones acumuladas
 
-8. Tests E2E del flujo completo
-9. Documentación de cada skill con ejemplos
-10. Integración con Pencil MCP para fase 2
+Las que siguen vigentes y explican por qué el código es como es.
 
-### P3 — Open Source
+| Decisión | Razón |
+|---|---|
+| La biblioteca de libros vive en `~/.apex/library.db`, fichero propio | `context.db` es per-proyecto (se duplicaría en ~10 BDs y `_get_db()` la rechaza fuera de proyecto); `~/.apex/context.db` es memoria append-only de errores graves y la biblioteca es mutable |
+| Un solo índice con columna de libro, no uno por libro | Permite preguntar cruzando títulos ("qué dicen mis libros sobre X"); el filtro a uno concreto sigue disponible |
+| Tool de biblioteca separada, no dentro de `apex_search` | `apex_search` pasa por `_get_db()`, que lanza sin `.apex/`; el Q&A del usuario ocurre fuera de todo proyecto. Mismo precedente que `apex_search_cross_project` |
+| Una sola tool de búsqueda para el usuario y para el Architect | Comparten chunks, vectores y citas; solo difieren en cómo se redacta la respuesta, y eso es prompting, no código |
+| Sin grafo de entidades sobre los libros | Verificado: 0 wikilinks en los 7 capítulos. Fabricar el grafo costaría ~250 llamadas LLM e introduciría alucinación justo donde el requisito es trazabilidad |
+| Sin numpy/sqlite-vec/faiss | 4.500 fragmentos se recorren en ~155 ms en Python puro. Reconsiderar hacia los 30 libros |
+| Sin FTS5 sobre los fragmentos del libro | Medido: el híbrido léxico da 3/6 igual que el denso solo. El léxico no cruza idiomas |
+| Reindexado automático al buscar, no watcher de ficheros | Vicente confirmó que los capítulos entran en bloque, nunca a medias. Comparar hashes es local y barato, y hace imposible buscar contra un índice desactualizado |
+| Los hechos del CLAUDE.md se generan, no se escriben | Auditoría 2026-07-21: ~42 afirmaciones falsas acumuladas. El 85% era derivable con un comando |
+| Fuera las cifras de líneas por módulo | 8 de 15 estaban mal (hasta +116%) y no aportan nada a quien lee |
+| 3 enums de rating (`useful`/`not_useful`/`unclear`) | `unclear` no es rating sino ausencia de señal: se excluye del denominador del FP rate |
+| Solo enums, nunca texto libre, en los outcomes del advisor | Privacidad: los facets pueden contener briefs o código sensible |
+| Cooldown 7 días entre auto-tunings | Anti-oscilación |
 
-11. Limpiar código para publicación
-12. Escribir CONTRIBUTING.md
-13. Crear issues de GitHub para roadmap
-14. Publicar como open source
+---
+
+## Errores conocidos a evitar
+
+1. Construir frontend antes de verificar backend.
+2. No investigar fuentes de datos antes de escribir scrapers.
+3. Tomar decisiones de diseño sin consultar al usuario.
+4. SPEC monolítica sin checkpoints.
+5. Hardcoded data en frontend.
+6. Sin tildes ni eñes en español.
+7. CORS abierto y sin auth al inicio.
+8. No generar edge cases antes del código.
+9. Asumir siempre "app web con dashboard".
+10. No usar awesome-design-md como referencia visual.
+11. Ir de prisa en vez de diseñar bien.
+12. **Fiarse de un documento de estado sin verificarlo contra el repo.** Este
+    fichero llegó a decir 695 tests cuando había 722, y a marcar como
+    pendientes sprints cerrados hacía meses. Si un dato importa para una
+    decisión, cuéntalo.
+
+---
+
+## Lecciones de proceso
+
+1. **Verificar antes de cerrar.** `pytest -q` antes de declarar verde. Y si
+   una pieza tiene comportamiento observable (un retrieval, un parser),
+   ejecutarla contra datos reales, no solo correr sus tests: los 16 tests del
+   chunker pasaron solo después de que cinco fallos destaparan tres bugs que
+   el código "parecía" no tener.
+2. **Auditar antes de presentar decisiones.** Distinguir explícitamente entre
+   decisiones ya tomadas que se están modificando y las genuinamente abiertas.
+3. **No emojis** en código ni documentación. Español con tildes y eñes.
+4. **Cuando el grader o los tests fallen, no bypasear**: causa raíz y fix
+   limpio.
+5. **No inventar un desacuerdo con el usuario.** Si algo parece un riesgo,
+   comprobar primero que el usuario lo ha pedido de verdad; citar una
+   autoridad para respaldar una suposición no verificada es peor que callarse.

@@ -26,6 +26,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.db_utils import get_sync_db
+
 import advisor
 
 try:
@@ -58,7 +60,7 @@ def advisor_health(
         "facets_freshness_days": None,
         "window_days": window_days,
     }
-    with sqlite3.connect(db_path) as c:
+    with get_sync_db(db_path) as c:
         c.row_factory = sqlite3.Row
 
         # 1. Totales por kind

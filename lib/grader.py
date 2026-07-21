@@ -337,7 +337,10 @@ Reglas:
 
 
 def parse_llm_verdict(text: str) -> dict:
-    """Parser tolerante: extrae el primer bloque JSON encontrado."""
+    """Parser tolerante: extrae el primer bloque JSON y valida contra schema.
+
+    Returns validated dict or {} if parse/validation fails.
+    """
     if not text:
         return {}
     start = text.find("{")
@@ -345,9 +348,87 @@ def parse_llm_verdict(text: str) -> dict:
     if start < 0 or end < 0 or end <= start:
         return {}
     try:
-        return json.loads(text[start:end + 1])
+        parsed = json.loads(text[start:end + 1])
     except json.JSONDecodeError:
         return {}
+
+    # Validate against expected schema
+    return _validate_verdict(parsed)
+
+
+# JSON Schema for LLM verdict validation
+_VERDICT_SCHEMA = {
+    "type": "object",
+    "required": ["quality", "should_block", "reasoning"],
+    "properties": {
+        "quality": {"type": "integer", "minimum": 1, "maximum": 4},
+        "category": {
+            "type": "string",
+            "enum": ["coding", "design", "integration", "deploy", "testing", "other"],
+        },
+        "additional_issues": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "should_block": {"type": "boolean"},
+        "reasoning": {"type": "string", "minLength": 1},
+    },
+    "additionalProperties": False,
+}
+
+_VALID_CATEGORIES = {"coding", "design", "integration", "deploy", "testing", "other"}
+
+
+def _validate_verdict(parsed: dict) -> dict:
+    """Valida el verdict del LLM. Devuelve {} sólo si es inservible.
+
+    El parser es TOLERANTE por contrato: un verdict al que le falte un campo
+    opcional se normaliza, no se tira. Descartarlo entero (como hacía la
+    versión estricta) convierte una respuesta parcialmente buena en silencio,
+    que es justo lo que el grader no debe hacer.
+
+    Sólo `quality` es imprescindible: sin ella no hay verdict que interpretar.
+    """
+    if not isinstance(parsed, dict):
+        return {}
+
+    if "quality" not in parsed:
+        return {}
+
+    # quality: int 1-4. Fuera de rango sí invalida: no hay lectura sensata.
+    try:
+        q = int(parsed["quality"])
+        if q < 1 or q > 4:
+            return {}
+        parsed["quality"] = q
+    except (TypeError, ValueError):
+        return {}
+
+    # should_block: si falta o no es bool, se asume el lado seguro (no bloquear)
+    if not isinstance(parsed.get("should_block"), bool):
+        parsed["should_block"] = False
+
+    # reasoning: si falta, queda vacío en vez de invalidar el verdict
+    if not isinstance(parsed.get("reasoning"), str):
+        parsed["reasoning"] = ""
+
+    # category: optional, must be in allowed set
+    if "category" in parsed:
+        cat = parsed["category"]
+        if cat not in _VALID_CATEGORIES:
+            parsed["category"] = "other"
+
+    # additional_issues: optional, list of strings
+    if "additional_issues" in parsed:
+        issues = parsed["additional_issues"]
+        if not isinstance(issues, list):
+            parsed["additional_issues"] = []
+        else:
+            parsed["additional_issues"] = [
+                str(i) for i in issues if isinstance(i, (str, int))
+            ]
+
+    return parsed
 
 
 def merge_verdicts(determinista: Verdict, llm: dict) -> Verdict:

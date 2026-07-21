@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.db_utils import get_sync_db
+
 # ── Constantes de pacing (blueprint sec 2.2) ──
 ADVISOR_DEFAULT_INTERVAL = 8
 ADVISOR_BACKOFF_INTERVAL = 16
@@ -122,8 +124,15 @@ def set_advisor_constants(
 
 # ── Helpers internos ──────────────────────────────────────────────
 
-def _conn(db_path: Path | str) -> sqlite3.Connection:
-    return sqlite3.connect(str(db_path), timeout=5.0)
+def _conn(db_path: Path | str):
+    """Context manager de conexión con los PRAGMAs estándar.
+
+    Devuelve el context manager entero, no `.__enter__()`: entrar y descartar
+    el generador dejaba el `finally: conn.close()` en manos del recolector, y
+    la conexión aparecía cerrada a mitad de uso ("Cannot operate on a closed
+    database"). Todos los llamadores hacen `with _conn(...) as c`.
+    """
+    return get_sync_db(db_path)
 
 
 def _get_meta_int(c: sqlite3.Connection, key: str, default: int = 0) -> int:

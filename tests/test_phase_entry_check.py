@@ -144,14 +144,28 @@ def test_search_cross_project_excludes_current_project(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_phase_queries_cover_all_phases():
-    """Cada fase 5-10 tiene queries dirigidas definidas."""
-    import apex_server as srv
+    """Cada fase 5-10 tiene queries dirigidas definidas.
 
-    # Extraemos _PHASE_QUERIES del handler verificando que el código las define
-    # buscando el diccionario en el módulo parseado
-    source = Path(ROOT / "mcp" / "apex_server.py").read_text()
+    Se comprueba el diccionario real del handler, no la presencia de una
+    cadena en el fichero: tras la refactorización de 2026-07 las queries
+    viven en `mcp/handlers/phase_gate.py`.
+    """
+    import importlib.util as ilu
+
+    pkg_dir = ROOT / "mcp" / "handlers"
+    spec = ilu.spec_from_file_location(
+        "apex_handlers", pkg_dir / "__init__.py",
+        submodule_search_locations=[str(pkg_dir)],
+    )
+    mod = ilu.module_from_spec(spec)
+    sys.modules["apex_handlers"] = mod
+    spec.loader.exec_module(mod)
+
+    from apex_handlers.phase_gate import _PHASE_QUERIES
+
     for phase in range(5, 11):
-        assert f"{phase}:" in source or f"phase={phase}" in source
+        assert phase in _PHASE_QUERIES, f"fase {phase} sin queries dirigidas"
+        assert _PHASE_QUERIES[phase], f"fase {phase} con lista vacía"
 
 
 def test_phase_entry_output_format_with_errors(tmp_path, monkeypatch):
@@ -303,6 +317,22 @@ def test_tool_definition_in_server():
 
 
 def test_tool_handler_in_server():
-    """apex_phase_entry_check tiene handler en call_tool()."""
-    source = (ROOT / "mcp" / "apex_server.py").read_text()
-    assert 'elif name == "apex_phase_entry_check"' in source
+    """apex_phase_entry_check tiene handler registrado.
+
+    Tras la refactorización a `mcp/handlers/` (2026-07) el despacho ya no es
+    un `elif` en el monolito: se comprueba el registro real en HANDLERS, que
+    es lo que determina si la tool responde.
+    """
+    import importlib.util as ilu
+
+    pkg_dir = ROOT / "mcp" / "handlers"
+    spec = ilu.spec_from_file_location(
+        "apex_handlers", pkg_dir / "__init__.py",
+        submodule_search_locations=[str(pkg_dir)],
+    )
+    mod = ilu.module_from_spec(spec)
+    sys.modules["apex_handlers"] = mod
+    spec.loader.exec_module(mod)
+
+    assert "apex_phase_entry_check" in mod.HANDLERS
+    assert callable(mod.HANDLERS["apex_phase_entry_check"])

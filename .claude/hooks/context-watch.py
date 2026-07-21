@@ -29,6 +29,11 @@ import os
 import sys
 from pathlib import Path
 
+# La raíz del repo debe estar en sys.path ANTES de `from lib.…`:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.hook_metrics import start_hook, end_hook
+
 # 1 token ≈ 4 chars (aproximación coherente con lib/handoff.py)
 _CHARS_PER_TOKEN = 4
 _DEFAULT_CONTEXT_LIMIT = int(os.environ.get("APEX_CONTEXT_LIMIT", "200000"))
@@ -40,21 +45,26 @@ def _measure_transcript(path: str) -> int:
     try:
         return Path(path).stat().st_size // _CHARS_PER_TOKEN
     except Exception:
+        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
 
 def main() -> int:
+    _hook_start = start_hook("context-watch")
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
     transcript = payload.get("transcript_path") or ""
     if not transcript:
+        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
     tokens = _measure_transcript(transcript)
     if tokens == 0:
+        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
     if _THRESHOLD_TOKENS > 0:
@@ -62,6 +72,7 @@ def main() -> int:
     else:
         threshold_tokens = int(_DEFAULT_CONTEXT_LIMIT * _THRESHOLD)
     if tokens < threshold_tokens:
+        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
     pct = round(100 * tokens / _DEFAULT_CONTEXT_LIMIT, 1)
@@ -86,6 +97,7 @@ def main() -> int:
         f"\"{session_id[:12] or '<id>'}\")` rehidrata el estado.\n"
         f"  Proyecto: {project_dir}\n"
     )
+    end_hook("context-watch", _hook_start, exit_code=0)
     return 0
 
 

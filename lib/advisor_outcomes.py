@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from lib.db_utils import get_sync_db
+
 import usage_data_reader as udr
 
 
@@ -182,7 +184,7 @@ def compute_outcomes(
     cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
     cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
 
-    with sqlite3.connect(str(db_path)) as conn:
+    with get_sync_db(db_path) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.execute(
             "SELECT a.id AS advice_id, a.created_at, "
@@ -241,7 +243,7 @@ def compute_outcomes(
         rating = infer_rating(outcome_enum, helpfulness, satisfaction)
         friction_json = json.dumps(friction, ensure_ascii=False)
 
-        with sqlite3.connect(str(db_path)) as conn:
+        with get_sync_db(db_path) as conn:
             if outcome_id is None:
                 conn.execute(
                     "INSERT INTO advice_outcomes "

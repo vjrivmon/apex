@@ -17,6 +17,11 @@ import sys
 import time
 from pathlib import Path
 
+# La raíz del repo debe estar en sys.path ANTES de `from lib.…`:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.hook_metrics import start_hook, end_hook
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
@@ -79,22 +84,28 @@ def _is_force_trigger(tool: str, payload: dict) -> bool:
 
 
 def main() -> int:
+    _hook_start = start_hook("advisor-trigger")
     if _advisor is None:
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     t0 = time.monotonic()
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     tool = payload.get("tool_name", "") or ""
     if tool in SKIP_TOOLS:
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     cwd = Path(payload.get("cwd") or os.getcwd())
     root = _find_project_root(cwd)
     if root is None:
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     db_path = root / ".apex" / "context.db"
     if not db_path.exists():
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     session_id = (
         payload.get("session_id")
@@ -107,6 +118,7 @@ def main() -> int:
         force = _is_force_trigger(tool, payload)
         run_, reason = _advisor.should_run(str(db_path), force=force)
         if not run_:
+            end_hook("advisor-trigger", _hook_start, exit_code=0)
             return 0
         bundle = _advisor.build_bundle(str(db_path), session_id)
         tokens = _advisor.estimate_bundle_tokens(bundle)
@@ -117,6 +129,7 @@ def main() -> int:
         )
     except Exception as e:
         sys.stderr.write(f"[apex-advisor] hook error: {e}\n")
+        end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
 
     elapsed_ms = (time.monotonic() - t0) * 1000
@@ -133,6 +146,7 @@ def main() -> int:
         f"prompt='review_id={rid}; session_id={session_id}; lee bundle "
         f"vía apex_get_context y apex_search'). MAX, no API.\n"
     )
+    end_hook("advisor-trigger", _hook_start, exit_code=0)
     return 0
 
 

@@ -33,6 +33,11 @@ import sys
 import time
 from pathlib import Path
 
+# La raíz del repo debe estar en sys.path ANTES de `from lib.…`:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.hook_metrics import start_hook, end_hook
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "lib"))
 
@@ -63,6 +68,7 @@ def increment_counter(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(str(db_path))
     except sqlite3.OperationalError:
+        end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute(
@@ -135,18 +141,22 @@ def render_advice(cycle: dict) -> str:
 
 
 def main() -> int:
+    _hook_start = start_hook("advisor-outcome-watch")
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
         return 0
     cwd_raw = payload.get("cwd") or os.getcwd()
     project_root = find_project_root(Path(cwd_raw))
     if project_root is None:
+        end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
         return 0
     db_path = project_root / ".apex" / "context.db"
 
     prompt_count = increment_counter(db_path)
     if not should_run(prompt_count):
+        end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
         return 0
 
     started = time.monotonic()
@@ -166,6 +176,7 @@ def main() -> int:
             }
         }
         sys.stdout.write(json.dumps(out))
+    end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
     return 0
 
 

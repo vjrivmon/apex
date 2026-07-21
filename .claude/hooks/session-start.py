@@ -17,6 +17,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# La raíz del repo debe estar en sys.path ANTES de `from lib.…`:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.hook_metrics import start_hook, end_hook
+
 HUB_DB = Path.home() / "RoadToDevOps" / "apex-hub" / "data" / "hub.db"
 MAX_ERRORS = 5
 INGEST_REMINDER_THRESHOLD = int(
@@ -78,10 +83,12 @@ def _bump_visit_counter(project_id: str) -> int:
     si hub.db no existe o falla, devuelve 0 (no dispara recordatorio).
     """
     if not HUB_DB.exists() or not project_id:
+        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     try:
         conn = sqlite3.connect(str(HUB_DB))
     except sqlite3.OperationalError:
+        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     try:
         conn.execute(
@@ -106,6 +113,7 @@ def _bump_visit_counter(project_id: str) -> int:
         conn.commit()
         return len(visited)
     except sqlite3.OperationalError:
+        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
@@ -157,6 +165,7 @@ def _format_context(errors: list[dict]) -> str:
 
 
 def main() -> None:
+    _hook_start = start_hook("session-start")
     # stdin: JSON con metadatos del evento (session_id, source, cwd, etc).
     # No lo necesitamos, pero lo consumimos para no dejar el pipe colgando.
     try:

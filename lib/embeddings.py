@@ -1,128 +1,106 @@
-"""APEX Embeddings — Búsqueda semántica local con nomic-embed-text via Ollama.
+"""APEX Embeddings — cliente único de nomic-embed-text vía Ollama.
 
-Permite buscar en la wiki y el contexto por significado, no solo por keywords.
-Usa el modelo nomic-embed-text que ya está instalado en el Slimbook.
+Es el ÚNICO cliente de embeddings de APEX. Cualquier módulo que necesite
+vectores (biblioteca de libros, memoria de errores, futuros consumidores)
+pasa por aquí en vez de hablar con Ollama por su cuenta.
+
+nomic-embed-text espera prefijos de tarea distintos para documentos y para
+consultas; usarlos mal degrada la similitud. `embed_batch` los pone por ti.
+
+Nota medida sobre el idioma (2026-07-21, corpus real de 228 fragmentos): el
+modelo es mayoritariamente inglés. Una pregunta en español contra un corpus
+inglés acierta 2 de 6; la misma pregunta traducida, 6 de 6. Quien llame debe
+enviar la consulta en el idioma del corpus.
 
 Uso:
-    emb = ApexEmbeddings(ollama_url="http://100.88.164.20:11434")
-    vector = await emb.embed("motor de priorización de tareas")
-    results = await emb.search(query="cómo priorizar", collection=wiki_texts)
+    vec = embed_query("context window budget management")
+    vecs = embed_batch([chunk1, chunk2], is_query=False)
 """
 from __future__ import annotations
 
 import json
-import math
-from pathlib import Path
+import os
+import urllib.error
+import urllib.request
 
-import httpx
+EMBED_MODEL = "nomic-embed-text"
+EMBED_DIM = 768
+
+# Prefijos de tarea que nomic espera. Sin ellos el modelo no distingue una
+# pregunta de un pasaje y la similitud se resiente.
+_DOC_PREFIX = "search_document: "
+_QUERY_PREFIX = "search_query: "
+
+# Lote por petición. 32 mantiene el cuerpo HTTP manejable y aprovecha el
+# batch de Ollama: 228 fragmentos se embeben en ~2.3s.
+_BATCH_SIZE = 32
+_TIMEOUT = 180
 
 
-class ApexEmbeddings:
-    """Genera embeddings con nomic-embed-text via Ollama y busca por similaridad."""
+class EmbeddingsUnavailable(RuntimeError):
+    """Ollama no responde o el modelo no está. Se propaga: no se traga."""
 
-    MODEL = "nomic-embed-text"
 
-    def __init__(self, ollama_url: str = "http://localhost:11434") -> None:
-        self.ollama_url = ollama_url.rstrip("/")
-        self._client: httpx.AsyncClient | None = None
+def ollama_url() -> str:
+    """URL de Ollama. `APEX_OLLAMA_URL` la sobreescribe."""
+    return os.environ.get("APEX_OLLAMA_URL", "http://localhost:11434").rstrip("/")
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
-        return self._client
 
-    async def embed(self, text: str) -> list[float]:
-        """Genera un vector de embedding para un texto."""
-        client = await self._get_client()
-        try:
-            r = await client.post(
-                f"{self.ollama_url}/api/embed",
-                json={"model": self.MODEL, "input": text},
+def _post(payload: dict) -> dict:
+    req = urllib.request.Request(
+        f"{ollama_url()}/api/embed",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
+            return json.loads(r.read())
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        raise EmbeddingsUnavailable(
+            f"Ollama no responde en {ollama_url()}: {exc}"
+        ) from exc
+
+
+def embed_batch(texts: list[str], *, is_query: bool = False) -> list[list[float]]:
+    """Embebe una lista de textos en lotes.
+
+    Una petición HTTP por lote, no una por texto: el cliente anterior hacía N
+    round-trips secuenciales (14 ms/doc contra 3,5 ms/doc en batch).
+    """
+    if not texts:
+        return []
+
+    prefix = _QUERY_PREFIX if is_query else _DOC_PREFIX
+    out: list[list[float]] = []
+    for i in range(0, len(texts), _BATCH_SIZE):
+        lote = [prefix + t for t in texts[i:i + _BATCH_SIZE]]
+        data = _post({"model": EMBED_MODEL, "input": lote})
+        vectores = data.get("embeddings") or []
+        if len(vectores) != len(lote):
+            raise EmbeddingsUnavailable(
+                f"Ollama devolvió {len(vectores)} vectores para {len(lote)} textos"
             )
-            r.raise_for_status()
-            data = r.json()
-            # Ollama /api/embed devuelve {"embeddings": [[...vector...]]}
-            embeddings = data.get("embeddings", [])
-            if embeddings and len(embeddings) > 0:
-                return embeddings[0]
-            return []
-        except Exception:
-            return []
-
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Genera embeddings para múltiples textos."""
-        results = []
-        for text in texts:
-            vec = await self.embed(text)
-            results.append(vec)
-        return results
-
-    async def search(
-        self,
-        query: str,
-        documents: list[dict],
-        top_k: int = 5,
-        text_key: str = "content",
-    ) -> list[dict]:
-        """Busca los documentos más similares al query por cosine similarity.
-
-        Args:
-            query: Texto a buscar
-            documents: Lista de dicts con al menos un campo de texto
-            top_k: Número de resultados a devolver
-            text_key: Key del dict que contiene el texto
-
-        Returns:
-            Lista de dicts ordenados por similaridad, con 'score' añadido
-        """
-        if not documents:
-            return []
-
-        query_vec = await self.embed(query)
-        if not query_vec:
-            return documents[:top_k]  # Fallback sin embeddings
-
-        # Embeddings de los documentos
-        doc_texts = [d.get(text_key, "") for d in documents]
-        doc_vecs = await self.embed_batch(doc_texts)
-
-        # Calcular similaridad coseno
-        scored = []
-        for doc, vec in zip(documents, doc_vecs):
-            if vec:
-                score = _cosine_similarity(query_vec, vec)
-                scored.append({**doc, "score": score})
-            else:
-                scored.append({**doc, "score": 0.0})
-
-        # Ordenar por score descendente
-        scored.sort(key=lambda x: x["score"], reverse=True)
-        return scored[:top_k]
-
-    async def health_check(self) -> bool:
-        """Verifica que Ollama responde y nomic-embed-text está disponible."""
-        try:
-            client = await self._get_client()
-            r = await client.get(f"{self.ollama_url}/api/tags")
-            r.raise_for_status()
-            models = [m["name"] for m in r.json().get("models", [])]
-            return any(self.MODEL in m for m in models)
-        except Exception:
-            return False
-
-    async def close(self) -> None:
-        if self._client:
-            await self._client.aclose()
-            self._client = None
+        out.extend(vectores)
+    return out
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Calcula la similaridad coseno entre dos vectores."""
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+def embed_query(text: str) -> list[float]:
+    """Embebe una consulta. Debe ir en el idioma del corpus."""
+    vecs = embed_batch([text], is_query=True)
+    if not vecs:
+        raise EmbeddingsUnavailable("Ollama devolvió una respuesta vacía")
+    return vecs[0]
+
+
+def health_check() -> tuple[bool, str]:
+    """`(disponible, motivo)`. No lanza: es para diagnóstico."""
+    try:
+        req = urllib.request.Request(f"{ollama_url()}/api/tags")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            modelos = [m.get("name", "") for m in json.loads(r.read()).get("models", [])]
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        return False, f"Ollama no responde en {ollama_url()}: {exc}"
+
+    if not any(EMBED_MODEL in m for m in modelos):
+        return False, f"falta el modelo {EMBED_MODEL} (ollama pull {EMBED_MODEL})"
+    return True, ""
