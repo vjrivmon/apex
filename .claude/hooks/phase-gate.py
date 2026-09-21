@@ -75,7 +75,21 @@ def _find_context_db(start: Path) -> Path | None:
     return None
 
 
+class VerdictIlegible(Exception):
+    """No se pudo determinar si hay bloqueo: la BD no se dejó consultar.
+
+    Es distinto de "no hay verdict". Colapsar ambos casos en None hacía que
+    una BD bloqueada o una fila corrupta dejaran pasar la transición en
+    silencio — un fail-open en el único punto que debía frenar.
+    """
+
+
 def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
+    """Último verdict de la fase, o None si no hay ninguno.
+
+    Lanza `VerdictIlegible` si la BD existe pero no se pudo leer. La tabla
+    ausente NO es error: los proyectos anteriores al Sprint 8 no la tienen.
+    """
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
         conn.row_factory = sqlite3.Row
@@ -94,11 +108,16 @@ def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
             "should_block": bool(row["should_block"]),
             "reasoning": row["reasoning"],
         }
-    except sqlite3.OperationalError:
-        # tabla no existe (proyecto antes de Sprint 8) o BD locked
-        return None
-    except Exception:
-        return None
+    except sqlite3.OperationalError as e:
+        # "no such table" = proyecto pre-Sprint 8: no hay nada que evaluar.
+        # Cualquier otro OperationalError (locked, corrupta, I/O) sí importa.
+        if "no such table" in str(e).lower():
+            return None
+        raise VerdictIlegible(f"BD ilegible: {e}") from e
+    except json.JSONDecodeError as e:
+        raise VerdictIlegible(f"columna issues corrupta: {e}") from e
+    except Exception as e:  # noqa: BLE001 — se reporta, no se traga
+        raise VerdictIlegible(f"{type(e).__name__}: {e}") from e
 
 
 def main() -> int:
@@ -140,7 +159,26 @@ def main() -> int:
         end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
-    verdict = _get_latest_verdict(db_path, blocking_phase)
+    try:
+        verdict = _get_latest_verdict(db_path, blocking_phase)
+    except VerdictIlegible as e:
+        # No se sabe si hay bloqueo. Se avisa en voz alta y se deja pasar:
+        # bloquear por una BD momentáneamente locked dejaría la sesión
+        # atascada sin causa real. Lo que no se hace es callar.
+        print(
+            f"[phase-gate] AVISO: no se pudo comprobar el grader de la fase "
+            f"{blocking_phase}.\n"
+            f"  Motivo: {e}\n"
+            f"  BD: {db_path}\n"
+            "  La transición SIGUE porque el fallo es de lectura, no un "
+            "veredicto negativo.\n"
+            "  Verifica a mano con apex_grader_evaluate antes de dar la fase "
+            "por cerrada.",
+            file=sys.stderr,
+        )
+        end_hook("phase-gate", _hook_start, exit_code=0)
+        return 0
+
     if not verdict or not verdict["should_block"]:
         # Sprint 12: si la transición es a in_progress y la nueva fase
         # tiene rol asociado, sugiere invocarlo (no bloqueante).

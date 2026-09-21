@@ -83,12 +83,10 @@ def _bump_visit_counter(project_id: str) -> int:
     si hub.db no existe o falla, devuelve 0 (no dispara recordatorio).
     """
     if not HUB_DB.exists() or not project_id:
-        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     try:
         conn = sqlite3.connect(str(HUB_DB))
     except sqlite3.OperationalError:
-        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     try:
         conn.execute(
@@ -113,7 +111,6 @@ def _bump_visit_counter(project_id: str) -> int:
         conn.commit()
         return len(visited)
     except sqlite3.OperationalError:
-        end_hook("session-start", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
@@ -188,6 +185,7 @@ def main() -> None:
         context_md = (context_md or "") + reminder
 
         if not context_md.strip():
+            end_hook("session-start", _hook_start, exit_code=0)
             sys.exit(0)
         output = {
             "hookSpecificOutput": {
@@ -196,8 +194,17 @@ def main() -> None:
             }
         }
         print(json.dumps(output, ensure_ascii=False))
-    except Exception:
-        # Nunca romper el arranque de la sesión por un error del hook.
+        end_hook("session-start", _hook_start, exit_code=0)
+    except Exception as e:  # noqa: BLE001
+        # Nunca romper el arranque de la sesión por un error del hook, pero
+        # tampoco callarlo: sin este aviso, un fallo aquí se manifiesta como
+        # "el contexto cross-project dejó de aparecer" sin pista de por qué.
+        print(
+            f"[session-start] El hook falló y no inyectó contexto: "
+            f"{type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        end_hook("session-start", _hook_start, exit_code=0)
         sys.exit(0)
 
 

@@ -68,7 +68,6 @@ def increment_counter(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(str(db_path))
     except sqlite3.OperationalError:
-        end_hook("advisor-outcome-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute(

@@ -67,7 +67,6 @@ def _measure_transcript(path: str) -> int:
     try:
         return Path(path).stat().st_size // _CHARS_PER_TOKEN
     except Exception:
-        end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
 

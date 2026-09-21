@@ -92,7 +92,6 @@ def _last_scan_id(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.OperationalError:
-        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute(
@@ -101,7 +100,6 @@ def _last_scan_id(db_path: Path) -> int:
         ).fetchone()
         return int(row[0]) if row and row[0] else 0
     except (sqlite3.OperationalError, ValueError):
-        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
@@ -127,13 +125,11 @@ def _current_max_log_id(db_path: Path) -> int:
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     except sqlite3.OperationalError:
-        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     try:
         row = conn.execute("SELECT MAX(id) FROM tool_call_log").fetchone()
         return int(row[0]) if row and row[0] else 0
     except sqlite3.OperationalError:
-        end_hook("skill-forge-watch", _hook_start, exit_code=0)
         return 0
     finally:
         conn.close()
