@@ -74,3 +74,16 @@ docs/skill-eval-audit/node_modules/
 
 # Métricas de hooks: se reescriben en cada ejecución, no son código.
 .apex/hook_metrics.jsonl
+
+# LaTeX: artefactos de compilacion del paper. El .tex, el .bib y las
+# figuras si se versionan; lo que regenera latexmk en cada build, no.
+docs/paper-ase2026/*.aux
+docs/paper-ase2026/*.bbl
+docs/paper-ase2026/*.blg
+docs/paper-ase2026/*.fdb_latexmk
+docs/paper-ase2026/*.fls
+docs/paper-ase2026/*.log
+docs/paper-ase2026/*.out
+
+# Fichero PostScript de 14MB generado por error por ImageMagick (2026-09-21).
+/json
