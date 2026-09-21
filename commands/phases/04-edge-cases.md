@@ -14,7 +14,10 @@ ANTES de escribir codigo, pensar en que puede fallar.
   y estrategia de mitigacion.
 - **[4c]** Priorizar: cuales bloquean el MVP y cuales son post-MVP.
 - **[4d]** Registrar con `apex_wiki_add(title="EDGE-CASES", ...)`.
-- **[4e]** `apex_set_phase(phase_number=4, status="completed")`.
+- **[4e]** `apex_grader_evaluate(phase=4, mode="full")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[4f]** `apex_set_phase(phase_number=4, status="completed")`.
 
 ## Criterio de salida
 

@@ -27,7 +27,10 @@ su puerto correctamente.
   Si hay hits: son SQL injection candidates — corregir antes de continuar.
   Verificar que credenciales de BD vienen de variables de entorno, no hardcodeadas.
 - **[7e]** Registrar con `apex_add_component`.
-- **[7f]** `apex_set_phase(phase_number=7, status="completed")`.
+- **[7f]** `apex_grader_evaluate(phase=7, mode="deterministic")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[7g]** `apex_set_phase(phase_number=7, status="completed")`.
 
 ## Criterio de salida
 

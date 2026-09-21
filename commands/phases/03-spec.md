@@ -26,7 +26,10 @@ Especificacion por fases, no monolitica. Empieza con reflexion profunda.
 - **[3f]** Revisar con el usuario. Pedir feedback en bloque (NO interrumpir con
   preguntas una a una).
 - **[3g]** Registrar SPEC como wiki: `apex_wiki_add(title="SPEC", ...)`.
-- **[3h]** `apex_set_phase(phase_number=3, status="completed")`.
+- **[3h]** `apex_grader_evaluate(phase=3, mode="full")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[3i]** `apex_set_phase(phase_number=3, status="completed")`.
 
 ## Criterio de salida
 

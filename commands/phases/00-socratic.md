@@ -32,7 +32,10 @@ sin valor real.
 - **[0i]** Cross-project retrieval obligatorio: antes de cerrar esta fase,
   ejecutar `apex_search_cross_project(query="<idea>")` para aprender de
   proyectos previos con el mismo dominio o stack.
-- **[0j]** `apex_set_phase(phase_number=0, status="completed")`
+- **[0j]** `apex_grader_evaluate(phase=0, mode="deterministic")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[0k]** `apex_set_phase(phase_number=0, status="completed")`
 
 ## Skills recomendadas
 

@@ -25,7 +25,10 @@
   Registrar con `apex_add_decision(category="maintenance", decision="...")`.
 - **[14f]** Publicar al portfolio si aplica: `apex_portfolio_draft(slug=...,
   apply=false)` genera MDX en vr-web para revision manual.
-- **[14g]** `apex_set_phase(phase_number=14, status="completed")`.
+- **[14g]** `apex_grader_evaluate(phase=14, mode="deterministic")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[14h]** `apex_set_phase(phase_number=14, status="completed")`.
 
 ## Skills recomendadas
 

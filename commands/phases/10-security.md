@@ -31,7 +31,10 @@ a errores de secretos en repo, CORS abierto, o rate limiting ausente.
   (minimo: 5 intentos → 429 con Retry-After header).
 - **[10f]** Registrar decisiones de seguridad con
   `apex_add_decision(category="security")`.
-- **[10g]** `apex_set_phase(phase_number=10, status="completed")`.
+- **[10g]** `apex_grader_evaluate(phase=10, mode="full")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[10h]** `apex_set_phase(phase_number=10, status="completed")`.
 
 ## Criterio de salida
 

@@ -17,7 +17,10 @@
   - Ultima actividad timestamp + tipo
   - Disco espacio usado/libre
   - Errores recientes ultimos 10 de context.db
-- **[13e]** `apex_set_phase(phase_number=13, status="completed")`.
+- **[13e]** `apex_grader_evaluate(phase=13, mode="deterministic")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[13f]** `apex_set_phase(phase_number=13, status="completed")`.
 
 ## Skills recomendadas
 

@@ -35,7 +35,10 @@ llegaron a produccion.
   - JS/TS: `npx nyc` / `jest --coverage`
   Threshold minimo: 80% en domain, 60% global. Si no se alcanza, registrar
   que falta y como next_step con `apex_add_next_step`.
-- **[9g]** `apex_set_phase(phase_number=9, status="completed")`.
+- **[9g]** `apex_grader_evaluate(phase=9, mode="full")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[9h]** `apex_set_phase(phase_number=9, status="completed")`.
 
 ## Skills recomendadas
 

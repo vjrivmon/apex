@@ -12,7 +12,10 @@ Determinar la forma correcta del producto. NO asumir "app web con dashboard".
   `apex_add_decision(category="solution_type", decision="...", reasoning="...")`.
 - **[1d]** Si tiene componente visual, decidir: PWA / desktop / mobile /
   terminal UI.
-- **[1e]** `apex_set_phase(phase_number=1, status="completed")`.
+- **[1e]** `apex_grader_evaluate(phase=1, mode="deterministic")`.
+  Si `should_block=true`, atacar los issues y reevaluar: el gate
+  rechaza la transicion mientras el verdict siga bloqueando.
+- **[1f]** `apex_set_phase(phase_number=1, status="completed")`.
 
 ## Regla
 
