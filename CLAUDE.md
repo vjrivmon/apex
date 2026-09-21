@@ -30,13 +30,13 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests | 746 pasando, **1 FALLANDO** |
+| Tests | 831 pasando, **1 FALLANDO** |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
-| Hooks | 12 en disco, 11 registrados en el proyecto |
+| Hooks | 12 en disco, 8 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
 | Rama | `main` (árbol sucio) |
-| HEAD | `48150c1 feat(mcp): APEX_AUTO_LAUNCH_HUB para no arrancar el hub al abrir el server` |
+| HEAD | `bd801a5 fix(gate+advisor): valida la forma del verdict y deja de resucitar bloqueos` |
 
 ### Artefactos por sprint
 
