@@ -82,7 +82,7 @@ def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
         cur = conn.execute(
             "SELECT id, phase, quality, issues, should_block, reasoning "
             "FROM grader_verdicts WHERE phase=? "
-            "ORDER BY created_at DESC LIMIT 1",
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
             (phase,))
         row = cur.fetchone()
         conn.close()

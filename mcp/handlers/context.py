@@ -90,7 +90,17 @@ async def handle_apex_search(db: Any, arguments: dict) -> Any:
     if mode == "fts":
         results = await db.search(arguments["query"], limit=limit)
         formatter = lambda r: f"- [{r['source']}] {r['content'][:150]}"
-    return [TextContent(type='text', text='OK')]
+    else:
+        results = await db.search_hybrid(arguments["query"], limit=limit)
+        formatter = lambda r: (
+            f"- [{r['source']} · score={r['hybrid_score']:.2f}] {r['content'][:150]}"
+        )
+    if not results:
+        return [TextContent(type="text", text=f"Sin resultados para '{arguments['query']}' (mode={mode})")]
+    lines = [f"Resultados para '{arguments['query']}' (mode={mode}):"]
+    for r in results:
+        lines.append(formatter(r))
+    return [TextContent(type="text", text="\n".join(lines))]
 
 async def handle_apex_log_session(db: Any, arguments: dict) -> Any:
     """Handler for apex_log_session."""

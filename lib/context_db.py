@@ -1248,7 +1248,7 @@ class ApexContextDB:
             rows = await db.execute_fetchall(
                 "SELECT id, phase, quality, category, issues, should_block, "
                 "reasoning, evidence_hash, deterministic_checks, llm_judged, created_at "
-                "FROM grader_verdicts WHERE phase=? ORDER BY created_at DESC LIMIT 1",
+                "FROM grader_verdicts WHERE phase=? ORDER BY created_at DESC, id DESC LIMIT 1",
                 (phase,))
         if not rows:
             return None

@@ -11,6 +11,9 @@ from scaffold_devops import ScaffoldOptions as _ScaffoldOptions
 from apex_handlers._common import find_project_root as _find_project_root
 from scaffold_devops import scaffold as _scaffold_devops
 from security_gate import scaffold_templates as _scaffold_security_templates
+from security_gate import check_gate as _check_security_gate
+from security_gate import render_report as _render_security_report
+from security_gate import write_report as _write_security_report
 from typing import Any
 
 
@@ -20,7 +23,15 @@ async def handle_apex_security_gate(db: Any, arguments: dict) -> Any:
     if arguments.get("scaffold"):
         copied = _scaffold_security_templates(root)
         scaffold_msg = f"Scaffolded {len(copied)} archivos de templates AgentArmor.\n\n"
-    return [TextContent(type='text', text='OK')]
+    else:
+        scaffold_msg = ""
+    report = _check_security_gate(root)
+    md = _render_security_report(report)
+    report_path = _write_security_report(report)
+    status = "PASSED" if report.passed else "BLOCKED"
+    return [TextContent(type="text", text=(
+        f"{scaffold_msg}Security Gate: **{status}**\n\n{md}\n\n(Report: {report_path})"
+    ))]
 
 async def handle_apex_scaffold_devops(db: Any, arguments: dict) -> Any:
     """Handler for apex_scaffold_devops."""

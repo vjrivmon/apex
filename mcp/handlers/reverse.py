@@ -52,7 +52,40 @@ async def handle_apex_reverse_plan(db: Any, arguments: dict) -> Any:
             action = "backlog"
         elif choice == "d":
             action = "verify"
-    return [TextContent(type='text', text='OK')]
+        else:
+            action = "now"
+        tasks.append({
+            "finding_id": f["id"],
+            "phase": f["phase"],
+            "severity": f["severity"],
+            "title": f["title"],
+            "action": action,
+        })
+    # Ordenar: now first, luego severity, luego phase
+    action_order = {"now": 0, "verify": 1, "backlog": 2, "skip": 3}
+    sev_order = {"high": 0, "medium": 1, "low": 2}
+    tasks.sort(key=lambda t: (action_order[t["action"]], sev_order[t["severity"]], t["phase"]))
+    # Fases a retomar: las que tengan status != completed según el scan
+    phases_to_retake = [
+        p for p in scan_report.get("phases", [])
+        if p["status"] in ("partial", "missing", "unknown")
+    ]
+    plan = {
+        "project": scan_report.get("project_name"),
+        "tasks": tasks,
+        "phases_to_retake": phases_to_retake,
+        "summary": f"{len([t for t in tasks if t['action']=='now'])} tareas ahora · "
+                   f"{len([t for t in tasks if t['action']=='backlog'])} backlog · "
+                   f"{len([t for t in tasks if t['action']=='skip'])} skipped",
+    }
+    md = [f"# Plan de acción: {plan['project']}", "", f"**{plan['summary']}**", "", "## Tareas ordenadas"]
+    for t in tasks[:30]:
+        md.append(f"- [{t['action'].upper()}] {t['finding_id']} (fase {t['phase']}, {t['severity']}): {t['title']}")
+    md.append("")
+    md.append(f"## Fases a retomar: {len(phases_to_retake)}")
+    for p in phases_to_retake:
+        md.append(f"- Fase {p['phase']} ({p['name']}) — status={p['status']} score={p['score']:.2f}")
+    return [TextContent(type="text", text="\n".join(md) + f"\n\n```json\n{json.dumps(plan, indent=2, ensure_ascii=False)}\n```")]
 
 async def handle_apex_onboard_apply(db: Any, arguments: dict) -> Any:
     """Handler for apex_onboard_apply."""
