@@ -84,40 +84,73 @@ class VerdictIlegible(Exception):
     """
 
 
+def _issues_validas(bruto) -> list[str]:
+    """`issues` debe ser una lista de cadenas.
+
+    json.loads solo valida sintaxis: `'[1]'` parsea bien y luego revienta en
+    el `", ".join(...)` del mensaje de bloqueo, fuera de todo manejo. Una
+    fila con forma inesperada es una BD que no se entiende, no un permiso.
+    """
+    try:
+        valor = json.loads(bruto or "[]")
+    except json.JSONDecodeError as e:
+        raise VerdictIlegible(f"columna issues corrupta: {e}") from e
+    if not isinstance(valor, list) or not all(isinstance(i, str) for i in valor):
+        raise VerdictIlegible(f"columna issues con forma inesperada: {valor!r}")
+    return valor
+
+
+def _bloqueo_valido(bruto) -> bool:
+    """`should_block` debe ser 0 o 1.
+
+    El esquema no lo restringe, y `bool(...)` convertiría NULL en False
+    (silenciando un bloqueo) y la cadena "0" en True (inventando uno).
+    """
+    if bruto in (0, 1):
+        return bool(bruto)
+    raise VerdictIlegible(f"should_block con valor inesperado: {bruto!r}")
+
+
 def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
     """Último verdict de la fase, o None si no hay ninguno.
 
     Lanza `VerdictIlegible` si la BD existe pero no se pudo leer. La tabla
     ausente NO es error: los proyectos anteriores al Sprint 8 no la tienen.
     """
+    conn = None
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
         conn.row_factory = sqlite3.Row
-        cur = conn.execute(
+        row = conn.execute(
             "SELECT id, phase, quality, issues, should_block, reasoning "
             "FROM grader_verdicts WHERE phase=? "
             "ORDER BY created_at DESC, id DESC LIMIT 1",
-            (phase,))
-        row = cur.fetchone()
-        conn.close()
+            (phase,)).fetchone()
         if not row:
             return None
         return {
             "id": row["id"], "phase": row["phase"], "quality": row["quality"],
-            "issues": json.loads(row["issues"] or "[]"),
-            "should_block": bool(row["should_block"]),
+            "issues": _issues_validas(row["issues"]),
+            "should_block": _bloqueo_valido(row["should_block"]),
             "reasoning": row["reasoning"],
         }
     except sqlite3.OperationalError as e:
-        # "no such table" = proyecto pre-Sprint 8: no hay nada que evaluar.
-        # Cualquier otro OperationalError (locked, corrupta, I/O) sí importa.
-        if "no such table" in str(e).lower():
+        # Solo la tabla ausente es "no hay nada que evaluar" (proyecto
+        # pre-Sprint 8). Se exige el nombre para no silenciar un esquema roto
+        # por otra tabla o vista que falte.
+        if "no such table: grader_verdicts" in str(e).lower():
             return None
         raise VerdictIlegible(f"BD ilegible: {e}") from e
-    except json.JSONDecodeError as e:
-        raise VerdictIlegible(f"columna issues corrupta: {e}") from e
+    except VerdictIlegible:
+        raise
     except Exception as e:  # noqa: BLE001 — se reporta, no se traga
         raise VerdictIlegible(f"{type(e).__name__}: {e}") from e
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 — cerrar es best-effort
+                pass
 
 
 def main() -> int:
@@ -170,10 +203,14 @@ def main() -> int:
             f"{blocking_phase}.\n"
             f"  Motivo: {e}\n"
             f"  BD: {db_path}\n"
-            "  La transición SIGUE porque el fallo es de lectura, no un "
+            "  El hook deja pasar porque el fallo es de lectura, no un "
             "veredicto negativo.\n"
-            "  Verifica a mano con apex_grader_evaluate antes de dar la fase "
-            "por cerrada.",
+            "  Aviso: el handler MCP consulta la MISMA BD antes de escribir, "
+            "y lo hace\n"
+            "  antes de mirar force, así que es probable que apex_set_phase "
+            "falle igual.\n"
+            "  Arregla la BD (revisa locks y permisos de "
+            ".apex/context.db) y reevalúa.",
             file=sys.stderr,
         )
         end_hook("phase-gate", _hook_start, exit_code=0)

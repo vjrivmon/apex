@@ -1242,6 +1242,35 @@ class ApexContextDB:
             await db.commit()
             return cur.lastrowid
 
+    async def list_blocking_verdicts(self) -> list[dict]:
+        """Bloqueos VIGENTES: el último verdict de cada fase, si bloquea.
+
+        Distinto de filtrar `should_block=1` sobre el histórico, que
+        resucita bloqueos ya resueltos por un PASS posterior. El desempate
+        por `id DESC` importa: `created_at` tiene precisión de segundo.
+        """
+        import json as _json
+        async with self._conn() as db:
+            rows = await db.execute_fetchall(
+                "SELECT v.id, v.phase, v.quality, v.category, v.issues, "
+                "       v.should_block, v.reasoning, v.llm_judged, "
+                "       v.created_at "
+                "FROM grader_verdicts AS v "
+                "WHERE v.should_block=1 AND v.id = ("
+                "  SELECT u.id FROM grader_verdicts AS u "
+                "  WHERE u.phase = v.phase "
+                "  ORDER BY u.created_at DESC, u.id DESC LIMIT 1) "
+                "ORDER BY v.created_at DESC, v.id DESC")
+        return [
+            {
+                "id": r[0], "phase": r[1], "quality": r[2], "category": r[3],
+                "issues": _json.loads(r[4] or "[]"),
+                "should_block": bool(r[5]), "reasoning": r[6],
+                "llm_judged": bool(r[7]), "created_at": r[8],
+            }
+            for r in rows
+        ]
+
     async def get_latest_verdict(self, phase: int) -> dict | None:
         import json as _json
         async with self._conn() as db:

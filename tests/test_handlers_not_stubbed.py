@@ -382,3 +382,53 @@ def test_ningun_handler_devuelve_ok_literal():
     assert not culpables, (
         f"handlers devolviendo 'OK' literal (cuerpo truncado): {culpables}"
     )
+
+
+# ── bloqueos vigentes vs. histórico ──────────────────────────────────────
+
+def test_bloqueo_resuelto_no_figura_como_vigente(handlers, db):
+    """Un BLOCK seguido de un PASS de la misma fase está resuelto.
+
+    El advisor y el handoff filtraban `should_block=1` sobre el histórico, así
+    que un bloqueo ya levantado seguía reportándose como vigente sesión tras
+    sesión.
+    """
+    # Fase 5: bloqueado y luego resuelto.
+    run(db.add_verdict(phase=5, quality=1, reasoning="sin git",
+                       issues=["no_git_init"], should_block=True))
+    run(db.add_verdict(phase=5, quality=3, reasoning="git ok",
+                       issues=[], should_block=False))
+    # Fase 8: sigue bloqueada.
+    run(db.add_verdict(phase=8, quality=1, reasoning="datos mock",
+                       issues=["mock_data"], should_block=True))
+
+    vigentes = run(db.list_blocking_verdicts())
+    fases = sorted(v["phase"] for v in vigentes)
+    assert fases == [8], f"fases bloqueadas {fases}, esperada solo la 8"
+    assert all("sin git" not in v["reasoning"] for v in vigentes)
+
+
+def test_bloqueo_reincidente_vuelve_a_figurar(handlers, db):
+    """BLOCK -> PASS -> BLOCK: el último manda, la fase está bloqueada."""
+    run(db.add_verdict(phase=9, quality=1, reasoning="v1", issues=["a"],
+                       should_block=True))
+    run(db.add_verdict(phase=9, quality=3, reasoning="v2", issues=[],
+                       should_block=False))
+    run(db.add_verdict(phase=9, quality=1, reasoning="v3", issues=["b"],
+                       should_block=True))
+
+    vigentes = run(db.list_blocking_verdicts())
+    assert [v["phase"] for v in vigentes] == [9]
+    assert vigentes[0]["reasoning"] == "v3"
+
+
+def test_el_historico_se_conserva(handlers, db):
+    """Los verdicts resueltos siguen en la tabla: solo cambia qué se muestra."""
+    run(db.add_verdict(phase=5, quality=1, reasoning="bloqueante",
+                       issues=["x"], should_block=True))
+    run(db.add_verdict(phase=5, quality=3, reasoning="resuelto",
+                       issues=[], should_block=False))
+
+    assert run(db.list_blocking_verdicts()) == []
+    historico = run(db.list_verdicts(limit=20))
+    assert len(historico) == 2, "el histórico no debe perder filas"

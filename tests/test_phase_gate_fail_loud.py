@@ -198,3 +198,120 @@ def test_hook_deja_pasar_con_force(tmp_path):
         tmp_path)
 
     assert r.returncode == 0
+
+
+# ── forma de la fila, no solo sintaxis ───────────────────────────────────
+
+def test_issues_json_valido_pero_no_lista_de_strings(gate, tmp_path):
+    """`'[1]'` parsea bien y luego revienta en el join del mensaje.
+
+    json.loads valida sintaxis, no forma. Sin esta comprobación el fallo
+    ocurría en la línea del print, fuera de todo manejo de error.
+    """
+    db = _crear_db(tmp_path / ".apex" / "context.db")
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (phase, quality, issues, should_block, "
+        "reasoning) VALUES (5, 1, '[1, 2]', 1, 'issues numericos')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(db, 5)
+
+
+def test_issues_json_valido_pero_objeto(gate, tmp_path):
+    """Un dict tampoco es una lista de issues."""
+    db = _crear_db(tmp_path / ".apex" / "context.db")
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (phase, quality, issues, should_block, "
+        "reasoning) VALUES (5, 1, '{\"a\": 1}', 0, 'objeto')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(db, 5)
+
+
+def test_should_block_nulo_no_se_silencia(gate, tmp_path):
+    """`bool(None)` es False: un NULL silenciaría un posible bloqueo."""
+    db = _crear_db(tmp_path / ".apex" / "context.db")
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (phase, quality, issues, should_block, "
+        "reasoning) VALUES (5, 1, '[]', NULL, 'sin dictamen')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(db, 5)
+
+
+def test_should_block_texto_no_numerico_es_ilegible(gate, tmp_path):
+    """`bool("si")` sería True: un texto inventaría un bloqueo.
+
+    Ojo con el type affinity de SQLite: en una columna INTEGER, el texto
+    `'0'` se almacena como el entero 0 (y entonces la lectura es correcta).
+    El caso que de verdad hay que rechazar es el texto no numérico, que sí
+    se conserva como TEXT.
+    """
+    db = _crear_db(tmp_path / ".apex" / "context.db")
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (phase, quality, issues, should_block, "
+        "reasoning) VALUES (5, 1, '[]', 'si', 'texto')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(db, 5)
+
+
+def test_should_block_texto_numerico_se_normaliza(gate, tmp_path):
+    """El type affinity convierte '1' en 1: lectura válida, no error."""
+    db = _crear_db(tmp_path / ".apex" / "context.db")
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "INSERT INTO grader_verdicts (phase, quality, issues, should_block, "
+        "reasoning) VALUES (5, 1, '[]', '1', 'numerico como texto')")
+    conn.commit()
+    conn.close()
+
+    assert gate._get_latest_verdict(db, 5)["should_block"] is True
+
+
+def test_esquema_incompatible_es_ilegible(gate, tmp_path):
+    """Falta una columna: no equivale a "no hay verdicts"."""
+    ruta = tmp_path / ".apex" / "context.db"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(ruta))
+    conn.execute(
+        "CREATE TABLE grader_verdicts (id INTEGER PRIMARY KEY, phase INTEGER)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(ruta, 5)
+
+
+def test_otra_tabla_ausente_no_se_silencia(gate, tmp_path):
+    """Solo `no such table: grader_verdicts` es tolerable.
+
+    Una vista rota por otra tabla ausente también da "no such table"; con la
+    comprobación genérica quedaba silenciada.
+    """
+    ruta = tmp_path / ".apex" / "context.db"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(ruta))
+    conn.execute("CREATE TABLE base (id INTEGER PRIMARY KEY, phase INTEGER, "
+                 "quality INTEGER, issues TEXT, should_block INTEGER, "
+                 "reasoning TEXT, created_at TEXT)")
+    conn.execute("CREATE VIEW grader_verdicts AS SELECT * FROM base")
+    conn.commit()
+    conn.execute("DROP TABLE base")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(gate.VerdictIlegible):
+        gate._get_latest_verdict(ruta, 5)

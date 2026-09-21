@@ -90,7 +90,10 @@ async def collect_state_from_db(db) -> dict[str, Any]:
     # Verdicts del grader bloqueando alguna fase
     try:
         verdicts = await db.list_verdicts(limit=20)
-        state["blocking_verdicts"] = [v for v in verdicts if v.get("should_block")]
+        # Los bloqueos se consultan aparte, no se filtran del histórico:
+        # filtrar los 20 últimos ocultaba un bloqueo vigente más antiguo, y
+        # mostraba como vigentes los ya resueltos por un PASS posterior.
+        state["blocking_verdicts"] = await db.list_blocking_verdicts()
         state["recent_verdicts"] = verdicts[:5]
     except Exception:
         state["blocking_verdicts"] = []

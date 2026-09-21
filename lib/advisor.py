@@ -436,10 +436,19 @@ def build_bundle(db_path: Path | str, session_id: str) -> dict:
             "ORDER BY id DESC LIMIT 3"
         )
         out["recent_decisions"] = [dict(r) for r in cur.fetchall()]
+        # Solo bloqueos VIGENTES: el verdict debe ser el ÚLTIMO de su fase.
+        # Filtrar por should_block=1 a secas resucitaba bloqueos ya resueltos
+        # por un PASS posterior, y podía devolver tres verdicts viejos de la
+        # misma fase. El histórico se conserva: esto solo elige qué mostrar.
         cur = c.execute(
-            "SELECT id, phase, quality, issues, reasoning, created_at "
-            "FROM grader_verdicts WHERE should_block=1 "
-            "ORDER BY id DESC LIMIT 3"
+            "SELECT v.id, v.phase, v.quality, v.issues, v.reasoning, "
+            "       v.created_at "
+            "FROM grader_verdicts AS v "
+            "WHERE v.should_block=1 AND v.id = ("
+            "  SELECT u.id FROM grader_verdicts AS u "
+            "  WHERE u.phase = v.phase "
+            "  ORDER BY u.created_at DESC, u.id DESC LIMIT 1) "
+            "ORDER BY v.id DESC LIMIT 3"
         )
         out["blocking_verdicts"] = [dict(r) for r in cur.fetchall()]
         cur = c.execute(
