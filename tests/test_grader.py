@@ -263,3 +263,74 @@ def test_build_llm_prompt_is_self_contained(project_phase_5_clean: Path) -> None
     # No debe filtrar paths absolutos del sistema (privacidad mínima)
     # (sólo verifica que no hay /home/ o /Users/ — root puede aparecer pero acotado)
     assert "Devuelve SÓLO" in prompt or "Devuelve" in prompt
+
+
+# ── Detección de git: worktrees y submódulos ─────────────────────────────
+
+def _git(*args: str, cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=str(cwd), check=True,
+                   capture_output=True)
+
+
+def test_git_detectado_en_repo_normal(tmp_path: Path) -> None:
+    from grader import _is_git_repo
+    _git("init", "-q", cwd=tmp_path)
+    assert _is_git_repo(tmp_path) is True
+
+
+def test_git_detectado_en_worktree(tmp_path: Path) -> None:
+    """En un worktree `.git` es un FICHERO, no un directorio.
+
+    Comprobar solo `is_dir()` marcaba `no_git_init` —issue bloqueante desde
+    la fase 5— en worktrees con git perfectamente funcional. El bloqueo era
+    falso y, con la persistencia de verdicts rota, quedaba congelado.
+    """
+    from grader import _is_git_repo
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    _git("config", "user.email", "t@t", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    (repo / "a.txt").write_text("x")
+    _git("add", ".", cwd=repo)
+    _git("commit", "-qm", "init", cwd=repo)
+
+    wt = tmp_path / "wt"
+    _git("worktree", "add", "-q", str(wt), cwd=repo)
+
+    assert (wt / ".git").is_file(), "premisa: en un worktree .git es fichero"
+    assert _is_git_repo(wt) is True
+
+
+def test_worktree_no_produce_issue_de_git(tmp_path: Path) -> None:
+    """El efecto observable: un worktree no debe bloquear la fase 5."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    _git("config", "user.email", "t@t", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    (repo / "a.txt").write_text("x")
+    _git("add", ".", cwd=repo)
+    _git("commit", "-qm", "init", cwd=repo)
+    wt = tmp_path / "wt"
+    _git("worktree", "add", "-q", str(wt), cwd=repo)
+
+    e = gather_evidence(wt, phase=5, component_types=[],
+                        decisions_metadata={"detected_os": "Linux"})
+    v = evaluate_deterministic(e)
+    assert e.git_initialized is True
+    assert ISSUE_NO_GIT not in v.issues
+    assert v.should_block is False
+
+
+def test_fichero_git_ajeno_no_cuenta_como_repo(tmp_path: Path) -> None:
+    """Un `.git` que no apunta a un gitdir no es un repo."""
+    from grader import _is_git_repo
+    (tmp_path / ".git").write_text("esto no es un puntero de git")
+    assert _is_git_repo(tmp_path) is False
+
+
+def test_sin_git_sigue_dando_falso(tmp_path: Path) -> None:
+    """El caso que el check debe seguir detectando."""
+    from grader import _is_git_repo
+    assert _is_git_repo(tmp_path) is False

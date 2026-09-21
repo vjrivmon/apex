@@ -134,6 +134,31 @@ def _walk_files(root: Path, patterns: tuple[str, ...]) -> list[Path]:
     return out
 
 
+def _is_git_repo(root: Path) -> bool:
+    """¿`root` está bajo control de git?
+
+    `.git` es un DIRECTORIO en un clon normal, pero un FICHERO en un git
+    worktree y en un submódulo, donde contiene una línea `gitdir: <ruta>`.
+    Comprobar solo `is_dir()` daba `no_git_init` — issue bloqueante desde la
+    fase 5 — en worktrees con git perfectamente funcional.
+
+    No se invoca `git rev-parse`: el grader corre a menudo y un subproceso
+    por evaluación es caro. La comprobación de fichero es suficiente y no
+    depende de que git esté instalado.
+    """
+    punto_git = root / ".git"
+    if punto_git.is_dir():
+        return True
+    if punto_git.is_file():
+        # Un worktree/submódulo legítimo apunta a su gitdir. Se exige el
+        # prefijo para no aceptar un fichero `.git` cualquiera.
+        try:
+            return punto_git.read_text(encoding="utf-8", errors="replace").lstrip().startswith("gitdir:")
+        except OSError:
+            return False
+    return False
+
+
 def gather_evidence(
     project_root: Path | str,
     phase: int,
@@ -142,7 +167,7 @@ def gather_evidence(
     last_session_log: str = "",
 ) -> Evidence:
     root = Path(project_root).resolve()
-    git_initialized = (root / ".git").is_dir()
+    git_initialized = _is_git_repo(root)
 
     git_diff = ""
     if git_initialized:
