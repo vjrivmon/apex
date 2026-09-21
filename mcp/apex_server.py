@@ -1865,7 +1865,8 @@ async def _db_exists(db: ApexContextDB) -> bool:
 
 async def main():
     # Auto-lanzar APEX Hub si no está corriendo
-    _launch_hub_if_needed()
+    if os.environ.get("APEX_AUTO_LAUNCH_HUB", "1") != "0":
+        _launch_hub_if_needed()
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())

@@ -1,0 +1,7 @@
+# Runtime del servidor MCP de APEX (lib/* + mcp/*).
+# El SDK debe quedarse en la linea 1.x: mcp>=2 elimina la API de bajo nivel
+# `mcp.server.Server` sobre la que esta escrito mcp/apex_server.py.
+mcp<2
+aiosqlite
+httpx
+pyyaml

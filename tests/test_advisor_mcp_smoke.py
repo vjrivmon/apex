@@ -39,6 +39,32 @@ def run(coro):
         loop.close()
 
 
+@pytest.mark.parametrize("auto_launch, expected", [(None, True), ("0", False), ("1", True)])
+def test_main_hub_autolaunch(apex_server_mod, monkeypatch, auto_launch, expected):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, Mock
+
+    if auto_launch is None:
+        monkeypatch.delenv("APEX_AUTO_LAUNCH_HUB", raising=False)
+    else:
+        monkeypatch.setenv("APEX_AUTO_LAUNCH_HUB", auto_launch)
+    launch = Mock()
+    serve = AsyncMock()
+
+    @asynccontextmanager
+    async def streams():
+        yield ("read", "write")
+
+    monkeypatch.setattr(apex_server_mod, "_launch_hub_if_needed", launch)
+    monkeypatch.setattr(apex_server_mod, "stdio_server", streams)
+    monkeypatch.setattr(apex_server_mod.server, "run", serve)
+    run(apex_server_mod.main())
+    assert launch.call_count == int(expected)
+    serve.assert_awaited_once_with(
+        "read", "write", apex_server_mod.server.create_initialization_options()
+    )
+
+
 @pytest.fixture
 def project_root(tmp_path, monkeypatch):
     """tmp_path con .apex/ inicializada y CWD apuntando ahí."""
