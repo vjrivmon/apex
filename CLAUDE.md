@@ -26,17 +26,17 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ## Estado verificado
 
-> Generado por `scripts/refresh_state.py` el 2026-07-21. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
+> Generado por `scripts/refresh_state.py` el 2026-09-21. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
 
 | Métrica | Valor |
 |---|---|
-| Tests | 730 pasando |
+| Tests | 746 pasando, **1 FALLANDO** |
 | Tools MCP | 57 |
-| Skills (`skills/`) | 24 |
+| Skills (`skills/`) | 25 |
 | Hooks | 12 en disco, 11 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
 | Rama | `main` (árbol sucio) |
-| HEAD | `5a37ca0 chore: no versionar .apex/hook_metrics.jsonl` |
+| HEAD | `48150c1 feat(mcp): APEX_AUTO_LAUNCH_HUB para no arrancar el hub al abrir el server` |
 
 ### Artefactos por sprint
 

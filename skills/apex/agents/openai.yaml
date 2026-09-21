@@ -1,0 +1,4 @@
+interface:
+  display_name: "APEX"
+  short_description: "Desarrollo por fases con memoria de proyecto"
+  default_prompt: "Usa $apex para continuar este proyecto desde su fase actual."

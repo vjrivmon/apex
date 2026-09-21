@@ -2,14 +2,24 @@
 """UserPromptSubmit hook: aviso de handoff cuando el transcript pasa el umbral
 configurado (Sprint 9.1, refinado para Opus 1M).
 
+El límite de contexto se detecta dinámicamente a partir del modelo activo
+(leído del propio transcript), así el porcentaje y el umbral relativo son
+correctos tanto en Sonnet 200K como en Opus 1M. Ver `_detect_context_limit`.
+
 Dos modos de configurar el umbral (el absoluto gana si está > 0):
 
 - `APEX_HANDOFF_THRESHOLD_TOKENS` (absoluto, recomendado): dispara cuando el
-  transcript supera ese número de tokens, independiente del modelo. Útil con
-  Opus 4.7 1M context donde "el 40%" no tiene el mismo significado que en
-  Sonnet 200K. Por defecto `0` (desactivado, usa porcentaje).
+  transcript supera ese número de tokens, independiente del modelo. Por
+  defecto `0` (desactivado, usa porcentaje).
 - `APEX_HANDOFF_THRESHOLD` (porcentaje, fallback): fracción [0, 1] aplicada
-  sobre `APEX_CONTEXT_LIMIT` (default 200000). Por defecto `0.40`.
+  sobre el límite de contexto detectado. Por defecto `0.40`.
+
+Límite de contexto (para el % y el umbral relativo):
+
+- `APEX_CONTEXT_LIMIT` (env): si se define, gana siempre (override explícito).
+- Autodetección por modelo: lee el último `model` del transcript y lo mapea a
+  su ventana real (`_MODEL_CONTEXT_LIMITS`). Opus → 1M, Sonnet/Haiku → 200K.
+- Si no hay env ni modelo reconocible, cae a 200000.
 
 A partir del umbral, las respuestas pierden precisión. Este hook mide el
 tamaño del transcript JSONL de la sesión actual y, si lo supera, inyecta un
@@ -36,7 +46,19 @@ from lib.hook_metrics import start_hook, end_hook
 
 # 1 token ≈ 4 chars (aproximación coherente con lib/handoff.py)
 _CHARS_PER_TOKEN = 4
-_DEFAULT_CONTEXT_LIMIT = int(os.environ.get("APEX_CONTEXT_LIMIT", "200000"))
+_FALLBACK_CONTEXT_LIMIT = 200000
+
+# Ventana de contexto real por familia de modelo. El match es por substring
+# sobre el id (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-...`),
+# así aguanta sufijos de fecha/variante sin tener que enumerarlos.
+_MODEL_CONTEXT_LIMITS = (
+    ("opus", 1000000),
+    ("sonnet", 200000),
+    ("haiku", 200000),
+)
+
+# Override explícito del env: si está, gana sobre la autodetección.
+_ENV_CONTEXT_LIMIT = int(os.environ.get("APEX_CONTEXT_LIMIT", "0"))
 _THRESHOLD = float(os.environ.get("APEX_HANDOFF_THRESHOLD", "0.40"))
 _THRESHOLD_TOKENS = int(os.environ.get("APEX_HANDOFF_THRESHOLD_TOKENS", "0"))
 
@@ -47,6 +69,37 @@ def _measure_transcript(path: str) -> int:
     except Exception:
         end_hook("context-watch", _hook_start, exit_code=0)
         return 0
+
+
+def _last_model(path: str) -> str:
+    """Último `model` no vacío del transcript JSONL (lo escribe cada mensaje
+    del asistente). Escanea de atrás hacia delante y para en el primero."""
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return ""
+    for line in reversed(lines):
+        if '"model"' not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        model = obj.get("message", {}).get("model") or obj.get("model")
+        if isinstance(model, str) and model and model != "<synthetic>":
+            return model
+    return ""
+
+
+def _detect_context_limit(transcript_path: str) -> int:
+    """Límite de contexto a usar: env explícito > modelo detectado > fallback."""
+    if _ENV_CONTEXT_LIMIT > 0:
+        return _ENV_CONTEXT_LIMIT
+    model = _last_model(transcript_path).lower()
+    for needle, limit in _MODEL_CONTEXT_LIMITS:
+        if needle in model:
+            return limit
+    return _FALLBACK_CONTEXT_LIMIT
 
 
 def main() -> int:
@@ -67,15 +120,17 @@ def main() -> int:
         end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
+    context_limit = _detect_context_limit(transcript)
+
     if _THRESHOLD_TOKENS > 0:
         threshold_tokens = _THRESHOLD_TOKENS
     else:
-        threshold_tokens = int(_DEFAULT_CONTEXT_LIMIT * _THRESHOLD)
+        threshold_tokens = int(context_limit * _THRESHOLD)
     if tokens < threshold_tokens:
         end_hook("context-watch", _hook_start, exit_code=0)
         return 0
 
-    pct = round(100 * tokens / _DEFAULT_CONTEXT_LIMIT, 1)
+    pct = round(100 * tokens / context_limit, 1)
     session_id = payload.get("session_id", "")
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
@@ -83,12 +138,12 @@ def main() -> int:
         threshold_label = f"umbral absoluto {_THRESHOLD_TOKENS:,} tk"
     else:
         threshold_label = (
-            f"{int(_THRESHOLD * 100)}% de {_DEFAULT_CONTEXT_LIMIT:,}"
+            f"{int(_THRESHOLD * 100)}% de {context_limit:,}"
         )
     sys.stdout.write(
         "\n"
         f"[apex context-watch] La sesión actual usa ~{tokens:,} tokens "
-        f"(~{pct}% de {_DEFAULT_CONTEXT_LIMIT:,}, supera {threshold_label}). "
+        f"(~{pct}% de {context_limit:,}, supera {threshold_label}). "
         f"Recomendado:\n"
         f"  1. Llama a `apex_resume_session` para serializar el handoff "
         f"de esta sesión ({session_id[:12] or '?'}).\n"

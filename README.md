@@ -4,6 +4,34 @@
 > software: desde la idea hasta el mantenimiento. Con persistencia de contexto
 > entre sesiones, tutor socrático, y 14 fases de desarrollo con gate 10.5 de seguridad.
 
+## Uso en Codex
+
+APEX también tiene una skill de entrada para Codex que reutiliza el router,
+las fases y las skills de este repositorio. Con el entorno `.venv` de APEX
+ya instalado, ejecuta desde la raíz del repositorio:
+
+```bash
+mkdir -p ~/.agents/skills
+ln -s "$PWD/skills/apex" ~/.agents/skills/apex
+codex mcp add apex --env APEX_AUTO_LAUNCH_HUB=0 -- "$PWD/.venv/bin/python3" "$PWD/mcp/apex_server.py"
+```
+
+Si el enlace `~/.agents/skills/apex` ya existe, comprueba su destino antes de
+repetir la instalación. Reinicia Codex después de registrar el MCP y usa
+`$apex` seguido de tu petición (o selecciona la skill APEX). Es el equivalente
+del comando `/apex` de Claude Code; escribir `/apex` como texto también está
+contemplado por la descripción de la skill, pero no registra un slash command
+nativo. Ver [skills de Codex](https://learn.chatgpt.com/docs/build-skills).
+
+El servidor debe heredar el directorio del proyecto abierto: no configures su
+`cwd` al repositorio APEX, porque la BD se selecciona por directorio de trabajo.
+`APEX_AUTO_LAUNCH_HUB=0` evita arrancar el Hub y abrir el navegador al conectar
+Codex. Sin esa variable se conserva el comportamiento anterior de Claude Code.
+
+Los hooks y agentes instalados en `~/.claude/` no se cargan en Codex. La skill
+adapta las llamadas de herramientas, registra el progreso explícitamente y
+mantiene los gates del MCP; no instala los hooks de Claude ni sus temporizadores.
+
 ## El Problema
 
 **Claude Code pierde el hilo cuando un proyecto ya está en marcha.** Las
