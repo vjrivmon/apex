@@ -204,6 +204,11 @@ def _launch_hub_if_needed() -> None:
             if _hub_is_running():
                 break
             time.sleep(0.2)
+        else:
+            # Sin esto el hub estuvo caído de julio a septiembre sin que nadie lo
+            # supiera: faltaba su .venv y el fallo solo quedaba en hub.log.
+            print(f"[apex] apex-hub no arrancó en 6 s con {python}. Revisa {_HUB_LOG} "
+                  f"(¿falta {venv_python}?).", file=sys.stderr)
 
     # Abrir navegador (esté ya corriendo o recién arrancado)
     try:
@@ -1828,6 +1833,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     handler = HANDLERS.get(name)
     if handler is None:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+    from apex_handlers._common import leaked_call_markup
+    leaked = leaked_call_markup(arguments or {})
+    if leaked:
+        return [TextContent(type="text", text=(
+            f"RECHAZADO, no se ha guardado nada: el argumento '{leaked}' contiene sintaxis de "
+            f"otra llamada a tool (<parameter name=...> o </invoke>). La llamada salió mal "
+            f"formada y los parámetros siguientes quedaron dentro de ese texto. Repite {name} "
+            f"pasando cada valor en su propio parámetro."))]
 
     # La biblioteca de libros vive en ~/.apex/library.db y es cross-project:
     # se consulta desde cualquier sitio, incluso sin proyecto APEX. Por eso se

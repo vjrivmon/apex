@@ -9,6 +9,7 @@ from mcp.types import TextContent
 from apex_handlers._common import db_exists as _db_exists
 from apex_handlers._common import find_project_root as _find_project_root
 from apex_handlers._common import sync_to_obsidian as _sync_to_obsidian
+from apex_handlers._common import vault_project_id as _vault_project_id
 from wiki_scaffold import create_wiki
 from typing import Any
 
@@ -72,7 +73,7 @@ async def handle_apex_set_phase(db: Any, arguments: dict) -> Any:
                 severity="high",
             )
         await db.set_phase(phase_n, new_status, arguments.get("notes", ""))
-        _project = await db.get_meta("nombre") or "unknown"
+        _project = _vault_project_id(db.db_path)
         _sync_to_obsidian("phase", {
             "project": _project, "phase": phase_n,
             "status": new_status, "notes": arguments.get("notes", ""),
@@ -107,7 +108,7 @@ async def handle_apex_log_session(db: Any, arguments: dict) -> Any:
     await db.log_session(
         arguments["summary"], key_outcomes=arguments.get("key_outcomes", ""),
         phase=arguments.get("phase"))
-    _project = await db.get_meta("nombre") or "unknown"
+    _project = _vault_project_id(db.db_path)
     _sync_to_obsidian("session", {"project": _project, "summary": arguments["summary"]})
     return [TextContent(type="text", text=f"Sesión registrada: {arguments['summary'][:80]}")]
 

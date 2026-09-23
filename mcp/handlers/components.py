@@ -7,6 +7,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / 'lib'))
 from mcp.types import TextContent
 from apex_handlers._common import sync_to_obsidian as _sync_to_obsidian
+from apex_handlers._common import vault_project_id as _vault_project_id
 from typing import Any
 
 
@@ -18,7 +19,7 @@ async def handle_apex_add_component(db: Any, arguments: dict) -> Any:
         files=arguments.get("files"))
     if arguments.get("status") and arguments["status"] != "planned":
         await db.update_component_status(arguments["id"], arguments["status"])
-    _project = await db.get_meta("nombre") or "unknown"
+    _project = _vault_project_id(db.db_path)
     _sync_to_obsidian("component", {"project": _project, "name": arguments["name"], "type": arguments["type"]})
     return [TextContent(type="text", text=f"Componente '{arguments['name']}' registrado como {arguments.get('status', 'planned')}")]
 
