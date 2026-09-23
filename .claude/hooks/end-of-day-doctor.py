@@ -79,7 +79,10 @@ HANDOFF_HARD_TIMEOUT_S = float(
 
 
 def _find_project_root(cwd: Path) -> Path | None:
+    home = Path.home()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break  # ~/.apex es memoria global, no un proyecto
         if (parent / ".apex" / "context.db").exists():
             return parent
     return None

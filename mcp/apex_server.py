@@ -307,9 +307,19 @@ def _sync_to_obsidian(event_type: str, data: dict) -> None:
 # --- Detectar directorio del proyecto ---
 
 def _find_project_root() -> Path:
-    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/."""
+    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/.
+
+    NUNCA sube hasta el home: `~/.apex/` es config global y memoria de errores
+    graves, no un proyecto. Resolverlo hacía que una carpeta sin `.apex/`
+    propio heredara el contexto de otro (galia -> osyris-ideas, 2026-07-17) o
+    escribiera en la BD global (Motor Fisico 2D Propio, 2026-09-22). Si no hay
+    proyecto devuelve el CWD; `_get_db()` es quien avisa.
+    """
+    home = Path.home()
     cwd = Path.cwd()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break
         if (parent / ".apex").exists():
             return parent
         if (parent / ".git").exists():
@@ -322,10 +332,25 @@ def _find_project_root() -> Path:
 _INITIALIZED_DB_PATHS: set[str] = set()
 
 
+class NotAnApexProjectError(RuntimeError):
+    """El CWD no pertenece a ningún proyecto APEX (no hay `.apex/` propio)."""
+
+
 def _get_db() -> ApexContextDB:
-    """Obtiene la instancia de context.db para el proyecto actual."""
+    """Obtiene la instancia de context.db para el proyecto actual.
+
+    Nunca devuelve la BD global (`~/.apex/context.db`). Sin `.apex/` propio
+    lanza NotAnApexProjectError en vez de servir contexto ajeno. La
+    comparación se hace en cada llamada para respetar cambios de HOME.
+    """
+    global_db = (Path.home() / ".apex" / "context.db").resolve()
     root = _find_project_root()
     db_path = root / ".apex" / "context.db"
+    if db_path.resolve() == global_db or not (root / ".apex").is_dir():
+        raise NotAnApexProjectError(
+            f"El directorio '{Path.cwd()}' no es un proyecto APEX (no tiene .apex/ propio). "
+            f"Ejecuta apex_init_project para inicializarlo, o cámbiate al directorio del proyecto."
+        )
     return ApexContextDB(str(db_path))
 
 
@@ -1846,8 +1871,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     # La biblioteca de libros vive en ~/.apex/library.db y es cross-project:
     # se consulta desde cualquier sitio, incluso sin proyecto APEX. Por eso se
     # despacha ANTES de _get_db(), que lanzaría NotAnApexProjectError.
-    db = None if name in LIBRARY_TOOLS else _get_db()
-    if db is not None:
+    # apex_init_project crea el `.apex/`: no puede exigirlo de antemano.
+    try:
+        if name in LIBRARY_TOOLS:
+            db = None
+        elif name == "apex_init_project":
+            db = ApexContextDB(str(_find_project_root() / ".apex" / "context.db"))
+        else:
+            db = _get_db()
+    except NotAnApexProjectError as exc:
+        await _debug_log(name, arguments, f"NOT_APEX_PROJECT: {exc}", 0)
+        return [TextContent(type="text", text=str(exc))]
+    if db is not None and name != "apex_init_project":
         await _ensure_db_schema(db)
 
     import time

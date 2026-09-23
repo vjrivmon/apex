@@ -13,9 +13,14 @@ _HUB_DB = _HUB_DIR / "data" / "hub.db"
 
 
 def find_project_root() -> Path:
-    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/."""
+    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/.
+    Nunca sube hasta el home: `~/.apex/` es memoria global, no un proyecto
+    (mismo criterio que apex_server._find_project_root)."""
+    home = Path.home()
     cwd = Path.cwd()
     for parent in [cwd, *cwd.parents]:
+        if parent == home:
+            break
         if (parent / ".apex").exists():
             return parent
         if (parent / ".git").exists():

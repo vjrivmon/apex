@@ -25,3 +25,5 @@ def _vault_aislado(tmp_path_factory, monkeypatch):
     """Ningún test escribe en el ApexVault real. En julio de 2026 la suite dejó
     decenas de líneas `Fase 5 -> completed` en projects/unknown-log.md."""
     monkeypatch.setenv("APEX_VAULT_DIR", str(tmp_path_factory.mktemp("vault")))
+    # Tampoco en la memoria global real de errores graves (~/.apex/context.db).
+    monkeypatch.setenv("APEX_GLOBAL_MEMORY_DB", str(tmp_path_factory.mktemp("global") / "context.db"))
