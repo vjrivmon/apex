@@ -354,6 +354,45 @@ def _get_db() -> ApexContextDB:
     return ApexContextDB(str(db_path))
 
 
+def _heal_wal_sidecars(db_path: Path) -> None:
+    """Aparta sidecars -wal/-shm que son symlinks ROTOS (auto-referenciales o
+    colgantes) antes de que SQLite intente abrirlos.
+
+    Origen del problema: una copia/backup externa (rsync) puede dejar
+    `context.db-wal` y `context.db-shm` como symlinks que apuntan a sí mismos.
+    Al abrir la BD en modo WAL, SQLite sigue el symlink, cae en ELOOP y aborta
+    con `unable to open database file`, dejando el MCP muerto para ese proyecto.
+
+    Seguridad: solo actúa cuando el sidecar es un symlink roto. Un `-wal` real
+    con transacciones pendientes es un fichero REGULAR (no symlink), así que
+    `os.path.islink` es False y NUNCA se toca. Idempotente y fail-open: si no
+    puede sanar, no bloquea el arranque del MCP."""
+    from datetime import datetime
+
+    for suffix in ("-wal", "-shm"):
+        side = str(db_path) + suffix
+        try:
+            if not os.path.islink(side):
+                continue  # fichero regular o ausente: jamás se toca
+            # symlink presente: roto si es auto-referencial o cuelga (ELOOP)
+            try:
+                broken = os.path.realpath(side) == side or not os.path.exists(side)
+            except OSError:
+                broken = True  # ELOOP al resolver
+            if not broken:
+                continue
+            corrupt = f"{side}.corrupt-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            try:
+                os.rename(side, corrupt)
+            except OSError:
+                try:
+                    os.unlink(side)
+                except OSError:
+                    pass  # fail-open: no bloquear el MCP por no poder sanar
+        except OSError:
+            continue
+
+
 async def _ensure_db_schema(db: ApexContextDB) -> None:
     """Garantiza que el schema está al día. Ejecuta initialize() (idempotente)
     una vez por path en cada vida del proceso. Necesario para que BDs creadas
@@ -363,6 +402,9 @@ async def _ensure_db_schema(db: ApexContextDB) -> None:
     if key in _INITIALIZED_DB_PATHS:
         return
     if db.db_path.exists():
+        # Sana sidecars WAL rotos (symlinks auto-referenciales de un rsync)
+        # antes del primer connect, o SQLite caería en ELOOP.
+        _heal_wal_sidecars(db.db_path)
         # BD existente: ejecuta executescript para añadir tablas nuevas
         # (CREATE TABLE IF NOT EXISTS) sin tocar datos.
         await db.initialize()
