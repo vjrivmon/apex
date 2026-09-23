@@ -26,17 +26,17 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ## Estado verificado
 
-> Generado por `scripts/refresh_state.py` el 2026-09-21. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
+> Generado por `scripts/refresh_state.py` el 2026-09-23. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
 
 | Métrica | Valor |
 |---|---|
-| Tests | 831 pasando, **1 FALLANDO** |
+| Tests | 848 pasando |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
 | Hooks | 12 en disco, 8 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
-| Rama | `main` (árbol sucio) |
-| HEAD | `bd801a5 fix(gate+advisor): valida la forma del verdict y deja de resucitar bloqueos` |
+| Rama | `fix/vault-sync-2026-09-23` (árbol sucio) |
+| HEAD | `a5a4f81 fix(mcp): self-heal de sidecars WAL rotos antes del primer connect (porta 1a19e21)` |
 
 ### Artefactos por sprint
 
@@ -113,7 +113,25 @@ mencionaban estaban obsoletas.
   preventiva con feedback loop implícito vía facets.
 - **Memoria global** (`lib/global_memory.py`): `~/.apex/context.db` es memoria
   append-only de errores GRAVES cross-project. NUNCA es el contexto de un
-  proyecto — `_get_db()` lanza si el cwd no tiene `.apex/` propio.
+  proyecto — `_get_db()` lanza si el cwd no tiene `.apex/` propio, y la
+  búsqueda de raíz (servidor y 6 hooks) se detiene en el home. Escrito el
+  2026-07-17 pero atascado en una rama sin fusionar hasta el 2026-09-23: entre
+  medias "Motor Fisico 2D Propio" volvió a escribir en la BD global.
+
+### Vault de Obsidian (2026-09-23)
+
+- `apex-hub/backend/vault_export.py` escribe, tras cada escaneo, una carpeta
+  por proyecto en `ApexVault/projects/<id>/` con el mismo contenido que la
+  ficha del hub (`<id>.md`, `decisiones`, `errores`, `componentes`,
+  `sesiones`). Lee `hub.db`: cada `context.db` se lee una sola vez.
+- El MCP añade eventos a `projects/<id>/log.md`. El id es el del hub
+  (`vault_project_id`: carpeta en minúsculas, espacios a guiones), no la meta
+  `nombre`, que es libre y sin ella todo caía en `unknown-log.md`.
+- `notas.md` es del usuario y nadie la toca. Lo personal no-APEX vive en otro
+  vault, `~/Documentos/Visi-Personal`.
+- El dispatcher rechaza argumentos con sintaxis de otra llamada a tool
+  filtrada (`<parameter name=`, `</invoke>` al inicio de línea): había 51
+  registros así en 9 proyectos (reparados, copias `.bak-2026-09-23-leaks`).
 
 ### Biblioteca de libros (2026-07-21)
 
@@ -161,8 +179,14 @@ Ver `.apex/sprints/DEUDA-2026-07-21.md` para el detalle con evidencia.
   Además el corte fijo de 5 en cada arranque repite lo obvio. Dirección
   acordada: llevarlos al mismo mecanismo que la biblioteca (corpus
   vectorizado, consultado bajo demanda y filtrado por relevancia real).
-- `code-before-phase5-gate.py` se instala en proyectos guiados pero no está
-  registrado en el propio APEX: APEX no se aplica su propio write-gate.
+- **Rama `fix/cross-project-tone-2026-07-06` sin fusionar**: sus tres
+  commits nunca llegaron a main. `6aee88d` (memoria global) y `1a19e21`
+  (self-heal WAL) se portaron el 2026-09-23. Falta `bce5bf6`: retrieval
+  cross-project con OR (`_build_fts_or_query`; en main el FTS sigue con AND
+  implícito), cross-project bloqueante en el grader, postura bajo presión,
+  `code-before-phase5-gate.py`, 5 ficheros de tests y 2 skills. Diverge de
+  main en 32 ficheros con trabajo posterior en ambos lados: requiere decidir
+  fichero a fichero.
 - `lib/prototype.py:183` — los guards de transición se ignoran.
 - S16.8 (`skills/advisor-feedback/`) deferido por decisión de 2026-05-08.
 
@@ -206,6 +230,8 @@ Las que siguen vigentes y explican por qué el código es como es.
 | 3 enums de rating (`useful`/`not_useful`/`unclear`) | `unclear` no es rating sino ausencia de señal: se excluye del denominador del FP rate |
 | Solo enums, nunca texto libre, en los outcomes del advisor | Privacidad: los facets pueden contener briefs o código sensible |
 | Cooldown 7 días entre auto-tunings | Anti-oscilación |
+| El vault de Obsidian se genera desde `hub.db`, no por eventos | El log por evento divergía del hub (701 decisiones frente a 419), truncaba a 100 caracteres y nunca rellenaba huecos |
+| Nota y ficha del hub se nombran por carpeta del proyecto | La meta `nombre` es libre: el mismo proyecto acababa con dos nombres |
 
 ---
 
@@ -244,3 +270,8 @@ Las que siguen vigentes y explican por qué el código es como es.
 5. **No inventar un desacuerdo con el usuario.** Si algo parece un riesgo,
    comprobar primero que el usuario lo ha pedido de verdad; citar una
    autoridad para respaldar una suposición no verificada es peor que callarse.
+
+6. **Una rama sin fusionar es trabajo perdido.** Los arreglos del 2026-07-17
+   pasaron dos meses en una rama mientras este fichero los daba por hechos, y
+   el bug que corregían se repitió. Al cerrar un arreglo, comprobar que está
+   en main (`git branch --contains <sha>`).
