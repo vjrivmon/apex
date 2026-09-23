@@ -5,3 +5,4 @@ mcp<2
 aiosqlite
 httpx
 pyyaml
+websockets  # apex_browser_trace: CDP sobre websocket (lib/browser_trace.py)
