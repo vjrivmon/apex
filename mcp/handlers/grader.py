@@ -9,6 +9,7 @@ from mcp.types import TextContent
 from apex_handlers._common import find_project_root as _find_project_root
 import grader as _grader
 import json
+import platform
 from typing import Any
 
 
@@ -23,6 +24,12 @@ async def handle_apex_grader_evaluate(db: Any, arguments: dict) -> Any:
     try:
         decisions_meta = {}
         _os = await db.get_meta("detected_os")
+        if not _os:
+            # Proyectos iniciados antes de que `apex_init_project` lo apuntara:
+            # sin esto, `os_detected` falla en todas las fases y la única
+            # salida era un INSERT a mano en `project_meta`.
+            _os = platform.system()
+            await db.set_meta("detected_os", _os)
         if _os:
             decisions_meta["detected_os"] = _os
     except Exception:

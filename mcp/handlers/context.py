@@ -12,6 +12,7 @@ from apex_handlers._common import sync_to_obsidian as _sync_to_obsidian
 from apex_handlers._common import vault_project_id as _vault_project_id
 from wiki_scaffold import create_wiki
 from typing import Any
+import platform
 
 
 async def handle_apex_init_project(db: Any, arguments: dict) -> Any:
@@ -23,6 +24,9 @@ async def handle_apex_init_project(db: Any, arguments: dict) -> Any:
         await db.set_meta("descripción", arguments["description"])
     if arguments.get("solution_type"):
         await db.set_meta("tipo_solución", arguments["solution_type"])
+    # El grader exige `detected_os` desde la fase 1. Lo sabe el propio
+    # servidor, que corre en la máquina del usuario: no depende del agente.
+    await db.set_meta("detected_os", platform.system())
     # Crear wiki scaffold
     domain = arguments.get("domain", "")
     wiki_dir = create_wiki(str(root), arguments["name"], domain)
