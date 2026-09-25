@@ -36,7 +36,7 @@ async def handle_apex_phase_entry_check(db: Any, arguments: dict) -> Any:
     prev_phase = phase - 1
     try:
         all_phases = await db.get_all_phases()
-        phase_map = {p["phase_number"]: p["status"] for p in all_phases}
+        phase_map = {p["number"]: p["status"] for p in all_phases}
         prev_status = phase_map.get(prev_phase)
     except Exception:  # noqa: BLE001 — context.db puede no estar inicializado
         prev_status = None
