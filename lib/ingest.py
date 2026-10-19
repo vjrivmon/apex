@@ -394,6 +394,14 @@ def _guess_project_root(source: Path) -> Path:
     return source.parent
 
 
+def _dentro_de(root: Path, path: Path) -> bool:
+    """¿`path` (resuelto, symlinks incluidos) está dentro de `root`?"""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, RuntimeError):
+        return False
+
+
 def ingest_dir(
     source_dir: Path,
     project_root: Path | None = None,
@@ -408,6 +416,12 @@ def ingest_dir(
         if not path.is_file() or path.suffix.lower() not in exts:
             continue
         if path.name.lower() == "readme.md":
+            continue
+        # Un symlink dentro del árbol puede apuntar fuera del proyecto: se
+        # comprueba la ruta RESUELTA, que es la que se lee.
+        raiz = project_root or _guess_project_root(path)
+        if not _dentro_de(raiz, path):
+            print(f"WARN: {path}: apunta fuera del proyecto, se ignora", file=sys.stderr)
             continue
         try:
             results.append(ingest(path, project_root=project_root, **kwargs))

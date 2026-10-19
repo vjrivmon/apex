@@ -17,25 +17,90 @@ from synthesis import synthesize as _synthesize
 from lint import write_report as _write_lint_report
 from wiki_scaffold import append_log
 from wiki_scaffold import update_index
+from wiki_scaffold import sanitize_slug
+from wiki_scaffold import wiki_page_path
+from wiki_scaffold import WikiPathError
 from typing import Any
+
+
+def _dentro_de(root: Path, destino: Path) -> bool:
+    """¿`destino` (resuelto, symlinks incluidos) está dentro de `root`?"""
+    try:
+        return destino.resolve().is_relative_to(root.resolve())
+    except OSError:
+        return False
+
+
+def _resolver_ruta_ingesta(ruta: str, project_root: Path) -> Path:
+    """Resuelve la ruta de la ingesta y la acota al proyecto.
+
+    Reglas:
+    - una ruta relativa se resuelve contra la raíz del proyecto;
+    - una ruta absoluta sólo se acepta si está dentro de la raíz del proyecto
+      (que incluye `.apex/raw/`);
+    - la comprobación se hace sobre la ruta RESUELTA, así que un symlink que
+      apunte fuera del proyecto también se rechaza.
+
+    Lanza `ValueError` con el motivo y las rutas permitidas.
+    """
+    if not isinstance(ruta, str) or not ruta.strip():
+        raise ValueError(
+            "La ruta de la ingesta está vacía: se esperaba la ruta de un archivo "
+            f"dentro del proyecto {project_root} (por ejemplo '.apex/raw/research/nota.md')."
+        )
+    candidata = Path(ruta).expanduser()
+    if not candidata.is_absolute():
+        candidata = project_root / candidata
+    try:
+        resuelta = candidata.resolve()
+    except OSError as exc:
+        raise ValueError(
+            f"No se pudo resolver la ruta {ruta!r}: {exc}. Se esperaba una ruta dentro "
+            f"del proyecto {project_root}."
+        )
+    permitidas = [project_root, project_root / ".apex" / "raw"]
+    if not any(_dentro_de(raiz, resuelta) for raiz in permitidas):
+        raise ValueError(
+            f"La ruta {resuelta} está fuera del proyecto. Rutas permitidas: "
+            f"{project_root} y sus subdirectorios (incluido {project_root / '.apex' / 'raw'})."
+        )
+    return resuelta
 
 
 async def handle_apex_wiki_add(db: Any, arguments: dict) -> Any:
     """Handler for apex_wiki_add."""
+    root = Path(_find_project_root())
+    wiki_dir = root / ".apex" / "wiki"
+    # El slug se valida ANTES de tocar la BD o el disco: un slug inválido es
+    # un error visible, no una página guardada en un sitio raro.
+    try:
+        slug = sanitize_slug(arguments["slug"], wiki_dir=wiki_dir)
+    except WikiPathError as exc:
+        return [TextContent(type="text", text=f"ERROR: slug de wiki inválido. {exc}")]
+    # La ruta de la página se resuelve antes de escribir nada, y tiene que
+    # seguir dentro del proyecto (symlinks incluidos).
+    page_path: Path | None = None
+    if wiki_dir.exists():
+        try:
+            page_path = wiki_page_path(wiki_dir, slug)
+        except WikiPathError as exc:
+            return [TextContent(type="text", text=f"ERROR: {exc}")]
+        if not _dentro_de(root, page_path):
+            return [TextContent(type="text", text=(
+                f"ERROR: la página {slug!r} se resolvería a {page_path.resolve()}, fuera "
+                f"del proyecto {root}. Se esperaba una ruta dentro del wiki del proyecto."
+            ))]
     await db.add_wiki_page(
-        arguments["slug"], arguments["title"], arguments["content"],
+        slug, arguments["title"], arguments["content"],
         page_type=arguments.get("page_type", "entity"),
         tags=arguments.get("tags"))
     # También escribir el archivo .md en el wiki filesystem
-    root = _find_project_root()
-    wiki_dir = root / ".apex" / "wiki"
-    if wiki_dir.exists():
-        page_path = wiki_dir / f"{arguments['slug']}.md"
+    if page_path is not None:
         page_path.parent.mkdir(parents=True, exist_ok=True)
         page_path.write_text(f"# {arguments['title']}\n\n{arguments['content']}", encoding="utf-8")
-        append_log(str(wiki_dir), f"Actualizada página: {arguments['slug']}")
+        append_log(str(wiki_dir), f"Actualizada página: {slug}")
         update_index(str(wiki_dir))
-    return [TextContent(type="text", text=f"Wiki página '{arguments['slug']}' guardada")]
+    return [TextContent(type="text", text=f"Wiki página '{slug}' guardada")]
 
 async def handle_apex_search_cross_project(db: Any, arguments: dict) -> Any:
     """Handler for apex_search_cross_project."""
@@ -87,15 +152,18 @@ async def handle_apex_search_cross_project(db: Any, arguments: dict) -> Any:
 
 async def handle_apex_ingest_source(db: Any, arguments: dict) -> Any:
     """Handler for apex_ingest_source."""
-    src_path = Path(arguments["path"])
-    if not src_path.is_absolute():
-        src_path = _find_project_root() / src_path
+    project_root = Path(_find_project_root()).resolve()
+    # La ingesta se acota al proyecto: rutas relativas contra la raíz del
+    # proyecto y rutas absolutas sólo si caen dentro (symlinks incluidos).
+    try:
+        src_path = _resolver_ruta_ingesta(arguments["path"], project_root)
+    except ValueError as exc:
+        return [TextContent(type="text", text=f"ERROR: {exc}")]
     if not src_path.exists():
         return [TextContent(type="text", text=f"Path no existe: {src_path}")]
     else:
         auto_wiki = arguments.get("auto_wiki", True)
         recursive = arguments.get("recursive", True)
-        project_root = _find_project_root()
         if src_path.is_dir():
             results_list = _ingest_dir(
                 src_path, project_root=project_root,
