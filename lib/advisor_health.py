@@ -13,6 +13,12 @@ Métricas:
 - `tuning_history`: últimos 5 entries de `advisor_tuning_history`.
 - `circuit_breaker_trips_24h`: nº de reviews
   `trigger_kind='circuit_breaker_reset'` últimas 24h.
+- `reviews_por_estado`: nº de reviews por estado (`pending`,
+  `completed`, `skipped`, `abandoned`). `reviews_pendientes` es el
+  subconjunto abierto: si no vuelve a cero, el bucle de cierre está
+  roto.
+- `advice_sin_outcome`: cards emitidas que aún no tienen rating
+  (backlog del escape hatch manual `apex_rate_advice`).
 - `facets_freshness_days`: días desde el archivo más reciente en
   `~/.claude/usage-data/facets/`. None si no existe el dir.
 
@@ -59,6 +65,9 @@ def advisor_health(
         "circuit_breaker_trips_24h": 0,
         "facets_freshness_days": None,
         "window_days": window_days,
+        "reviews_por_estado": {},
+        "reviews_pendientes": 0,
+        "advice_sin_outcome": 0,
     }
     with get_sync_db(db_path) as c:
         c.row_factory = sqlite3.Row
@@ -144,7 +153,26 @@ def advisor_health(
         row = cur.fetchone()
         out["circuit_breaker_trips_24h"] = int(row["n"]) if row else 0
 
-    # 7. Facets freshness (filesystem, no BD)
+        # 7. Estado del ciclo de reviews: cuántos están en cada estado
+        # terminal y cuántos siguen abiertos (un review que nunca se
+        # cierra es la señal de que el bucle está roto).
+        cur = c.execute(
+            "SELECT status, COUNT(*) AS n FROM advisor_reviews GROUP BY status"
+        )
+        out["reviews_por_estado"] = {r["status"]: r["n"] for r in cur.fetchall()}
+        out["reviews_pendientes"] = out["reviews_por_estado"].get("pending", 0)
+
+        # 8. Cards emitted sin outcome: el backlog del escape hatch
+        # manual (`apex_rate_advice`).
+        cur = c.execute(
+            "SELECT COUNT(*) AS n FROM advisor_advice a "
+            "WHERE NOT EXISTS (SELECT 1 FROM advice_outcomes o "
+            "                  WHERE o.advice_id = a.id)"
+        )
+        row = cur.fetchone()
+        out["advice_sin_outcome"] = int(row["n"]) if row else 0
+
+    # 9. Facets freshness (filesystem, no BD)
     out["facets_freshness_days"] = _facets_freshness_days()
     out["facets_warn_threshold_days"] = FRESHNESS_WARN_DAYS
     return out
