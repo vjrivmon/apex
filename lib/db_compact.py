@@ -6,20 +6,32 @@ plus VACUUM for reclaiming disk space.
 Usage (from MCP tool or hook):
     from lib.db_compact import apex_db_compact
     stats = apex_db_compact("/path/to/.apex/context.db", retention_days=30)
+
+CLI:
+    python -m lib.db_compact --db .apex/context.db --retention-days 30
 """
 from __future__ import annotations
 
+import argparse
+import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 
-# Tables with continuously growing rows (logs, traces, archives)
+# Tables with continuously growing rows (logs, traces, archives).
+#
+# La columna de tiempo es la que REALMENTE existe en cada tabla. Antes,
+# `advisor_reviews` pedía `reviewed_at` y `tool_output_archive` pedía
+# `archived_at`: ninguna de las dos existe, así que el DELETE lanzaba
+# OperationalError y el error quedaba escondido en `stats["errors"]`, que
+# nadie lee. Las dos tablas —que son justo las que más crecen— nunca se
+# compactaban. La comprobación de columnas de más abajo lo hace explícito.
 _LOG_TABLES = {
     "tool_call_log": "created_at",
-    "tool_output_archive": "archived_at",
+    "tool_output_archive": "created_at",
     "reasoning_traces": "created_at",
-    "advisor_reviews": "reviewed_at",
+    "advisor_reviews": "triggered_at",
     "advisor_advice": "created_at",
     "advice_outcomes": "computed_at",
     "skill_handoffs": "created_at",
@@ -60,6 +72,7 @@ def apex_db_compact(
         "vacuum_before_kb": 0,
         "vacuum_after_kb": 0,
         "tables_cleaned": [],
+        "tables_skipped": [],
         "errors": [],
     }
 
@@ -76,6 +89,20 @@ def apex_db_compact(
         # Clean old rows from log tables
         for table, ts_column in _LOG_TABLES.items():
             if table not in existing:
+                stats["tables_skipped"].append(
+                    f"{table}: no existe en esta base"
+                )
+                continue
+            columns = {
+                row[1]
+                for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if ts_column not in columns:
+                # Fallo de esquema: se dice en voz alta, no se traga.
+                stats["tables_skipped"].append(
+                    f"{table}: no tiene la columna {ts_column!r} "
+                    f"(columnas: {', '.join(sorted(columns))})"
+                )
                 continue
             try:
                 cursor = conn.execute(
@@ -86,7 +113,7 @@ def apex_db_compact(
                 if deleted > 0:
                     stats["rows_deleted"] += deleted
                     stats["tables_cleaned"].append(table)
-            except Exception as exc:
+            except sqlite3.Error as exc:
                 stats["errors"].append(f"{table}: {exc}")
 
         conn.commit()
@@ -99,7 +126,7 @@ def apex_db_compact(
         # VACUUM
         try:
             conn.execute("VACUUM")
-        except Exception as exc:
+        except sqlite3.Error as exc:
             stats["errors"].append(f"VACUUM: {exc}")
 
         # Measure DB size after VACUUM
@@ -111,3 +138,26 @@ def apex_db_compact(
         conn.close()
 
     return stats
+
+
+def main() -> int:
+    """CLI: compacta una `context.db` y publica las estadísticas en JSON."""
+    parser = argparse.ArgumentParser(
+        description="Compacta la context.db de un proyecto APEX"
+    )
+    parser.add_argument(
+        "--db", required=True, help="ruta de la context.db a compactar"
+    )
+    parser.add_argument(
+        "--retention-days", type=int, default=30,
+        help="elimina filas de log más antiguas que N días (por defecto 30)",
+    )
+    args = parser.parse_args()
+    stats = apex_db_compact(args.db, retention_days=args.retention_days)
+    print(json.dumps(stats, ensure_ascii=False, indent=2))
+    # 1 si la compactación falló; 0 si fue limpia o sólo hubo skips.
+    return 1 if stats.get("errors") else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
