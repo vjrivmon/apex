@@ -280,6 +280,7 @@ def orphan_modules() -> list[str]:
         + list((REPO / "mcp").glob("*.py"))
         + list((REPO / "mcp" / "handlers").glob("*.py"))  # refactor 2026-07
         + list((REPO / ".claude" / "hooks").glob("*.py"))  # los hooks importan lib/
+        + list((REPO / ".codex" / "hooks").glob("*.py"))  # idem para Codex
         + list((REPO / "scripts").glob("*.py"))
     )
     textos = {f: f.read_text(encoding="utf-8") for f in fuentes}
@@ -287,8 +288,14 @@ def orphan_modules() -> list[str]:
         nombre = mod.stem
         if nombre.startswith("_"):
             continue
+        # El prefijo de paquete es opcional: `from lib.db_utils import …` y
+        # `from db_utils import …` cuentan igual. Sin esto, todo lo que se
+        # importa como `lib.X` salía como huérfano: `db_utils`,
+        # `hook_metrics` y `cross_project_errors` estaban en la lista siendo
+        # código en uso.
+        patron = rf"\b(import|from)\s+(?:[A-Za-z_][\w]*\.)?{re.escape(nombre)}\b"
         usado = any(
-            re.search(rf"\b(import|from)\s+{re.escape(nombre)}\b", txt)
+            re.search(patron, txt)
             for f, txt in textos.items() if f != mod
         )
         if not usado:

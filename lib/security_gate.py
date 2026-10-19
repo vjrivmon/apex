@@ -54,7 +54,10 @@ REQUIRED_LAYERS = [
 SECURITY_GATE_PHASE = 10.5
 
 # Marcadores de que el proyecto tiene gitleaks configurado (Gap F, S19.1c).
-GITLEAKS_MARKERS = (Path(".husky") / "pre-commit", Path(".gitleaks.toml"))
+# La lista vive en lib/gitleaks.py, que es su única fuente: aquí se reexporta
+# porque el blueprint la nombra como parte de la API del gate.
+from gitleaks import GITLEAKS_MARKERS as GITLEAKS_MARKERS  # noqa: E402
+from gitleaks import is_configured as _gitleaks_is_configured  # noqa: E402
 
 
 @dataclass
@@ -139,11 +142,14 @@ def _check_gitleaks_configured(project_root: Path) -> bool:
     True si existe `.husky/pre-commit` o `.gitleaks.toml` en la raíz del
     proyecto; False si no.
 
-    Detecta la CONFIGURACIÓN, no la instalación del binario ni la ejecución
-    real del hook: para eso está `lib/gitleaks.py` (Sprint 19). La fase 10
-    (seguridad) usa esto para no dejar pasar sin detección de secretos.
+    El predicado vive en `lib/gitleaks.py` (única fuente) y aquí se reexporta
+    para que la API que pide el blueprint S19.1c siga siendo la que usa el
+    gate. Detecta la CONFIGURACIÓN, no la instalación del binario ni la
+    ejecución real del hook: para eso están `lib/gitleaks.is_available()` y
+    `lib/gitleaks.run_gitleaks()`. La fase 10 (seguridad) usa esto para no
+    dejar pasar sin detección de secretos.
     """
-    return any((project_root / marcador).exists() for marcador in GITLEAKS_MARKERS)
+    return _gitleaks_is_configured(project_root)
 
 
 def verdict_from_report(report: GateReport) -> dict:

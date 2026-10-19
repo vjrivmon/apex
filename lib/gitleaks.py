@@ -6,14 +6,11 @@ estructurado.
 
 FRONTERA DE RESPONSABILIDAD (importante)
 -----------------------------------------
-Este módulo EXECUTA gitleaks. NO decide si el proyecto tiene gitleaks
-configurado: ese predicado vive en `lib/security_gate.py`
-(`_check_gitleaks_configured(project_root)`, S19.1c), implementado en paralelo
-por otro agente. Aquí `is_configured()` es solo una envoltura fina que
-intenta reutilizar ese predicado y, si no está disponible, cae a una
-comprobación local equivalente (`.husky/pre-commit` o `.gitleaks.toml`).
-Esa duplicación es un fallback documentado, no la implementación principal:
-si cambia el predicado de security_gate, este módulo lo hereda.
+Este módulo EXECUTA gitleaks y es la ÚNICA fuente del predicado
+"¿el proyecto tiene gitleaks configurado?" (`is_configured`).
+`lib/security_gate.py` lo importa (S19.1c) en vez de mantener una copia:
+antes cada módulo tenía su propia comprobación y el que no se usaba
+acababa detectado como código muerto.
 
 Uso:
     python -m lib.gitleaks --project-root .              # estado
@@ -32,6 +29,10 @@ from pathlib import Path
 
 # Nombre del binario que se busca en el PATH.
 GITLEAKS_BINARY = "gitleaks"
+
+# Marcadores que indican que el proyecto tiene gitleaks configurado.
+# Un hook pre-commit instalado o un fichero de configuración.
+GITLEAKS_MARKERS = (Path(".husky") / "pre-commit", Path(".gitleaks.toml"))
 
 # Timeout por defecto (segundos) para la ejecución de gitleaks.
 DEFAULT_TIMEOUT = 60.0
@@ -157,39 +158,19 @@ def _as_text(value: object) -> str:
     return str(value)
 
 
-def _security_gate_predicate():
-    """Devuelve `_check_gitleaks_configured` de security_gate, o None.
-
-    El predicado de verdad vive en security_gate (S19.1c). Si ese módulo no
-    está importable, quien llama usa el fallback local.
-    """
-    try:
-        from security_gate import _check_gitleaks_configured  # type: ignore
-    except Exception:
-        try:
-            from lib.security_gate import _check_gitleaks_configured  # type: ignore
-        except Exception:
-            return None
-    return _check_gitleaks_configured
-
-
-def _local_configured(project_root: Path) -> bool:
-    """Fallback local: hay hook de gitleaks o fichero de configuración."""
-    return (project_root / ".husky" / "pre-commit").exists() or \
-        (project_root / ".gitleaks.toml").exists()
-
-
 def is_configured(project_root: Path | str) -> bool:
     """True si el proyecto tiene gitleaks configurado.
 
-    Envoltura fina sobre el predicado de `lib/security_gate.py`. Si ese
-    predicado no está disponible, cae a la comprobación local equivalente.
+    ÚNICA fuente del predicado. `lib/security_gate.py` lo importa (S19.1c:
+    la fase 10 no deja pasar sin detección de secretos) en vez de mantener
+    una copia: antes cada módulo tenía su propia comprobación y el que
+    faltaba se detectaba como código muerto.
+
+    Detecta la CONFIGURACIÓN (hook o fichero de config), no la instalación
+    del binario: para eso están `is_available()` y `run_gitleaks()`.
     """
     root = Path(project_root)
-    predicate = _security_gate_predicate()
-    if predicate is not None:
-        return bool(predicate(root))
-    return _local_configured(root)
+    return any((root / marcador).exists() for marcador in GITLEAKS_MARKERS)
 
 
 def main(argv: list[str] | None = None) -> int:

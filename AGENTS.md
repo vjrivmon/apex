@@ -34,7 +34,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 894 |
+| Tests (funciones de test) | 901 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
@@ -66,14 +66,11 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 Código escrito que nadie usa. Suele ser trabajo a medias, no
 necesariamente muerto: verificar antes de borrar o cablear.
 
-- `lib/cross_project_errors.py`
-- `lib/gitleaks.py`
-- `lib/hook_metrics.py`
 - `lib/vfs_grep.py`
 
 ### Contexto del repo (volátil)
 
-Rama `main` · HEAD `c0f9a71 merge(a1): el bucle del advisor deja de ser inerte` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `2916a2d merge(a5): re-verifica la evidencia de las 8 capas AgentArmor` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
