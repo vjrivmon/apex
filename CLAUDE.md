@@ -34,14 +34,14 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 901 |
+| Tests (funciones de test) | 1047 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
 | Hooks en disco | 13 |
 | Hooks registrados en el proyecto | 8 |
 | Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
-| Tablas en el schema (`lib/context_db.py`) | 27 |
+| Tablas en el schema (`lib/context_db.py`) | 28 |
 | Tablas en la BD viva (`.apex/context.db`) | 34 |
 
 ### Artefactos por sprint
@@ -57,7 +57,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S15 advisor + traces | presente | lib/advisor.py, lib/reasoning_traces.py |
 | S16 advisor feedback | presente | lib/advisor_outcomes.py, lib/advisor_health.py |
 | S17 VirtualFS | presente | lib/vfs.py, lib/vfs_grep.py |
-| S18 Granite curator | ausente | ningún artefacto |
+| S18 Granite curator | presente | lib/curator.py |
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
 
@@ -66,11 +66,11 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 Código escrito que nadie usa. Suele ser trabajo a medias, no
 necesariamente muerto: verificar antes de borrar o cablear.
 
-- `lib/vfs_grep.py`
+- `lib/project_root.py`
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `2916a2d merge(a5): re-verifica la evidencia de las 8 capas AgentArmor` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `cb59923 feat(project-root): una sola resolucion de la raiz del proyecto` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 

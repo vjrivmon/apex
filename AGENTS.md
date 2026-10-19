@@ -34,14 +34,14 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 901 |
+| Tests (funciones de test) | 1047 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
 | Hooks en disco | 13 |
 | Hooks registrados en el proyecto | 8 |
 | Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
-| Tablas en el schema (`lib/context_db.py`) | 27 |
+| Tablas en el schema (`lib/context_db.py`) | 28 |
 | Tablas en la BD viva (`.apex/context.db`) | 34 |
 
 ### Artefactos por sprint
@@ -57,7 +57,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S15 advisor + traces | presente | lib/advisor.py, lib/reasoning_traces.py |
 | S16 advisor feedback | presente | lib/advisor_outcomes.py, lib/advisor_health.py |
 | S17 VirtualFS | presente | lib/vfs.py, lib/vfs_grep.py |
-| S18 Granite curator | ausente | ningún artefacto |
+| S18 Granite curator | presente | lib/curator.py |
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
 
@@ -66,11 +66,11 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 Código escrito que nadie usa. Suele ser trabajo a medias, no
 necesariamente muerto: verificar antes de borrar o cablear.
 
-- `lib/vfs_grep.py`
+- `lib/project_root.py`
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `2916a2d merge(a5): re-verifica la evidencia de las 8 capas AgentArmor` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `cb59923 feat(project-root): una sola resolucion de la raiz del proyecto` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
@@ -160,41 +160,82 @@ modelo.
 
 Ver `.apex/sprints/DEUDA-2026-07-21.md` para el detalle con evidencia.
 
-- **VFS implementado pero inalcanzable**: `lib/vfs.py` + `lib/vfs_grep.py` con
-  75 tests verdes y **cero tools `apex_vfs_*` en el servidor**. Falta S17.6
-  (`vfs_sql_render.py`, referenciado en `vfs.py:23` pero inexistente), S17.7,
-  S17.8 y el wiring S17.9. Las tablas `vfs_render_cache` y `vfs_query_log`
-  están creadas sin CRUD.
-- **Errores cross-project: señal rota**. Los 279 errores de `hub.db` tienen
-  todos `recurrence_count = 1`, así que el `ORDER BY recurrence_count DESC`
-  de `session-start.py:59` no ordena nada y devuelve siempre los mismos 5.
-  Además el corte fijo de 5 en cada arranque repite lo obvio. Dirección
-  acordada: llevarlos al mismo mecanismo que la biblioteca (corpus
-  vectorizado, consultado bajo demanda y filtrado por relevancia real).
-- `code-before-phase5-gate.py` se instala en proyectos guiados pero no está
-  registrado en el propio APEX: APEX no se aplica su propio write-gate.
-- `lib/prototype.py:183` — los guards de transición se ignoran.
-- S16.8 (`skills/advisor-feedback/`) deferido por decisión de 2026-05-08.
+- **Errores cross-project: resuelto en el ranking, no en el corpus.**
+  `hub.db.errors.recurrence_count` es la recurrencia **local** (sube sólo si el
+  mismo error se repite en la misma `context.db`) y el escáner del hub la
+  copia tal cual: las 367 filas valían 1, así que el `ORDER BY
+  recurrence_count DESC` de `session-start.py` era degenerado y el `LIMIT 5`
+  devolvía siempre los mismos errores. Ahora `lib/cross_project_errors.py`
+  calcula al leer la recurrencia que el hook anunciaba —**proyectos
+  distintos** con la misma firma— y ordena por esa, luego severidad y
+  recencia. Queda pendiente la parte de la dirección acordada que no se
+  hizo: llevar los errores a un corpus vectorizado consultado bajo demanda,
+  como la biblioteca.
+- **`code-before-phase5-gate.py` no existe como código.** Sólo quedan dos
+  `.pyc` huérfanos (`.claude/hooks/__pycache__/` y `.codex/hooks/__pycache__/`).
+  Nunca se fusionó: vivió sólo en `origin/fix/cross-project-tone-2026-07-06`.
+  El write-gate de APEX sobre APEX no existe; el que sí existe es
+  `phase-gate.py`, que bloquea `apex_set_phase` con exit 2.
+- S16.8 (`skills/advisor-feedback/`) diferido por decisión de 2026-05-08.
+- Las capas L1-L6 del gate AgentArmor siguen en `status: partial`. Los
+  motivos exactos de cada una están en `.apex/security/L*.md` (sección
+  "Cómo desbloquear"), no aquí: esa lista caduca. L7 y L8 están `passed`.
+
+### Cerrado en la auditoría del 2026-10-19
+
+Estos estaban en la lista de deuda y ya no:
+
+- **VFS implementado pero inalcanzable** → cerrado. `lib/vfs_sql_render.py`
+  con los renderizadores SQL→markdown, CRUD de `vfs_render_cache` y
+  `vfs_query_log`, y las 4 tools `apex_vfs_*` registradas. Se despachan con
+  `db=None` (como las de biblioteca) porque el VFS es cross-project: debe
+  funcionar sin que el cwd sea un proyecto APEX.
+- **`lib/prototype.py:183` — los guards de transición se ignoran** → cerrado.
+  Un guard es el *nombre* de una condición (`has_required_fields`), como
+  dice la skill; ahora se valida que lo sea, el TUI genera un método
+  `guard_<nombre>` por guard y `_fire` lo evalúa: si devuelve False, la
+  transición no ocurre y el TUI dice qué guard la bloqueó.
+- **El bucle del Advisor era inerte** → cerrado. 7.269 reviews existían
+  todos en `pending` con `advice_count=0` porque `update_review_status()` y
+  `register_review_outcome()` no tenían ni un call site. Ahora hay cierre
+  idempotente, poda de reviews caducados, circuit breaker funcionando y
+  `advisor_health()` con datos de verdad.
+- **El gate 10.5 no bloqueaba nada** → cerrado. `apex_security_gate` ahora
+  persiste un veredicto para la fase 10.5 y entrar en la fase 11 exige que
+  ni la fase 10 ni el gate 10.5 bloqueen. La fase 10 además exige gitleaks
+  configurado.
+- **`refresh_state.py --check` nunca convergía** → cerrado. Comparaba el
+  recuento real de tests contra el valor congelado en el fichero, así que
+  daba "desfasado" el 100% de las veces. Ahora compara métrica a métrica y
+  el contexto volátil (rama, HEAD) no fuerza reescritura.
+- **`lib/db_compact.py` huérfano y con dos columnas equivocadas** → cerrado.
+  Pedía `advisor_reviews.reviewed_at` y `tool_output_archive.archived_at`,
+  que no existen: el DELETE fallaba y el error quedaba escondido. Ahora hay
+  `apex_db_compact` en el MCP.
+- **13 copias de `find_project_root()`** → cerrado. `lib/project_root.py` es
+  la implementación única y el home nunca se resuelve como proyecto.
+- **La memoria global contenía estado de otros proyectos** → cerrado. El
+  estado residual se exportó a `~/.apex/legacy-project-state-2026-10-19.db`
+  y a `~/.apex/rescate-estado-legacy-2026-10-19.json`; la memoria global ya
+  sólo contiene `grave_errors`.
 
 ---
 
 ## Roadmap
 
 El orden estricto S17 → S18 → S19 se decidió el 2026-05-08 en lugar de saltar
-a S19 por la urgencia de Gap F (gitleaks). Sigue vigente, con la salvedad de
-que S17 quedó a medias (código sin wiring) y de que se ejecutó trabajo
-posterior (S20/S21) sin registrarlo aquí en su momento.
+a S19 por la urgencia de Gap F (gitleaks). Los tres están ejecutados (2026-10-19).
 
-| Sprint | Foco | Blueprint |
-|---|---|---|
-| S17 | VirtualFS cross-project (a medias: falta wiring MCP) | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
-| S18 | Granite Curator opt-in vía `APEX_CURATOR_MODEL` | (mismo fichero que S17) |
-| S19 | Advent Integration (Tier 1+2+4; gitleaks es prioridad cero) | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
+| Sprint | Foco | Estado | Blueprint |
+|---|---|---|---|
+| S17 | VirtualFS cross-project | cerrado: 4 tools `apex_vfs_*` registradas | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
+| S18 | Granite Curator opt-in vía `APEX_CURATOR_MODEL` | cerrado: opt-in, fallback estricto a la heurística | (mismo fichero que S17) |
+| S19 | Advent Integration | Tier 1 cerrado (gitleaks, CI, slash commands, CLAUDE.md APEX-aware). Tiers 2 y 4 sin empezar | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
 
 Pendientes sin sprint asignado: embeddings sobre la wiki del proyecto
 (la infraestructura ya existe en `lib/embeddings.py`), integración Pencil MCP
-en fase 2.
-
+en fase 2, y el Tier 2/Tier 4 de S19 (`apex_export_session`, reglas
+condicionales por componente, hook de `PreCompact`).
 ---
 
 ## Decisiones acumuladas
