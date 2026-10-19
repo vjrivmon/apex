@@ -87,3 +87,7 @@ docs/paper-ase2026/*.out
 
 # Fichero PostScript de 14MB generado por error por ImageMagick (2026-09-21).
 /json
+
+# Backups de context.db: son bases de datos completas, no código.
+.apex/*.bak-*
+.apex/*.bak

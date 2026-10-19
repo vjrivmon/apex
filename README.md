@@ -32,6 +32,31 @@ Los hooks y agentes instalados en `~/.claude/` no se cargan en Codex. La skill
 adapta las llamadas de herramientas, registra el progreso explícitamente y
 mantiene los gates del MCP; no instala los hooks de Claude ni sus temporizadores.
 
+## Uso en OpenCode
+
+OpenCode descubre la skill APEX enlazada en `~/.agents/skills/apex`. Registra
+el servidor MCP globalmente y deja que herede el directorio del proyecto activo:
+si `apex` o el comando global ya existen, comprueba su destino antes de
+repetir la instalación.
+
+```bash
+cd ~/RoadToDevOps/apex
+opencode mcp add apex --global --env APEX_AUTO_LAUNCH_HUB=0 -- \
+  "$PWD/.venv/bin/python3" "$PWD/mcp/apex_server.py"
+mkdir -p ~/.config/opencode/commands
+ln -s "$PWD/.opencode/commands/apex.md" \
+  ~/.config/opencode/commands/apex.md
+opencode mcp list
+```
+
+El comando nativo `/apex` usa la skill compartida y las herramientas MCP bajo
+`tools.apex`. No configures `cwd` para el servidor: APEX selecciona
+`.apex/context.db` a partir del workspace actual. La variable evita que el MCP
+arranque APEX Hub automáticamente. Comprueba el nombre devuelto por
+`apex_get_context` antes de escribir; los hooks de Claude Code no se ejecutan en
+OpenCode. El contexto y la búsqueda de la base se consultan mediante las
+herramientas APEX; no se expone SQL arbitrario.
+
 ## El Problema
 
 **Claude Code pierde el hilo cuando un proyecto ya está en marcha.** Las

@@ -26,17 +26,17 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ## Estado verificado
 
-> Generado por `scripts/refresh_state.py` el 2026-09-23. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
+> Generado por `scripts/refresh_state.py` el 2026-10-19. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
 
 | Métrica | Valor |
 |---|---|
 | Tests | 848 pasando |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
-| Hooks | 12 en disco, 8 registrados en el proyecto |
+| Hooks | 13 en disco, 8 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
-| Rama | `fix/vault-sync-2026-09-23` (árbol sucio) |
-| HEAD | `a5a4f81 fix(mcp): self-heal de sidecars WAL rotos antes del primer connect (porta 1a19e21)` |
+| Rama | `main` (árbol sucio) |
+| HEAD | `c750cb4 fix(phase-gate): el gate ve el estado de la fase anterior` |
 
 ### Artefactos por sprint
 
