@@ -26,17 +26,23 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 ## Estado verificado
 
-> Generado por `scripts/refresh_state.py` el 2026-10-19. NO editar a mano: se sobreescribe. La narrativa va fuera de este bloque.
+> Generado por `scripts/refresh_state.py` contando el repo.
+> NO editar a mano: se sobreescribe. La narrativa va fuera de este
+> bloque. Las filas de hooks globales y de la BD viva dependen de la
+> máquina: se reportan, pero `--check` no las cuenta como deriva. La
+> sección de contexto es volátil y tampoco fuerza reescritura.
 
 | Métrica | Valor |
 |---|---|
-| Tests | 848 pasando |
+| Tests (funciones de test) | 762 |
+| Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
-| Hooks | 13 en disco, 8 registrados en el proyecto |
-| Tablas en `context.db` | 27 |
-| Rama | `main` (árbol sucio) |
-| HEAD | `c750cb4 fix(phase-gate): el gate ve el estado de la fase anterior` |
+| Hooks en disco | 13 |
+| Hooks registrados en el proyecto | 8 |
+| Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
+| Tablas en el schema (`lib/context_db.py`) | 27 |
+| Tablas en la BD viva (`.apex/context.db`) | 34 |
 
 ### Artefactos por sprint
 
@@ -65,6 +71,10 @@ necesariamente muerto: verificar antes de borrar o cablear.
 - `lib/hook_metrics.py`
 - `lib/vfs_grep.py`
 
+### Contexto del repo (volátil)
+
+Rama `feat/a3` (árbol sucio) · HEAD `9ac9a6d chore(audit): versiona la integracion Codex/OpenCode y AGENTS.md` · refrescado el 2026-10-19.
+
 <!-- APEX:STATE:END -->
 
 ---
@@ -76,8 +86,11 @@ necesariamente muerto: verificar antes de borrar o cablear.
 cd ~/RoadToDevOps/apex
 PYTHONPATH=lib .venv/bin/pytest tests/ -v
 
-# Regenerar el bloque de estado de este fichero
+# Regenerar el bloque de estado de CLAUDE.md y AGENTS.md
 .venv/bin/python scripts/refresh_state.py
+
+# Refrescar el recuento de suite (instantánea con fecha; tarda ~20 s)
+.venv/bin/python scripts/refresh_state.py --run-tests
 
 # Comprobar si está desfasado sin escribir (útil en hooks/CI)
 .venv/bin/python scripts/refresh_state.py --check
@@ -225,7 +238,7 @@ Las que siguen vigentes y explican por qué el código es como es.
 | Sin numpy/sqlite-vec/faiss | 4.500 fragmentos se recorren en ~155 ms en Python puro. Reconsiderar hacia los 30 libros |
 | Sin FTS5 sobre los fragmentos del libro | Medido: el híbrido léxico da 3/6 igual que el denso solo. El léxico no cruza idiomas |
 | Reindexado automático al buscar, no watcher de ficheros | Vicente confirmó que los capítulos entran en bloque, nunca a medias. Comparar hashes es local y barato, y hace imposible buscar contra un índice desactualizado |
-| Los hechos del CLAUDE.md se generan, no se escriben | Auditoría 2026-07-21: ~42 afirmaciones falsas acumuladas. El 85% era derivable con un comando |
+| Los hechos del CLAUDE.md y del AGENTS.md se generan, no se escriben | Auditoría 2026-07-21: ~42 afirmaciones falsas acumuladas. El 85% era derivable con un comando. Auditoría 2026-10-19: el control de deriva estaba roto (comparaba el recuento real contra el congelado) y AGENTS.md era una copia a mano |
 | Fuera las cifras de líneas por módulo | 8 de 15 estaban mal (hasta +116%) y no aportan nada a quien lee |
 | 3 enums de rating (`useful`/`not_useful`/`unclear`) | `unclear` no es rating sino ausencia de señal: se excluye del denominador del FP rate |
 | Solo enums, nunca texto libre, en los outcomes del advisor | Privacidad: los facets pueden contener briefs o código sensible |
