@@ -1,3 +1,8 @@
+---
+name: tools-integration
+description: Conecta APEX con herramientas externas (Pencil, Paper.design, Stitch, MCP servers) y decide cuál usar en cada fase. Usar cuando el usuario quiere integrar una herramienta o un MCP nuevo al flujo. Triggers ES/EN — herramientas externas, integración, tools, MCP, Pencil, Stitch, integrar herramienta.
+---
+
 # Integración de Herramientas Externas
 
 ## Herramientas disponibles para APEX

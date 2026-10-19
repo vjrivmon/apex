@@ -1,3 +1,8 @@
+---
+name: security-audit
+description: Auditoría de seguridad AgentArmor 8-layer + OWASP ASI Top-10 en fase 10 de /apex, con el gate 10.5 que bloquea el deploy si alguna capa L1-L8 no tiene evidencia. Triggers ES/EN — auditoría de seguridad, security audit, AgentArmor, OWASP, security gate, vulnerabilidades.
+---
+
 # SecurityAudit — Auditoría automatizada + AgentArmor 8-layer + ASI Top-10
 
 > **Ampliado en Sprint 6**: integra el modelo **AgentArmor** (8 capas de

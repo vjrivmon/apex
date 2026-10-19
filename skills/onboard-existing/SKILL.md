@@ -1,3 +1,8 @@
+---
+name: onboard-existing
+description: Integra en APEX un proyecto pequeño que ya tiene código pero no tiene .apex/, detectando en qué fases está y creando el context.db con el estado real. Para repos grandes usar reverse-engineer. Triggers ES/EN — onboard, integrar proyecto existente, proyecto sin .apex, existing project, adoptar repo.
+---
+
 # Onboard Existing Project — Integrar proyecto existente en APEX
 
 ## Cuándo activar

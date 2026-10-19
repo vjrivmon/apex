@@ -1,3 +1,8 @@
+---
+name: portfolio-publisher
+description: Publica un proyecto terminado como caso real en vr-web/content/cases/ al cerrar la fase 14 de /apex, con aprobación manual intermedia. Usar cuando el usuario pide sacarlo al portfolio. Triggers ES/EN — portfolio, publicar caso, publícalo, añadir a casos, vr-web, publish case.
+---
+
 # PortfolioPublisher — Publica el proyecto en vr-web/content/cases/
 
 ## Cuándo activar

@@ -1,3 +1,8 @@
+---
+name: brand-identity
+description: Construye el manual de identidad profundo (logo escalable, favicon, app icon, variantes) en fase 2b de /apex, tras el moodboard y antes de tokens. Triggers ES/EN — identidad de marca, brand identity, logo, brand book, manual de marca, favicon, app icon.
+---
+
 # BrandIdentity — Manual de identidad profundo y logo escalable
 
 ## Cuándo activar

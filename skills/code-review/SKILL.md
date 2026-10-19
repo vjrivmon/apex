@@ -1,3 +1,8 @@
+---
+name: code-review
+description: Revisa código como staff engineer en las fases 6-8 de /apex y antes de merge a main, buscando bugs reales y violaciones. Se activa a petición (/review) o con más de 5 archivos modificados. Triggers ES/EN — code review, revisión de código, revisar diff, staff engineer review, pre-merge.
+---
+
 # CodeReview — Revision de codigo estilo staff engineer
 
 ## Cuando activar

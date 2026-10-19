@@ -1,3 +1,8 @@
+---
+name: iterate
+description: Guía las fases intermedias 12-14 de /apex sobre un proyecto ya implementado — añadir feature, corregir bug, mejorar rendimiento, refactorizar o actualizar dependencias sin romper el hilo. Triggers ES/EN — iterar, iterate, nueva feature, arreglar bug, refactor, mejora, mantenimiento.
+---
+
 # IterationGuide — Guía para Fases Intermedias (12-14)
 
 ## Cuándo activar

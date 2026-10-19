@@ -1,3 +1,8 @@
+---
+name: design-research
+description: Biblioteca rotativa de inspiración visual para la fase 2a (moodboard) de /apex, antes de proponer dirección de diseño. Usar cuando el usuario pide inspiración, referencias o tendencias de diseño. Triggers ES/EN — inspiración, referencias, moodboard, design research, tendencias visuales, references.
+---
+
 # DesignResearch — Biblioteca rotativa de inspiración visual
 
 ## Cuándo activar

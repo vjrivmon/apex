@@ -1,3 +1,8 @@
+---
+name: brainstorming
+description: Genera 2-3 soluciones candidatas con estimación de effort/impact por cada finding, tras apex_reverse_scan o en fase 12 cuando aparece un bug o feature ambigua. Triggers ES/EN — brainstorming, lluvia de ideas, generar soluciones, opciones, candidatas, alternativas, effort/impact.
+---
+
 # brainstorming — Generación de soluciones por finding
 
 ## Cuándo invocar
