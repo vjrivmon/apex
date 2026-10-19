@@ -185,6 +185,13 @@ Ver `.apex/sprints/DEUDA-2026-07-21.md` para el detalle con evidencia.
   El write-gate de APEX sobre APEX no existe; el que sí existe es
   `phase-gate.py`, que bloquea `apex_set_phase` con exit 2.
 - S16.8 (`skills/advisor-feedback/`) diferido por decisión de 2026-05-08.
+- **Rama `origin/fix/cross-project-tone-2026-07-06`**: su commit `bce5bf6`
+  se ha ido portando por partes (retrieval OR, regla #18, higiene del FTS,
+  frontmatter de las skills, postura compartida). Queda sin portar, y es
+  trabajo de decisión más que de código: la reescritura del router
+  `commands/apex.md`, las skills `effective-agent-skills` y
+  `brain-to-docs` (contenido externo de github.com/davidondrej/skills) y el
+  `code-before-phase5-gate.py` con sus tests. Decidir fichero a fichero.
 - Las capas L1-L6 del gate AgentArmor siguen en `status: partial`. Los
   motivos exactos de cada una están en `.apex/security/L*.md` (sección
   "Cómo desbloquear"), no aquí: esa lista caduca. L7 y L8 están `passed`.
@@ -226,6 +233,31 @@ Estos estaban en la lista de deuda y ya no:
   estado residual se exportó a `~/.apex/legacy-project-state-2026-10-19.db`
   y a `~/.apex/rescate-estado-legacy-2026-10-19.json`; la memoria global ya
   sólo contiene `grave_errors`.
+- **El retrieval cross-project devolvía 0 hits en consultas naturales**
+  → cerrado. FTS5 hace AND implícito (`MATCH "a b c"` exige las tres
+  palabras en la MISMA fila) y la consulta cruda se pasaba tal cual. Medido
+  contra el `hub.db` real: "memoria global errores graves" daba 0 hits con
+  AND y 365 con OR. Ahora `lib/fts_query.py` tokeniza, quita stopwords y
+  une con OR; `rank` (BM25) sigue ordenando por relevancia.
+- **La regla absoluta #18 era una recomendación sin maquinaria** → cerrado.
+  Decía "cross-project retrieval obligatorio" pero nada impedía cerrar la
+  fase 3 sin haber consultado el hub. Ahora `lib/cross_project_flag.py`
+  registra la consulta por fase y el grader bloquea las fases de decisión
+  (0, 2, 3, 5) si no se consultó. Si el hub no está disponible, el check no
+  aplica: no se puede exigir lo que no se puede hacer.
+- **El índice FTS5 no reflejaba el estado real de los datos** → cerrado. Una
+  decisión invalidada seguía apareciendo en la búsqueda, y reindexar
+  duplicaba la fila. Ahora `_index_fts()` es idempotente,
+  `invalidate_decision()` saca la fila del índice, y `cleanup_fts()` repara
+  las BDs ya contaminadas.
+- **16 de 25 skills no tenían frontmatter** → cerrado. Sin `name` +
+  `description` una skill no es descubrible por descripción: sólo se activa
+  si se nombra a mano.
+- **Los hooks de Claude y los de Codex se habían separado** → cerrado. Las
+  dos familias son ahora idénticas byte a byte, y las 12 copias de la
+  resolución de la raíz del proyecto son una sola implementación
+  (`lib/project_root.py`). Seis copias de Codex no cortaban en el home y
+  resolvían `~/.apex/context.db` como si fuera el contexto de un proyecto.
 
 ---
 
