@@ -30,6 +30,9 @@ from typing import Sequence
 
 import httpx
 
+# La resolucion de la raiz del proyecto es de lib/project_root.py (unica).
+from project_root import project_db_path as _project_db_path
+
 # ── Configuración ─────────────────────────────────────────────────────────
 
 ENV_MODEL = "APEX_CURATOR_MODEL"
@@ -268,18 +271,11 @@ def get_curator(db_path: str | Path | None = None) -> CuratorBackend:
 def project_db_path() -> Path | None:
     """`.apex/context.db` del proyecto actual, subiendo desde el cwd.
 
-    `~/.apex/` es memoria global de errores graves, no el contexto del
-    proyecto: no se busca (mismo criterio que el resto de APEX).
+    Delega en `lib/project_root.py`, que es la implementación ÚNICA de esta
+    búsqueda. `~/.apex/` es memoria global de errores graves, no el contexto
+    del proyecto: no se busca.
     """
-    home = Path.home()
-    cwd = Path.cwd()
-    for padre in [cwd, *cwd.parents]:
-        if padre == home:
-            break
-        cand = padre / ".apex" / "context.db"
-        if cand.exists():
-            return cand
-    return None
+    return _project_db_path()
 
 
 def record_call(db_path: str | Path | None, kind: str, model: str,

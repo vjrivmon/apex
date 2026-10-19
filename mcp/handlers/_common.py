@@ -4,7 +4,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
+
+# La raiz del repo, para importar `lib.project_root` (implementacion unica).
+_LIB = Path(__file__).resolve().parents[2] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+if str(_LIB.parent) not in sys.path:
+    sys.path.append(str(_LIB.parent))
+from lib.project_root import resolve_project_root as _resolve_project_root  # noqa: E402
+from lib.fts_query import build_fts_or_query as _build_fts_or_query  # noqa: E402
 
 
 # --- Hub constants ---
@@ -13,21 +23,17 @@ _HUB_DB = _HUB_DIR / "data" / "hub.db"
 
 
 def find_project_root() -> Path:
-    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/.
-    Nunca sube hasta el home: `~/.apex/` es memoria global, no un proyecto
-    (mismo criterio que apex_server._find_project_root)."""
-    home = Path.home()
-    cwd = Path.cwd()
-    for parent in [cwd, *cwd.parents]:
-        if parent == home:
-            break
-        if (parent / ".apex").exists():
-            return parent
-        if (parent / ".git").exists():
-            return parent
-        if parent == parent.parent:
-            break
-    return cwd
+    """Raíz del proyecto APEX: delega en `lib/project_root.py`.
+
+    La implementación es ÚNICA y vive en `lib/project_root.py`
+    (`resolve_project_root()`): sube desde el CWD hasta encontrar `.apex/` o
+    `.git/`, NUNCA sube hasta el home (`~/.apex/` es config global y memoria
+    de errores graves, no un proyecto) y, si no hay proyecto, devuelve el CWD.
+
+    Antes de 2026-10-19 esta función tenía su propia copia de la lógica, y
+    no coincidía con la de los hooks: acababa escribiendo en la BD global.
+    """
+    return _resolve_project_root()
 
 
 async def db_exists(db) -> bool:
@@ -122,12 +128,23 @@ def search_cross_project(query: str, limit: int = 8, exclude_project: str | None
         if not fts_q:
             return {**empty, "hub_available": True}
 
+        # FTS5 hace AND implícito: MATCH "a b c" exige las tres palabras en
+        # la MISMA fila. Pasando la consulta cruda, una pregunta natural
+        # ("memoria global errores graves") devolvía 0 hits aunque la base
+        # tuviera las palabras repartidas en 365 filas distintas. Medido
+        # contra el hub.db real el AND daba 0 y el OR 365.
+        # La consulta se ensancha; el ORDER BY rank (BM25) sigue ordenando
+        # por relevancia. Ver lib/fts_query.py.
+        or_q = _build_fts_or_query(fts_q)
+        if not or_q:
+            return {**empty, "hub_available": True}
+
         sql = (
             "SELECT project_id, source_type, source_id, "
             "snippet(hub_search, 3, '[', ']', '...', 24) AS snip, rank "
             "FROM hub_search WHERE hub_search MATCH ?"
         )
-        params: list = [fts_q]
+        params: list = [or_q]
         if exclude_project:
             sql += " AND project_id != ?"
             params.append(exclude_project)
@@ -137,6 +154,7 @@ def search_cross_project(query: str, limit: int = 8, exclude_project: str | None
         try:
             rows = [dict(r) for r in conn.execute(sql, params)]
         except sqlite3.OperationalError:
+            # Sintaxis FTS5 inválida → reintento como frase exacta del original
             try:
                 rows = [dict(r) for r in conn.execute(sql, [f'"{fts_q}"', *params[1:]])]
             except sqlite3.OperationalError:

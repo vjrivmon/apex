@@ -56,14 +56,11 @@ LOOKBACK_DAYS = int(os.environ.get("APEX_OUTCOME_WATCH_LOOKBACK_DAYS", "14"))
 FRESHNESS_WARN_DAYS = 7
 
 
-def find_project_root(cwd: Path) -> Path | None:
-    home = Path.home()
-    for parent in [cwd, *cwd.parents]:
-        if parent == home:
-            break  # ~/.apex es memoria global, no un proyecto
-        if (parent / ".apex" / "context.db").exists():
-            return parent
-    return None
+# La raiz del proyecto la resuelve lib/project_root.py, la implementacion UNICA.
+# Antes cada hook traia su propia copia, con reglas distintas: seis de ellas
+# no cortaban al llegar al home y resolvian ~/.apex/context.db (memoria global)
+# como si fuera el contexto de un proyecto.
+from lib.project_root import find_project_root
 
 
 def increment_counter(db_path: Path) -> int:

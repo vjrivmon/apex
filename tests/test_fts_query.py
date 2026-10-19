@@ -97,43 +97,58 @@ class TestStopwords:
             assert palabra in FTS_STOPWORDS
 
 
+@pytest.fixture
+def hub(tmp_path):
+    """Mini hub.db con el esquema real de la tabla `hub_search`."""
+    path = tmp_path / "hub.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE VIRTUAL TABLE hub_search USING fts5("
+        "content, source_type UNINDEXED, source_id UNINDEXED, project_id UNINDEXED)"
+    )
+    # La tabla `errors` de la que el retrieval saca el detalle de cada hit.
+    conn.execute(
+        "CREATE TABLE errors (id INTEGER PRIMARY KEY, project_id TEXT, "
+        "description TEXT, lesson TEXT, severity TEXT, phase INTEGER, "
+        "recurrence_count INTEGER DEFAULT 1, created_at TEXT)"
+    )
+    for eid, desc in ((1, "memoria global"), (2, "errores graves"),
+                      (3, "el filtro de gitleaks no funciona"),
+                      (4, "secretos filtrados en el commit")):
+        conn.execute(
+            "INSERT INTO errors (id, project_id, description, lesson, severity, "
+            "phase, recurrence_count, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (eid, "otro", desc, "la leccion", "high", 3, 1, "2026-01-01"),
+        )
+    # Filas SEPARADAS: cada término en su fila, como pasa de verdad.
+    # Éste es el caso que el AND implícito no puede cazar.
+    conn.execute(
+        "INSERT INTO hub_search (content, source_type, source_id, project_id) "
+        "VALUES (?,?,?,?)",
+        ("memoria global", "error", 1, "otro"),
+    )
+    conn.execute(
+        "INSERT INTO hub_search (content, source_type, source_id, project_id) "
+        "VALUES (?,?,?,?)",
+        ("errores graves", "error", 2, "otro"),
+    )
+    conn.execute(
+        "INSERT INTO hub_search (content, source_type, source_id, project_id) "
+        "VALUES (?,?,?,?)",
+        ("el filtro de gitleaks no funciona", "error", 3, "otro"),
+    )
+    conn.execute(
+        "INSERT INTO hub_search (content, source_type, source_id, project_id) "
+        "VALUES (?,?,?,?)",
+        ("secretos filtrados en el commit", "error", 4, "otro"),
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
 class TestSobreHubReal:
     """La prueba que importa: contra el esquema real de hub.db."""
-
-    @pytest.fixture
-    def hub(self, tmp_path):
-        """Mini hub.db con el esquema real de la tabla `hub_search`."""
-        path = tmp_path / "hub.db"
-        conn = sqlite3.connect(path)
-        conn.execute(
-            "CREATE VIRTUAL TABLE hub_search USING fts5("
-            "content, source_type UNINDEXED, source_id UNINDEXED, project_id UNINDEXED)"
-        )
-        # Filas SEPARADAS: cada término en su fila, como pasa de verdad.
-        # Éste es el caso que el AND implícito no puede cazar.
-        conn.execute(
-            "INSERT INTO hub_search (content, source_type, source_id, project_id) "
-            "VALUES (?,?,?,?)",
-            ("memoria global", "error", 1, "otro"),
-        )
-        conn.execute(
-            "INSERT INTO hub_search (content, source_type, source_id, project_id) "
-            "VALUES (?,?,?,?)",
-            ("errores graves", "error", 2, "otro"),
-        )
-        conn.execute(
-            "INSERT INTO hub_search (content, source_type, source_id, project_id) "
-            "VALUES (?,?,?,?)",
-            ("el filtro de gitleaks no funciona", "error", 3, "otro"),
-        )
-        conn.execute(
-            "INSERT INTO hub_search (content, source_type, source_id, project_id) "
-            "VALUES (?,?,?,?)",
-            ("secretos filtrados en el commit", "error", 4, "otro"),
-        )
-        conn.commit()
-        conn.close()
-        return path
 
     def _hits(self, hub: Path, query: str) -> int:
         conn = sqlite3.connect(f"file:{hub}?mode=ro", uri=True)
@@ -157,3 +172,58 @@ class TestSobreHubReal:
 
     def test_una_frase_exacta_sigue_encontrando(self, hub):
         assert self._hits(hub, build_fts_or_query("memoria global")) == 1
+
+
+class TestCableadoEnElRetrieval:
+    """La búsqueda cross-project usa la consulta OR, no la cruda."""
+
+    @pytest.fixture
+    def handlers(self):
+        import importlib.util
+        import sys
+
+        root = _REPO
+        pkg = root / "mcp" / "handlers"
+        spec = importlib.util.spec_from_file_location(
+            "apex_handlers", pkg / "__init__.py",
+            submodule_search_locations=[str(pkg)],
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["apex_handlers"] = mod
+        raiz = str(root)
+        original = list(sys.path)
+        for p in ("", ".", raiz):
+            while p in sys.path:
+                sys.path.remove(p)
+        sys.path.insert(0, str(root / "lib"))
+        sys.path.append(raiz)
+        try:
+            yield mod
+        finally:
+            sys.path[:] = original
+
+    def test_la_busqueda_encuentra_lo_que_el_and_no_encontraba(
+        self, handlers, hub, monkeypatch
+    ):
+        import apex_handlers._common as common
+
+        monkeypatch.setattr(common, "_HUB_DB", hub)
+        resultado = common.search_cross_project(
+            "memoria global errores graves", limit=5
+        )
+        assert resultado["hub_available"] is True
+        assert resultado["errors"], (
+            "el retrieval cross-project sigue usando la consulta cruda: con "
+            "AND implícito devuelve 0 hits para consultas naturales"
+        )
+
+    def test_la_busqueda_sigue_excluyendo_el_proyecto_actual(
+        self, handlers, hub, monkeypatch
+    ):
+        import apex_handlers._common as common
+
+        monkeypatch.setattr(common, "_HUB_DB", hub)
+        resultado = common.search_cross_project(
+            "memoria", limit=5, exclude_project="otro"
+        )
+        assert not resultado["errors"], "no debe traer errores del proyecto excluido"

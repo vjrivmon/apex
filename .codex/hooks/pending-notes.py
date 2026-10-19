@@ -6,6 +6,10 @@ exporta apex-hub. `<id>` es el del hub: carpeta del proyecto en minúsculas,
 espacios a guiones. Cada `- [ ] ...` de primer nivel es una tarea; las líneas
 sangradas debajo son su detalle. `- [ ] !auto ...` se implementa sin esperar
 confirmación.
+# La raíz del repo debe estar en sys.path para importar lib.project_root:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 
 Inyecta TODAS las tareas abiertas (hasta que se marquen `- [x]`) y señala las
 nuevas o modificadas desde la sesión anterior. Qué se vio ya se guarda como
@@ -24,6 +28,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# La raíz del repo debe estar en sys.path para importar lib.project_root:
+# el hook puede ejecutarse desde cualquier cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 META_KEY = "pendientes_vistos"
 TEMPLATE = """# Pendientes
 
@@ -41,14 +49,11 @@ def vault_dir() -> Path:
     return Path(os.environ.get("APEX_VAULT_DIR", Path.home() / "Documents" / "ApexVault")).expanduser()
 
 
-def find_project_root(cwd: Path) -> Path | None:
-    home = Path.home()
-    for parent in [cwd, *cwd.parents]:
-        if parent == home:
-            break  # ~/.apex es memoria global, no un proyecto
-        if (parent / ".apex" / "context.db").exists():
-            return parent
-    return None
+# La raiz del proyecto la resuelve lib/project_root.py, la implementacion UNICA.
+# Antes cada hook traia su propia copia, con reglas distintas: seis de ellas
+# no cortaban al llegar al home y resolvian ~/.apex/context.db (memoria global)
+# como si fuera el contexto de un proyecto.
+from lib.project_root import find_project_root
 
 
 def project_id(root: Path) -> str:

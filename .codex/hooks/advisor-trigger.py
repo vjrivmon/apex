@@ -6,9 +6,6 @@ intervalo (default 8) o se da un force trigger (apex_set_phase, grader
 bloqueante, error critical/high), crea una fila advisor_reviews(pending) y
 emite a stderr un mensaje pidiendo invocar `Task(subagent_type='apex-advisor')`.
 
-NO llama al modelo. NO bloquea. Si algo falla, exit 0 silencioso (mejor
-ruido que un hook que rompe la sesión).
-
 Ciclo de vida del review (Sprint 15/16, arreglado 2026-10-19):
 
 - Antes de abrir un review nuevo se cierra el que hubiera pendiente: la
@@ -23,6 +20,9 @@ Ciclo de vida del review (Sprint 15/16, arreglado 2026-10-19):
 - Mientras hay un review abierto NO se abre otro: sin este guard se
   acumulaba un review por cada tool call (7269 filas 'pending' en la
   auditoría del 2026-10-19).
+
+NO llama al modelo. NO bloquea. Si algo falla, exit 0 silencioso (mejor
+ruido que un hook que rompe la sesión).
 """
 from __future__ import annotations
 
@@ -67,11 +67,11 @@ FORCE_TOOLS = {
 TIMEOUT_S = float(os.environ.get("APEX_ADVISOR_HOOK_TIMEOUT_S", "2.0"))
 
 
-def _find_project_root(cwd: Path) -> Path | None:
-    for parent in [cwd, *cwd.parents]:
-        if (parent / ".apex" / "context.db").exists():
-            return parent
-    return None
+# La raiz del proyecto la resuelve lib/project_root.py, la implementacion UNICA.
+# Antes cada hook traia su propia copia, con reglas distintas: seis de ellas
+# no cortaban al llegar al home y resolvian ~/.apex/context.db (memoria global)
+# como si fuera el contexto de un proyecto.
+from lib.project_root import find_project_root as _find_project_root
 
 
 def _response_text(payload: dict) -> str:

@@ -25,6 +25,7 @@ from pathlib import Path
 # La raíz del repo debe estar en sys.path ANTES de `from lib.…`:
 # el hook puede ejecutarse desde cualquier cwd.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.project_root import project_db_path as _project_db_path
 from lib.hook_metrics import start_hook, end_hook
 
 TARGET_TOOLS = {
@@ -66,13 +67,14 @@ def _suggest_role_for_phase(phase: int) -> None:
         pass
 
 
+# La base del proyecto la resuelve lib/project_root.py, la implementacion
+# UNICA. Antes cada hook traia su propia copia; la de Codex ni siquiera
+# cortaba en el home, asi que desde el home resolvia ~/.apex/context.db
+# (la memoria global de errores graves) como si fuera el contexto del
+# proyecto.
 def _find_context_db(start: Path) -> Path | None:
-    """Busca .apex/context.db hacia arriba."""
-    for parent in [start, *start.parents]:
-        candidate = parent / ".apex" / "context.db"
-        if candidate.exists():
-            return candidate
-    return None
+    """Busca .apex/context.db hacia arriba. Nunca devuelve la global."""
+    return _project_db_path(start)
 
 
 class VerdictIlegible(Exception):
@@ -153,6 +155,33 @@ def _get_latest_verdict(db_path: Path, phase: int) -> dict | None:
                 pass
 
 
+def _fases_a_comprobar(phase_number, new_status: str) -> list[int]:
+    """Fases cuyo veredicto hay que leer para esta transición.
+
+    Refleja la MISMA regla que el handler MCP
+    (`mcp/handlers/context.py::_fases_del_veredicto`): entrar en la fase 11
+    exige el veredicto de la fase 10 Y el del gate de seguridad 10.5.
+
+    El hook sólo frena si algún veredicto dice "bloquea". La AUSENCIA de
+    veredicto la resuelve el handler MCP (que es fail-closed para el 10.5):
+    el hook no bloquea de más, pero tampoco deja pasar un bloqueo.
+    """
+    try:
+        phase_n = int(phase_number)
+    except (TypeError, ValueError):
+        return []
+    fases: list[int] = []
+    if new_status == "completed":
+        fases = [phase_n]
+    elif new_status == "in_progress" and phase_n > 0:
+        fases = [phase_n - 1]
+    else:
+        return []
+    if phase_n == 11 and 10.5 not in fases:
+        fases.append(10.5)
+    return [f for f in fases if f is not None and f >= 0]
+
+
 def main() -> int:
     _hook_start = start_hook("phase-gate")
     try:
@@ -177,12 +206,8 @@ def main() -> int:
         end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
-    blocking_phase = None
-    if new_status == "completed":
-        blocking_phase = int(phase_number)
-    elif new_status == "in_progress" and int(phase_number) > 0:
-        blocking_phase = int(phase_number) - 1
-    if blocking_phase is None or blocking_phase < 0:
+    blocking_phases = _fases_a_comprobar(phase_number, new_status)
+    if not blocking_phases:
         end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
@@ -192,52 +217,59 @@ def main() -> int:
         end_hook("phase-gate", _hook_start, exit_code=0)
         return 0
 
-    try:
-        verdict = _get_latest_verdict(db_path, blocking_phase)
-    except VerdictIlegible as e:
-        # No se sabe si hay bloqueo. Se avisa en voz alta y se deja pasar:
-        # bloquear por una BD momentáneamente locked dejaría la sesión
-        # atascada sin causa real. Lo que no se hace es callar.
+    for blocking_phase in blocking_phases:
+        try:
+            verdict = _get_latest_verdict(db_path, blocking_phase)
+        except VerdictIlegible as e:
+            # No se sabe si hay bloqueo. Se avisa en voz alta y se deja pasar:
+            # bloquear por una BD momentáneamente locked dejaría la sesión
+            # atascada sin causa real. Lo que no se hace es callar.
+            print(
+                f"[phase-gate] AVISO: no se pudo comprobar el grader de la fase "
+                f"{blocking_phase}.\n"
+                f"  Motivo: {e}\n"
+                f"  BD: {db_path}\n"
+                "  El hook deja pasar porque el fallo es de lectura, no un "
+                "veredicto negativo.\n"
+                "  Aviso: el handler MCP consulta la MISMA BD antes de escribir, "
+                "y lo hace\n"
+                "  antes de mirar force, así que es probable que apex_set_phase "
+                "falle igual.\n"
+                "  Arregla la BD (revisa locks y permisos de "
+                ".apex/context.db) y reevalúa.",
+                file=sys.stderr,
+            )
+            end_hook("phase-gate", _hook_start, exit_code=0)
+            return 0
+
+        if not verdict or not verdict["should_block"]:
+            continue
+
+        # Bloqueo: stderr → usuario, exit 2 → tool no se ejecuta
+        issues = ", ".join(verdict["issues"]) or "(ninguna)"
+        etiqueta = ("gate de seguridad 10.5" if blocking_phase == 10.5
+                    else f"fase {blocking_phase}")
         print(
-            f"[phase-gate] AVISO: no se pudo comprobar el grader de la fase "
-            f"{blocking_phase}.\n"
-            f"  Motivo: {e}\n"
-            f"  BD: {db_path}\n"
-            "  El hook deja pasar porque el fallo es de lectura, no un "
-            "veredicto negativo.\n"
-            "  Aviso: el handler MCP consulta la MISMA BD antes de escribir, "
-            "y lo hace\n"
-            "  antes de mirar force, así que es probable que apex_set_phase "
-            "falle igual.\n"
-            "  Arregla la BD (revisa locks y permisos de "
-            ".apex/context.db) y reevalúa.",
+            "phase-gate.py BLOQUEA apex_set_phase:\n"
+            f"  {etiqueta} tiene verdict #{verdict['id']} con quality "
+            f"{verdict['quality']}/4\n"
+            f"  Issues: {issues}\n"
+            f"  Razón: {verdict['reasoning']}\n"
+            "\n"
+            "Resolución: ataca los issues y vuelve a llamar apex_grader_evaluate.\n"
+            "Override: pasa force=True con force_reason='...' al apex_set_phase.",
             file=sys.stderr,
         )
-        end_hook("phase-gate", _hook_start, exit_code=0)
-        return 0
+        end_hook("phase-gate", _hook_start, exit_code=2)
+        return 2
 
-    if not verdict or not verdict["should_block"]:
+    # Ninguna de las fases bloquea.
+    if new_status == "in_progress":
         # Sprint 12: si la transición es a in_progress y la nueva fase
         # tiene rol asociado, sugiere invocarlo (no bloqueante).
-        if new_status == "in_progress":
-            _suggest_role_for_phase(int(phase_number))
-        end_hook("phase-gate", _hook_start, exit_code=0)
-        return 0
-
-    # Bloqueo: stderr → usuario, exit 2 → tool no se ejecuta
-    issues = ", ".join(verdict["issues"]) or "(ninguna)"
-    print(
-        "phase-gate.py BLOQUEA apex_set_phase:\n"
-        f"  Fase {blocking_phase} tiene verdict #{verdict['id']} con quality {verdict['quality']}/4\n"
-        f"  Issues: {issues}\n"
-        f"  Razón: {verdict['reasoning']}\n"
-        "\n"
-        "Resolución: ataca los issues y vuelve a llamar apex_grader_evaluate.\n"
-        "Override: pasa force=True con force_reason='...' al apex_set_phase.",
-        file=sys.stderr,
-    )
-    end_hook("phase-gate", _hook_start, exit_code=2)
-    return 2
+        _suggest_role_for_phase(int(phase_number))
+    end_hook("phase-gate", _hook_start, exit_code=0)
+    return 0
 
 
 if __name__ == "__main__":

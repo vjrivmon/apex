@@ -34,7 +34,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 1124 |
+| Tests (funciones de test) | 1131 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 64 |
 | Skills (`skills/`) | 25 |
@@ -42,7 +42,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 | Hooks registrados en el proyecto | 8 |
 | Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
 | Tablas en el schema (`lib/context_db.py`) | 28 |
-| Tablas en la BD viva (`.apex/context.db`) | 34 |
+| Tablas en la BD viva (`.apex/context.db`) | 35 |
 
 ### Artefactos por sprint
 
@@ -61,16 +61,9 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
 
-### Módulos sin importadores
-
-Código escrito que nadie usa. Suele ser trabajo a medias, no
-necesariamente muerto: verificar antes de borrar o cablear.
-
-- `lib/fts_query.py`
-
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `2af3b71 fix(fts): el indice refleja el estado real de los datos` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `0353a05 feat(postura): reglas 21-22 y postura compartida en todos los roles` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
