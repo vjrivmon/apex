@@ -269,7 +269,9 @@ CREATE TABLE IF NOT EXISTS advisor_reviews (
     advice_count INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'pending'
-    -- 'pending' | 'completed' | 'skipped' | 'error'
+    -- 'pending' | 'completed' | 'skipped' | 'abandoned' | 'error'
+    -- 'abandoned': un review que se dejó abierto y la poda cerró por
+    -- antigüedad (caducado sin advice). Se añadió el 2026-10-19.
 );
 
 CREATE INDEX IF NOT EXISTS idx_advisor_reviews_session
@@ -1259,7 +1261,7 @@ class ApexContextDB:
 
     async def add_verdict(
         self,
-        phase: int,
+        phase: int | float,
         quality: int,
         reasoning: str,
         category: str | None = None,
@@ -1310,7 +1312,7 @@ class ApexContextDB:
             for r in rows
         ]
 
-    async def get_latest_verdict(self, phase: int) -> dict | None:
+    async def get_latest_verdict(self, phase: int | float) -> dict | None:
         import json as _json
         async with self._conn() as db:
             rows = await db.execute_fetchall(

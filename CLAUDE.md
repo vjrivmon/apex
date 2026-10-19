@@ -34,7 +34,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 1047 |
+| Tests (funciones de test) | 1065 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
@@ -66,11 +66,12 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 Código escrito que nadie usa. Suele ser trabajo a medias, no
 necesariamente muerto: verificar antes de borrar o cablear.
 
+- `lib/fts_query.py`
 - `lib/project_root.py`
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `cb59923 feat(project-root): una sola resolucion de la raiz del proyecto` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `7c4b75d feat(fts): construccion de consultas OR para el retrieval cross-project` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
