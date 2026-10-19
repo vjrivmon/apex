@@ -13,9 +13,23 @@ from apex_handlers._common import vault_project_id as _vault_project_id
 from security_gate import GITLEAKS_MARKERS as _GITLEAKS_MARKERS
 from security_gate import SECURITY_GATE_PHASE as _SECURITY_GATE_PHASE
 from security_gate import _check_gitleaks_configured as _check_gitleaks_configured
+from init_claude_md import ensure_claude_md as _ensure_claude_md
+from scaffold_devops import install_slash_commands as _install_slash_commands
 from wiki_scaffold import create_wiki
 from typing import Any
 import platform
+
+
+def _refrescar_claude_md(root) -> None:
+    """Actualiza el bloque APEX-AWARE del CLAUDE.md del proyecto (S19.2).
+
+    Best-effort: si falla, la transición de fase NO se interrumpe. El bloque
+    es informativo, el gate no depende de él.
+    """
+    try:
+        _ensure_claude_md(root)
+    except Exception:
+        pass
 
 
 # Fases cuyo veredicto hay que consultar, además del de la fase previa.
@@ -68,7 +82,29 @@ async def handle_apex_init_project(db: Any, arguments: dict) -> Any:
     # Crear wiki scaffold
     domain = arguments.get("domain", "")
     wiki_dir = create_wiki(str(root), arguments["name"], domain)
-    return [TextContent(type="text", text=f"Proyecto inicializado en {root}/.apex/\n- context.db creada con 15 fases\n- Wiki scaffold en {wiki_dir}")]
+    # S19.2: CLAUDE.md APEX-aware. `ensure_claude_md` NO pisa un CLAUDE.md
+    # existente: si no hay, lo crea; si hay, sólo actualiza el bloque
+    # marcable APEX-AWARE.
+    claude_md = "no generado"
+    try:
+        _ensure_claude_md(root)
+        claude_md = "generado/actualizado"
+    except Exception as exc:  # best-effort: no bloquea la inicialización
+        claude_md = f"error: {exc}"
+    # S19.3: slash commands cortos de APEX en .claude/commands/.
+    comandos = "omitidos"
+    try:
+        copiados, _omitidos = _install_slash_commands(root)
+        comandos = f"{len(copiados)} comando(s)"
+    except Exception as exc:
+        comandos = f"error: {exc}"
+    return [TextContent(type="text", text=(
+        f"Proyecto inicializado en {root}/.apex/\n"
+        f"- context.db creada con 15 fases\n"
+        f"- Wiki scaffold en {wiki_dir}\n"
+        f"- CLAUDE.md APEX-aware: {claude_md}\n"
+        f"- Slash commands: {comandos}"
+    ))]
 
 async def handle_apex_get_context(db: Any, arguments: dict) -> Any:
     """Handler for apex_get_context."""
@@ -173,6 +209,10 @@ async def handle_apex_set_phase(db: Any, arguments: dict) -> Any:
         "project": _project, "phase": phase_n,
         "status": new_status, "notes": arguments.get("notes", ""),
     })
+    # S19.2: el bloque APEX-AWARE del CLAUDE.md lleva la fase actual.
+    # `ensure_claude_md` es idempotente: si no hay CLAUDE.md, no crea uno
+    # aquí (sólo `apex_init_project` lo hace).
+    _refrescar_claude_md(_find_project_root())
     msg = f"Fase {phase_n} → {new_status}"
     for f, verdict in veredictos:
         etiqueta = "gate 10.5" if f == GATE_PHASE else "grader"
