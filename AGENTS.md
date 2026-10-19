@@ -125,6 +125,21 @@ mencionaban estaban obsoletas.
   append-only de errores GRAVES cross-project. NUNCA es el contexto de un
   proyecto — `_get_db()` lanza si el cwd no tiene `.apex/` propio.
 
+### Vault de Obsidian (2026-09-23)
+
+- `apex-hub/backend/vault_export.py` escribe, tras cada escaneo, una carpeta
+  por proyecto en `ApexVault/projects/<id>/` con el mismo contenido que la
+  ficha del hub (`<id>.md`, `decisiones`, `errores`, `componentes`,
+  `sesiones`). Lee `hub.db`: cada `context.db` se lee una sola vez.
+- El MCP añade eventos a `projects/<id>/log.md`. El id es el del hub
+  (`vault_project_id`: carpeta en minúsculas, espacios a guiones), no la meta
+  `nombre`, que es libre y sin ella todo caía en `unknown-log.md`.
+- `notas.md` es del usuario y nadie la toca. Lo personal no-APEX vive en otro
+  vault, `~/Documentos/Visi-Personal`.
+- El dispatcher rechaza argumentos con sintaxis de otra llamada a tool
+  filtrada (`<parameter name=`, `</invoke>` al inicio de línea): había 51
+  registros así en 9 proyectos (reparados, copias `.bak-2026-09-23-leaks`).
+
 ### Biblioteca de libros (2026-07-21)
 
 Retrieval **denso** sobre los libros técnicos que lee Vicente. Es la primera

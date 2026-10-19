@@ -1,24 +1,25 @@
 # CLAUDE.md — APEX
 
-> Fuente única del estado del proyecto. Fusiona lo que antes vivía repartido
-> entre este fichero y `BLUEPRINT.md`, que se contradecían entre sí.
+> **El estado de este proyecto vive en [`AGENTS.md`](AGENTS.md).** Este
+> fichero es el que carga Claude Code; `AGENTS.md` es el que cargan Codex y
+> los demás agentes, y es la fuente única. No dupliques la narrativa aquí:
+> lo que se escriba en los dos se acaba contradiciendo, que es exactamente
+> lo que pasó entre el 2026-04 y el 2026-09-23 con este mismo fichero.
 >
-> **Cómo está organizado:** los HECHOS (tests, tools, tablas, qué sprint tiene
-> código escrito) van en el bloque generado `APEX:STATE`, que produce
-> `scripts/refresh_state.py` contando el repo. No se editan a mano. Todo lo
-> demás es NARRATIVA — decisiones y su porqué — y esa sí se escribe a mano
-> porque no caduca.
+> Hasta el 2026-10-19 este fichero tenía su propia copia de la narrativa y
+> las dos se divergieron. La copia de `AGENTS.md` es la que manda; lo que
+> faltaba en ella se portó allí.
 
 ## Qué es APEX
 
-Sistema de skills + MCP server para Claude Code que guía el ciclo completo de
-desarrollo de software. Usa una BD SQLite contextual por proyecto
-(`.apex/context.db`) + un segundo cerebro (ingest/lint/synthesis) + un
-dashboard cross-project (`apex-hub`) para que Claude Code nunca pierda el hilo.
+Sistema de skills + MCP server que guía el ciclo completo de desarrollo de
+software. Usa una BD SQLite contextual por proyecto (`.apex/context.db`) +
+un segundo cerebro (ingest/lint/synthesis) + un dashboard cross-project
+(`apex-hub`, repo aparte en `~/RoadToDevOps/apex-hub/`) para que el agente
+nunca pierda el hilo.
 
-**Arquitectura: puro CLI + MCP + skills.** El frontend/backend web legacy vive
-en la rama `archive/legacy-web` y NO se carga en el flujo actual. El único
-frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
+**Arquitectura: puro CLI + MCP + skills.** El frontend/backend web legacy
+vive en la rama `archive/legacy-web` y NO se carga en el flujo actual.
 
 ---
 
@@ -93,195 +94,16 @@ PYTHONPATH=lib .venv/bin/pytest tests/ -v
 .venv/bin/python scripts/refresh_state.py --check
 ```
 
-`backend/` sigue en el árbol por inercia histórica desde el Sprint 7, declarado
-legacy y sin usar. `frontend/` ya no existe: se borró y las instrucciones que lo
-mencionaban estaban obsoletas.
+El bloque de arriba se genera con `scripts/refresh_state.py` contando el
+repo. **No se edita a mano.** Si añades tests, regenera el bloque antes de
+commitear: el control de deriva (`--check`) lo detecta y falla.
 
----
+## Hooks
 
-## Estado por área
+Los hooks de Claude Code viven en `.claude/hooks/` y se registran en
+`.claude/settings.json` (proyecto) y `~/.claude/settings.json` (global,
+para que APEX actúe en todos los proyectos). Hay un juego equivalente para
+Codex en `.codex/hooks/`, con su propio registro `.codex/hooks.json`.
 
-### Núcleo (verificado y en uso)
-
-- **Context DB v2** (`lib/context_db.py`) con hybrid retrieval **léxico**
-  (70% FTS5/BM25 + 30% keyword LIKE). Ojo: "hybrid" ahí NO significa
-  semántico — ambas piernas operan sobre caracteres. El retrieval denso vive
-  aparte, en la biblioteca de libros.
-- **Wiki scaffold + segundo cerebro** (`lib/wiki_scaffold.py`): `wiki/` estilo
-  Karpathy, `.apex/brand/`, `.apex/raw/`, `.apex/releases/`.
-- **Ingest pipeline** (`lib/ingest.py`), **self-heal** (`lib/lint.py`),
-  **synthesis** con `dream_deep` density-triggered (`lib/synthesis.py`).
-- **Scaffold DevOps** (`lib/scaffold_devops.py` + `templates/`).
-- **Security gate** (`lib/security_gate.py`): AgentArmor L1-L8, la fase 10.5
-  bloquea la 11.
-- **Grader** (`lib/grader.py`) + **/goal loop** (`lib/goal_loop.py`).
-- **Context hygiene**: `lib/handoff.py`, `lib/token_filter.py`.
-- **Roles** (`lib/roles.py`): 5 subagents nativos, mapeados a fases.
-- **Apex-doctor** (`lib/apex_doctor.py`): 6 analizadores (A1-A6), trigger
-  semántico por frases de cierre.
-- **Advisor** (`lib/advisor.py` + `advisor_outcomes/health/tuning`): capa
-  preventiva con feedback loop implícito vía facets.
-- **Memoria global** (`lib/global_memory.py`): `~/.apex/context.db` es memoria
-  append-only de errores GRAVES cross-project. NUNCA es el contexto de un
-  proyecto — `_get_db()` lanza si el cwd no tiene `.apex/` propio, y la
-  búsqueda de raíz (servidor y 6 hooks) se detiene en el home. Escrito el
-  2026-07-17 pero atascado en una rama sin fusionar hasta el 2026-09-23: entre
-  medias "Motor Fisico 2D Propio" volvió a escribir en la BD global.
-
-### Vault de Obsidian (2026-09-23)
-
-- `apex-hub/backend/vault_export.py` escribe, tras cada escaneo, una carpeta
-  por proyecto en `ApexVault/projects/<id>/` con el mismo contenido que la
-  ficha del hub (`<id>.md`, `decisiones`, `errores`, `componentes`,
-  `sesiones`). Lee `hub.db`: cada `context.db` se lee una sola vez.
-- El MCP añade eventos a `projects/<id>/log.md`. El id es el del hub
-  (`vault_project_id`: carpeta en minúsculas, espacios a guiones), no la meta
-  `nombre`, que es libre y sin ella todo caía en `unknown-log.md`.
-- `notas.md` es del usuario y nadie la toca. Lo personal no-APEX vive en otro
-  vault, `~/Documentos/Visi-Personal`.
-- El dispatcher rechaza argumentos con sintaxis de otra llamada a tool
-  filtrada (`<parameter name=`, `</invoke>` al inicio de línea): había 51
-  registros así en 9 proyectos (reparados, copias `.bak-2026-09-23-leaks`).
-
-### Biblioteca de libros (2026-07-21)
-
-Retrieval **denso** sobre los libros técnicos que lee Vicente. Es la primera
-pieza de APEX que busca por significado y no por caracteres.
-
-- `lib/book_chunker.py` — trocea `.md` respetando el árbol de headings. Sabe
-  que un `#` dentro de un fence es un comentario de Python, no una sección
-  (el corpus real tiene 5 de esos), y no separa una fila de tabla de su
-  cabecera. **No funde fragmentos de headings distintos**: la citabilidad
-  manda sobre el tamaño.
-- `lib/book_corpus.py` — `~/.apex/library.db`, un índice con columna de libro
-  (no un índice por libro: permite preguntar cruzando títulos). Reindexado
-  incremental por `content_sha`, borrado de capítulos desaparecidos, y
-  `sync_book()` que se llama antes de cada búsqueda para que sea imposible
-  buscar contra un índice viejo.
-- `lib/embeddings.py` — cliente ÚNICO de embeddings de APEX (nomic-embed-text
-  vía Ollama, 768d). Batch real: una petición por lote, no una por texto.
-- Tools: `apex_book_search`, `apex_book_index`, `apex_book_list`. Funcionan
-  **sin proyecto APEX** (retorno temprano antes del gate `_get_db()`).
-
-**Dato de diseño medido**: nomic-embed-text es mayoritariamente inglés. Las
-preguntas en español contra el corpus inglés aciertan 2/6; traducidas, 6/6.
-Por eso la `description` de la tool instruye a enviar la query en inglés. El
-usuario pregunta en español; la traducción ocurre por dentro.
-
-**Umbral 0.66**, calibrado sobre el corpus real: preguntas cubiertas por el
-libro puntúan 0.69-0.82, preguntas ajenas 0.45-0.58. Por debajo del umbral la
-tool no devuelve una lista vacía muda — devuelve el estado "no cubierto" con
-la instrucción explícita de decirlo en vez de rellenar con los pesos del
-modelo.
-
-### Deuda conocida
-
-Ver `.apex/sprints/DEUDA-2026-07-21.md` para el detalle con evidencia.
-
-- **VFS implementado pero inalcanzable**: `lib/vfs.py` + `lib/vfs_grep.py` con
-  75 tests verdes y **cero tools `apex_vfs_*` en el servidor**. Falta S17.6
-  (`vfs_sql_render.py`, referenciado en `vfs.py:23` pero inexistente), S17.7,
-  S17.8 y el wiring S17.9. Las tablas `vfs_render_cache` y `vfs_query_log`
-  están creadas sin CRUD.
-- **Errores cross-project: señal rota**. Los 279 errores de `hub.db` tienen
-  todos `recurrence_count = 1`, así que el `ORDER BY recurrence_count DESC`
-  de `session-start.py:59` no ordena nada y devuelve siempre los mismos 5.
-  Además el corte fijo de 5 en cada arranque repite lo obvio. Dirección
-  acordada: llevarlos al mismo mecanismo que la biblioteca (corpus
-  vectorizado, consultado bajo demanda y filtrado por relevancia real).
-- **Rama `fix/cross-project-tone-2026-07-06` sin fusionar**: sus tres
-  commits nunca llegaron a main. `6aee88d` (memoria global) y `1a19e21`
-  (self-heal WAL) se portaron el 2026-09-23. Falta `bce5bf6`: retrieval
-  cross-project con OR (`_build_fts_or_query`; en main el FTS sigue con AND
-  implícito), cross-project bloqueante en el grader, postura bajo presión,
-  `code-before-phase5-gate.py`, 5 ficheros de tests y 2 skills. Diverge de
-  main en 32 ficheros con trabajo posterior en ambos lados: requiere decidir
-  fichero a fichero.
-- `lib/prototype.py:183` — los guards de transición se ignoran.
-- S16.8 (`skills/advisor-feedback/`) deferido por decisión de 2026-05-08.
-
----
-
-## Roadmap
-
-El orden estricto S17 → S18 → S19 se decidió el 2026-05-08 en lugar de saltar
-a S19 por la urgencia de Gap F (gitleaks). Sigue vigente, con la salvedad de
-que S17 quedó a medias (código sin wiring) y de que se ejecutó trabajo
-posterior (S20/S21) sin registrarlo aquí en su momento.
-
-| Sprint | Foco | Blueprint |
-|---|---|---|
-| S17 | VirtualFS cross-project (a medias: falta wiring MCP) | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
-| S18 | Granite Curator opt-in vía `APEX_CURATOR_MODEL` | (mismo fichero que S17) |
-| S19 | Advent Integration (Tier 1+2+4; gitleaks es prioridad cero) | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
-
-Pendientes sin sprint asignado: embeddings sobre la wiki del proyecto
-(la infraestructura ya existe en `lib/embeddings.py`), integración Pencil MCP
-en fase 2.
-
----
-
-## Decisiones acumuladas
-
-Las que siguen vigentes y explican por qué el código es como es.
-
-| Decisión | Razón |
-|---|---|
-| La biblioteca de libros vive en `~/.apex/library.db`, fichero propio | `context.db` es per-proyecto (se duplicaría en ~10 BDs y `_get_db()` la rechaza fuera de proyecto); `~/.apex/context.db` es memoria append-only de errores graves y la biblioteca es mutable |
-| Un solo índice con columna de libro, no uno por libro | Permite preguntar cruzando títulos ("qué dicen mis libros sobre X"); el filtro a uno concreto sigue disponible |
-| Tool de biblioteca separada, no dentro de `apex_search` | `apex_search` pasa por `_get_db()`, que lanza sin `.apex/`; el Q&A del usuario ocurre fuera de todo proyecto. Mismo precedente que `apex_search_cross_project` |
-| Una sola tool de búsqueda para el usuario y para el Architect | Comparten chunks, vectores y citas; solo difieren en cómo se redacta la respuesta, y eso es prompting, no código |
-| Sin grafo de entidades sobre los libros | Verificado: 0 wikilinks en los 7 capítulos. Fabricar el grafo costaría ~250 llamadas LLM e introduciría alucinación justo donde el requisito es trazabilidad |
-| Sin numpy/sqlite-vec/faiss | 4.500 fragmentos se recorren en ~155 ms en Python puro. Reconsiderar hacia los 30 libros |
-| Sin FTS5 sobre los fragmentos del libro | Medido: el híbrido léxico da 3/6 igual que el denso solo. El léxico no cruza idiomas |
-| Reindexado automático al buscar, no watcher de ficheros | Vicente confirmó que los capítulos entran en bloque, nunca a medias. Comparar hashes es local y barato, y hace imposible buscar contra un índice desactualizado |
-| Los hechos del CLAUDE.md y del AGENTS.md se generan, no se escriben | Auditoría 2026-07-21: ~42 afirmaciones falsas acumuladas. El 85% era derivable con un comando. Auditoría 2026-10-19: el control de deriva estaba roto (comparaba el recuento real contra el congelado) y AGENTS.md era una copia a mano |
-| Fuera las cifras de líneas por módulo | 8 de 15 estaban mal (hasta +116%) y no aportan nada a quien lee |
-| 3 enums de rating (`useful`/`not_useful`/`unclear`) | `unclear` no es rating sino ausencia de señal: se excluye del denominador del FP rate |
-| Solo enums, nunca texto libre, en los outcomes del advisor | Privacidad: los facets pueden contener briefs o código sensible |
-| Cooldown 7 días entre auto-tunings | Anti-oscilación |
-| El vault de Obsidian se genera desde `hub.db`, no por eventos | El log por evento divergía del hub (701 decisiones frente a 419), truncaba a 100 caracteres y nunca rellenaba huecos |
-| Nota y ficha del hub se nombran por carpeta del proyecto | La meta `nombre` es libre: el mismo proyecto acababa con dos nombres |
-
----
-
-## Errores conocidos a evitar
-
-1. Construir frontend antes de verificar backend.
-2. No investigar fuentes de datos antes de escribir scrapers.
-3. Tomar decisiones de diseño sin consultar al usuario.
-4. SPEC monolítica sin checkpoints.
-5. Hardcoded data en frontend.
-6. Sin tildes ni eñes en español.
-7. CORS abierto y sin auth al inicio.
-8. No generar edge cases antes del código.
-9. Asumir siempre "app web con dashboard".
-10. No usar awesome-design-md como referencia visual.
-11. Ir de prisa en vez de diseñar bien.
-12. **Fiarse de un documento de estado sin verificarlo contra el repo.** Este
-    fichero llegó a decir 695 tests cuando había 722, y a marcar como
-    pendientes sprints cerrados hacía meses. Si un dato importa para una
-    decisión, cuéntalo.
-
----
-
-## Lecciones de proceso
-
-1. **Verificar antes de cerrar.** `pytest -q` antes de declarar verde. Y si
-   una pieza tiene comportamiento observable (un retrieval, un parser),
-   ejecutarla contra datos reales, no solo correr sus tests: los 16 tests del
-   chunker pasaron solo después de que cinco fallos destaparan tres bugs que
-   el código "parecía" no tener.
-2. **Auditar antes de presentar decisiones.** Distinguir explícitamente entre
-   decisiones ya tomadas que se están modificando y las genuinamente abiertas.
-3. **No emojis** en código ni documentación. Español con tildes y eñes.
-4. **Cuando el grader o los tests fallen, no bypasear**: causa raíz y fix
-   limpio.
-5. **No inventar un desacuerdo con el usuario.** Si algo parece un riesgo,
-   comprobar primero que el usuario lo ha pedido de verdad; citar una
-   autoridad para respaldar una suposición no verificada es peor que callarse.
-
-6. **Una rama sin fusionar es trabajo perdido.** Los arreglos del 2026-07-17
-   pasaron dos meses en una rama mientras este fichero los daba por hechos, y
-   el bug que corregían se repitió. Al cerrar un arreglo, comprobar que está
-   en main (`git branch --contains <sha>`).
+La lista de hooks y su alcance están en `AGENTS.md`, sección "Estado por
+área".
