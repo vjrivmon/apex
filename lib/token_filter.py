@@ -17,6 +17,11 @@ Heurísticas pragmáticas:
 """
 from __future__ import annotations
 
+try:  # el curador es opcional: sin httpx, APEX sigue funcionando igual
+    import curator as _curator
+except ImportError:  # pragma: no cover - solo si httpx no está instalado
+    _curator = None  # type: ignore
+
 DEFAULT_CHARS_THRESHOLD = 5_000
 DEFAULT_LINES_THRESHOLD = 100
 
@@ -70,6 +75,22 @@ def should_archive(output: str, tool_name: str = "",
     return False
 
 
+def _resumen_curado(output: str, max_chars: int) -> str | None:
+    """Resumen semántico con el curador local, o None si no procede.
+
+    El curador destila, no decide: el output original sigue archivado
+    entero en `tool_output_archive`, así que un resumen pobre no pierde
+    información.
+    """
+    if _curator is None:
+        return None
+    curador = _curator.get_curator()
+    if not curador.enabled:
+        return None
+    # ~4 chars por token, el mismo criterio que usa el resto de APEX.
+    return curador.summarize(output, max_tokens=max(64, max_chars // 4))
+
+
 def summarize_for_context(output: str,
                            head_lines: int = 10,
                            tail_lines: int = 5,
@@ -85,6 +106,13 @@ def summarize_for_context(output: str,
 
     if total_chars <= max_chars and total_lines <= head_lines + tail_lines + 2:
         return output  # ya es corto, no resumir
+
+    # Sprint 18 (opt-in): con curador activo, el corte por caracteres se
+    # sustituye por un resumen semántico. Si el curador está apagado o falla,
+    # sigue la heurística de siempre, byte a byte.
+    curado = _resumen_curado(output, max_chars)
+    if curado:
+        return curado
 
     head = lines[:head_lines]
     tail = lines[-tail_lines:] if tail_lines > 0 else []
