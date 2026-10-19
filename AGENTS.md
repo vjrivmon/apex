@@ -34,7 +34,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 872 |
+| Tests (funciones de test) | 894 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
@@ -73,7 +73,7 @@ necesariamente muerto: verificar antes de borrar o cablear.
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `d0b9dd1 fix(doctor): la fase 10.5 del gate no se confunde con la fase 10` · refrescado el 2026-10-19.
+Rama `main` · HEAD `c0f9a71 merge(a1): el bucle del advisor deja de ser inerte` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
