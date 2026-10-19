@@ -9,10 +9,10 @@ asi_coverage:
   - ASI05
   - ASI08
 evidence:
-  - "Planning lo hace Claude Code (el caller). APEX no ejecuta planning autonomo: es un MCP server que expone herramientas bajo demanda, una tool por llamada (mcp/apex_server.py:1897-1899)."
-  - "Superficie de tools: 57 tools MCP al 2026-10-19, valor derivado de `len(await list_tools())` en mcp/apex_server.py:551-1894. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
-  - "Sin carga dinamica de tools: el registro de handlers es un dict literal (mcp/handlers/__init__.py:64-121) y el set de tools de biblioteca es un frozenset literal (mcp/handlers/books.py:21-23)."
-  - "Subprocess con allowlist: el unico Popen del servidor MCP es el del hub, con lista fija [python, -m, backend], cwd fijo _HUB_DIR y sin argumentos del caller (mcp/apex_server.py:175-220, Popen en mcp/apex_server.py:191-197). Se dispara al arrancar el server (mcp/apex_server.py:1957-1960), NO desde apex_init_project (mcp/handlers/context.py:18-33)."
+  - "Planning lo hace Claude Code (el caller). APEX no ejecuta planning autonomo: es un MCP server que expone herramientas bajo demanda, una tool por llamada (mcp/apex_server.py:2090-2092)."
+  - "Superficie de tools: 64 tools MCP al 2026-10-19, valor derivado de `len(await list_tools())` en mcp/apex_server.py:566-2087. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
+  - "Sin carga dinamica de tools: el registro de handlers es un dict literal (mcp/handlers/__init__.py:72-137), el set de tools de biblioteca es un frozenset literal (mcp/handlers/books.py:21-23) y el del VirtualFS tambien (mcp/handlers/vfs.py:49-51)."
+  - "Subprocess con allowlist: el unico Popen del servidor MCP es el del hub, con lista fija [python, -m, backend], cwd fijo _HUB_DIR y sin argumentos del caller (mcp/apex_server.py:175-220, Popen en mcp/apex_server.py:191-197). Se dispara al arrancar el server (mcp/apex_server.py:2153-2156), NO desde apex_init_project (mcp/handlers/context.py:18-33)."
   - "Escrituras fuera de .apex/: el scaffold de devops copia plantillas a .github/, docker/ y monitor/ del target (lib/scaffold_devops.py:75-96) y el portfolio escribe <slug>.mdx en el out_dir (mcp/handlers/portfolio.py:40-53). Ninguno de los dos valida que el path no salga del proyecto (F4-02)."
   - "Trazabilidad de tool calls: cada PostToolUse (salvo las tools de SKIP_LOG) inserta una fila en tool_call_log (lib/context_db.py:183-190), alimentado por el hook .claude/hooks/skill-forge-watch.py:162-166. Es un log, no una cadena con request_id/parent_id."
   - "Guardas de transicion: la skill flow-guardian describe el gate 10.5 como bloqueante para la fase 11 (skills/flow-guardian/SKILL.md:69-90) y el hook de fase delega el veredicto en el grader (.claude/hooks/phase-gate.py:200-244)."
@@ -32,10 +32,10 @@ proyecto no validan el path (F4-02).
 
 - [x] **Scope limitado**: el MCP server no ejecuta planes autonomos. Solo
       responde a tool calls individuales; el planner es Claude Code
-      (mcp/apex_server.py:1897-1899).
+      (mcp/apex_server.py:2090-2092).
 - [x] **Tool allowlist**: las tools estan fijadas en la lista literal de
-      `list_tools()` (mcp/apex_server.py:551-1894) y los handlers en un
-      dict literal (mcp/handlers/__init__.py:64-121). No hay mecanismo de
+      `list_tools()` (mcp/apex_server.py:566-2087) y los handlers en un
+      dict literal (mcp/handlers/__init__.py:72-137). No hay mecanismo de
       carga dinamica.
 - [x] **Subprocess allowlist**: unico Popen del servidor, con binario y
       cwd fijos y sin argumentos del caller (mcp/apex_server.py:191-197).
@@ -83,13 +83,14 @@ proyecto no validan el path (F4-02).
 
 ```bash
 # Superficie de tools (derivada, no hardcodeada)
-grep -c '^        Tool($' mcp/apex_server.py                  # 57
+grep -c '^        Tool($' mcp/apex_server.py                  # 64
 # Sin carga dinamica: dict y frozenset literales
-sed -n '64p' mcp/handlers/__init__.py
+sed -n '72p' mcp/handlers/__init__.py
 sed -n '21p' mcp/handlers/books.py
+sed -n '49p' mcp/handlers/vfs.py
 # Subprocess allowlist del hub
 sed -n '191,197p' mcp/apex_server.py
 # El hub se lanza al arrancar el server, no en apex_init_project
-sed -n '1957,1960p' mcp/apex_server.py
+sed -n '2153,2156p' mcp/apex_server.py
 sed -n '18,33p' mcp/handlers/context.py
 ```

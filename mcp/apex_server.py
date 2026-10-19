@@ -60,6 +60,13 @@ import reasoning_traces as _traces  # noqa: E402
 import skill_handoff as _handoff_skill  # noqa: E402
 import prototype as _prototype  # noqa: E402
 
+# La resolución de la raíz del proyecto vive en `lib/project_root.py`: es la
+# implementación ÚNICA (el home nunca se resuelve como proyecto). El import va
+# aquí, con los demás módulos de `lib/`, porque la raíz del repo está en
+# `sys.path` en este punto: se añade en la cabecera y se quita más abajo, antes
+# de importar el SDK `mcp`.
+from lib.project_root import resolve_project_root as _resolve_project_root  # noqa: E402
+
 # El SDK se llama `mcp`, igual que el directorio de este repo. Si el cwd es la
 # raíz de APEX, `mcp/` la ensombrece y el import del SDK falla. Se descarta la
 # entrada de sys.path que apunta a la raíz ANTES de importar el SDK.
@@ -108,6 +115,21 @@ sys.modules["apex_handlers"] = _handlers
 _spec.loader.exec_module(_handlers)
 HANDLERS = _handlers.HANDLERS
 LIBRARY_TOOLS = _handlers.LIBRARY_TOOLS
+VFS_TOOLS = _handlers.VFS_TOOLS
+
+# Tools que NO exigen que el caller esté dentro de un proyecto APEX: se
+# despachan con `db=None` (el mismo patrón que la biblioteca).
+#
+# - Biblioteca: vive en `~/.apex/library.db`, es cross-project.
+# - VirtualFS: es cross-project por definición (navegar el ecosistema).
+# - Curador: es un servicio local opt-in (`APEX_CURATOR_MODEL`), no estado de
+#   proyecto; su telemetría cae al `context.db` del cwd si lo hay.
+# - Compactador: resuelve su propio `context.db` y avisa si no hay ninguno.
+NO_PROJECT_DB_TOOLS = LIBRARY_TOOLS | VFS_TOOLS | frozenset({
+    "apex_curator_status",
+    "apex_curator_test",
+    "apex_db_compact",
+})
 
 # --- Debug monitor (envía eventos si está corriendo) ---
 
@@ -307,26 +329,19 @@ def _sync_to_obsidian(event_type: str, data: dict) -> None:
 # --- Detectar directorio del proyecto ---
 
 def _find_project_root() -> Path:
-    """Busca el directorio del proyecto subiendo desde CWD hasta encontrar .apex/ o .git/.
+    """Raíz del proyecto APEX: delega en `lib/project_root.py`.
 
-    NUNCA sube hasta el home: `~/.apex/` es config global y memoria de errores
-    graves, no un proyecto. Resolverlo hacía que una carpeta sin `.apex/`
-    propio heredara el contexto de otro (galia -> osyris-ideas, 2026-07-17) o
-    escribiera en la BD global (Motor Fisico 2D Propio, 2026-09-22). Si no hay
-    proyecto devuelve el CWD; `_get_db()` es quien avisa.
+    La implementación es ÚNICA y vive en `lib/project_root.py`
+    (`resolve_project_root()`): sube desde el CWD hasta encontrar `.apex/` o
+    `.git/`, NUNCA sube hasta el home (`~/.apex/` es config global y memoria
+    de errores graves, no un proyecto) y, si no hay proyecto, devuelve el CWD
+    para que sea `_get_db()` quien avise.
+
+    Antes de 2026-10-19 esta función tenía su propia copia de la lógica, con
+    reglas que no coincidían con las de los hooks y acababan escribiendo en la
+    BD global.
     """
-    home = Path.home()
-    cwd = Path.cwd()
-    for parent in [cwd, *cwd.parents]:
-        if parent == home:
-            break
-        if (parent / ".apex").exists():
-            return parent
-        if (parent / ".git").exists():
-            return parent
-        if parent == parent.parent:
-            break
-    return cwd
+    return _resolve_project_root()
 
 
 _INITIALIZED_DB_PATHS: set[str] = set()
@@ -1891,7 +1906,185 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["phase"],
             },
-        ),    ]
+        ),
+        # ── Sprint 17: VirtualFS cross-project ────────────────────────────
+        # El VFS es cross-project: estas tools se despachan con `db=None` y
+        # funcionan aunque el cwd NO sea un proyecto APEX.
+        Tool(
+            name="apex_vfs_exec",
+            description=(
+                "Ejecuta una línea tipo bash limitada sobre el VirtualFS "
+                "cross-project (read-only). Solo se admiten `ls`, `cat`, `grep` y "
+                "`find`, y como sufijos de pipe `| grep`, `| head [-n N]` y `| wc -l`. "
+                "No hay shell: cualquier otro comando, `;`, `&&`, backticks o "
+                "`$(...)` se rechazan (exit_code 2). El VirtualFS es read-only: las "
+                "escrituras devuelven EROFS. Devuelve JSON con stdout, stderr y "
+                "exit_code."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": (
+                            "Una línea de comando, p.ej. 'ls /projects/apex/wiki' o "
+                            "'grep -rn tdd /projects/apex/wiki | head -n 20'"
+                        ),
+                    },
+                },
+                "required": ["command"],
+            },
+        ),
+        Tool(
+            name="apex_vfs_ls",
+            description=(
+                "Lista el contenido de un directorio del VirtualFS cross-project "
+                "(read-only). Devuelve JSON con path y entries (name, kind, "
+                "size_bytes). Montajes: /projects/<slug>/<wiki|decisions|handoffs|raw|"
+                "errors|skills-history>, /lessons/{critical,by-project}, /vault. Las "
+                "raíces permitidas salen de hub.db.global_meta.vfs_allowed_roots "
+                "(default ~/RoadToDevOps + ApexVault)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path virtual absoluto (empieza por '/'). Si se omite, "
+                            "lista '/'."
+                        ),
+                        "default": "/",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="apex_vfs_cat",
+            description=(
+                "Lee un fichero del VirtualFS cross-project (read-only) y devuelve su "
+                "contenido. Sirve también los ficheros virtualizados desde SQL "
+                "(categorías errors, skills-history, lessons-*). El VFS no permite "
+                "escrituras: cualquier intento devuelve EROFS."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path virtual absoluto del fichero (p.ej. "
+                            "/projects/apex/wiki/SCHEMA.md)"
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="apex_vfs_grep",
+            description=(
+                "Busca un patrón en el VirtualFS cross-project con flags POSIX (-i, "
+                "-r, -n, -l, -E). Usa el índice FTS5 de cada context.db como pre-filtro "
+                "antes del escaneo en memoria; si el patrón no es traducible a FTS5 "
+                "devuelve un AVISO y ejecuta el escaneo completo. Salida: una línea "
+                "por coincidencia (path[:número:línea])."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Patrón (regex Python) a buscar",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path virtual absoluto donde buscar. '/projects' busca en "
+                            "todos los proyectos."
+                        ),
+                        "default": "/projects",
+                    },
+                    "flags": {
+                        "type": "string",
+                        "description": (
+                            "Flags POSIX de grep: -i, -r, -n, -l, -E (agrupados o "
+                            "separados)."
+                        ),
+                        "default": "",
+                    },
+                },
+                "required": ["pattern"],
+            },
+        ),
+        # ── Sprint 18: curador local (opt-in) ────────────────────────────
+        Tool(
+            name="apex_curator_status",
+            description=(
+                "Sprint 18 — Estado del curador local (opt-in). enabled=false si "
+                "APEX_CURATOR_MODEL no está definida (comportamiento por defecto: "
+                "heurísticas). last_24h trae calls, avg_latency (ms) y fallback_rate "
+                "(proporción de llamadas que cayeron a la heurística)."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="apex_curator_test",
+            description=(
+                "Sprint 18 — Prueba de conectividad del curador local. Llama al "
+                "modelo con kind='summarize' (default), 'embed' o 'rerank' y devuelve "
+                "la respuesta o el motivo del fallo. Para troubleshoot: si el curador "
+                "está apagado lo dice; si el modelo no responde lo dice y APEX sigue "
+                "con la heurística."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Texto de prueba a resumir o embeber.",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["summarize", "embed", "rerank"],
+                        "default": "summarize",
+                        "description": "Qué operación probar contra el modelo.",
+                    },
+                    "docs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Documentos a reordenar (solo kind='rerank'). Si falta, se "
+                            "usa 'text'."
+                        ),
+                    },
+                },
+                "required": ["text"],
+            },
+        ),
+        # ── Mantenimiento de la base de contexto ─────────────────────────
+        Tool(
+            name="apex_db_compact",
+            description=(
+                "Compacta la context.db del proyecto: borra filas de log más antiguas "
+                "que retention_days (30 por defecto) y ejecuta VACUUM. Devuelve filas "
+                "eliminadas, tamaño antes/después y las tablas limpiadas u omitidas."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "retention_days": {
+                        "type": "integer",
+                        "description": (
+                            "Días de retención de los logs. Por defecto 30."
+                        ),
+                        "default": 30,
+                        "minimum": 0,
+                    },
+                },
+            },
+        ),
+    ]
 
 
 @server.call_tool()
@@ -1913,9 +2106,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     # La biblioteca de libros vive en ~/.apex/library.db y es cross-project:
     # se consulta desde cualquier sitio, incluso sin proyecto APEX. Por eso se
     # despacha ANTES de _get_db(), que lanzaría NotAnApexProjectError.
+    # Lo mismo vale para el VirtualFS (cross-project por definición), el
+    # curador (servicio local opt-in) y el compactador (resuelve su propia
+    # context.db): son las tools de `NO_PROJECT_DB_TOOLS`.
     # apex_init_project crea el `.apex/`: no puede exigirlo de antemano.
     try:
-        if name in LIBRARY_TOOLS:
+        if name in NO_PROJECT_DB_TOOLS:
             db = None
         elif name == "apex_init_project":
             db = ApexContextDB(str(_find_project_root() / ".apex" / "context.db"))

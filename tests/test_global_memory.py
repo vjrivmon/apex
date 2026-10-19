@@ -117,6 +117,12 @@ def test_init_project_en_carpeta_suelta_no_toca_el_global(apex_server_mod, tmp_p
     motor.mkdir(parents=True)
     monkeypatch.chdir(motor)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    # La resolución de la raíz del proyecto es la de `lib/project_root.py`
+    # (implementación ÚNICA) y esa lee el home del ENTORNO, no de
+    # `Path.home()`. Sin esto, el `tmp_path` de arriba no sería el home y su
+    # `.apex/` se tomaría por el marcador de un proyecto: el testaría otro
+    # escenario (y con otro resultado) del que quiere comprobar.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     asyncio.run(apex_server_mod.call_tool("apex_init_project", {"name": "Motor"}))
 
