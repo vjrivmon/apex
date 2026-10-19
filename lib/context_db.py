@@ -561,6 +561,10 @@ class ApexContextDB:
             await db.execute(
                 "UPDATE decisions SET invalid_from=datetime('now'), superseded_by=? WHERE id=?",
                 (superseded_by, decision_id))
+            # Sacarla del índice FTS: si se queda, `search()` la sigue
+            # ofreciendo al agente como si fuera vigente, que es justo lo
+            # que `invalid_from` debe impedir.
+            await self._delete_fts(db, "decision", decision_id)
             # Registrar en log (no en errors, para evitar nested connection)
             if reason:
                 await db.execute(
@@ -1249,13 +1253,77 @@ class ApexContextDB:
 
     async def _index_fts(self, db: aiosqlite.Connection, content: str,
                          source: str, source_id) -> None:
+        """Indexa en FTS5. IDEMPOTENTE: borra la fila previa del mismo
+        (source, source_id) antes de insertar.
+
+        Antes insertaba a ciegas: re-indexar una decisión (o reescribir una
+        página de wiki) acumulaba filas duplicadas en el índice, y la
+        búsqueda devolvía el mismo contenido N veces. Además, invalidar una
+        decisión la dejaba en el índice: seguía apareciendo en `search()`
+        como si siguiera vigente, que es justo lo que el modelo temporal
+        (invalid_from) debe evitar.
+        """
+        sid = str(source_id) if source_id else ""
         try:
             await db.execute(
+                "DELETE FROM context_fts WHERE source=? AND source_id=?",
+                (source, sid))
+            await db.execute(
                 "INSERT INTO context_fts (content, source, source_id) VALUES (?, ?, ?)",
-                (content, source, str(source_id) if source_id else ""))
+                (content, source, sid))
             await db.commit()
         except Exception:
             pass
+
+    async def _delete_fts(self, db: aiosqlite.Connection, source: str,
+                          source_id) -> None:
+        """Saca una fila del índice FTS5 (ej: una decisión invalidada)."""
+        sid = str(source_id) if source_id else ""
+        try:
+            await db.execute(
+                "DELETE FROM context_fts WHERE source=? AND source_id=?",
+                (source, sid))
+            await db.commit()
+        except Exception:
+            pass
+
+    async def cleanup_fts(self) -> dict:
+        """Repara índices FTS ya contaminados (pase one-shot sobre BDs viejas).
+
+        Dos clases de basura acumulada antes de hacer `_index_fts`
+        idempotente:
+        1. Filas duplicadas con la misma (source, source_id) → deja sólo la
+           más reciente (mayor rowid).
+        2. Decisiones ya invalidadas (invalid_from IS NOT NULL) que seguían
+           apareciendo en `search()`.
+
+        Devuelve {"dedup": n, "invalidated": m}.
+        """
+        dedup = invalidated = 0
+        async with self._conn() as db:
+            # 1. Dedup: por cada (source, source_id) con >1 fila, borra todas
+            #    menos la de mayor rowid.
+            rows = await db.execute_fetchall(
+                "SELECT source, source_id, COUNT(*) c, MAX(rowid) keep "
+                "FROM context_fts GROUP BY source, source_id HAVING c > 1")
+            for source, source_id, _c, keep in rows:
+                cur = await db.execute(
+                    "DELETE FROM context_fts "
+                    "WHERE source=? AND source_id=? AND rowid<>?",
+                    (source, source_id, keep))
+                dedup += cur.rowcount or 0
+
+            # 2. Decisiones invalidadas que siguen en FTS.
+            invalidas = await db.execute_fetchall(
+                "SELECT id FROM decisions WHERE invalid_from IS NOT NULL")
+            for (did,) in invalidas:
+                cur = await db.execute(
+                    "DELETE FROM context_fts WHERE source='decision' AND source_id=?",
+                    (str(did),))
+                invalidated += cur.rowcount or 0
+
+            await db.commit()
+        return {"dedup": dedup, "invalidated": invalidated}
 
     # ── Grader verdicts (Sprint 8) ──
 
