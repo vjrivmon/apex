@@ -264,7 +264,12 @@ def analyze_grader_block_patterns(db_path: Path) -> list[DoctorProposal]:
         for iss in issues:
             if not isinstance(iss, str):
                 continue
-            issue_to_phases.setdefault(iss, set()).add(int(phase))
+            # La fase 10.5 (gate AgentArmor) es un float: `int(phase)` la
+            # truncaba a 10 y mezclaba dos fases distintas en el mismo
+            # cluster de issues.
+            issue_to_phases.setdefault(iss, set()).add(
+                int(phase) if float(phase).is_integer() else phase
+            )
             issue_to_reasonings.setdefault(iss, []).append(reasoning or "")
 
     proposals: list[DoctorProposal] = []
@@ -431,14 +436,20 @@ def sync_local_verdicts_to_hub(
             local_id, phase, category, issues_json, should_block, reasoning, created_at = row
             status = "blocked" if should_block else "ok"
             suggestion = (f"[{category or 'general'}] {reasoning or ''}").strip()[:500]
+            # La fase 10.5 (gate AgentArmor) no es un entero. `int(phase)`
+            # la truncaba a 10 y en el hub el gate de seguridad se confundía
+            # con la fase de seguridad. Se conserva el valor tal cual: la
+            # columna `phase` del hub tiene afinidad INTEGER pero SQLite
+            # guarda 10.5 como REAL sin perder precisión.
+            phase_val = phase if phase is not None else None
             try:
                 cur = hub.execute(
                     "INSERT OR IGNORE INTO grader_verdicts "
                     "(project_id, original_id, phase, question_index, status, "
                     " issues_json, suggestion, created_at) "
                     "VALUES (?,?,?,?,?,?,?,?)",
-                    (project_id, int(local_id), int(phase) if phase is not None else None,
-                     int(phase) if phase is not None else None, status,
+                    (project_id, int(local_id), phase_val,
+                     phase_val, status,
                      issues_json or "[]", suggestion, created_at or ""),
                 )
                 if cur.rowcount > 0:

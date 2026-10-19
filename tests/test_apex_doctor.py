@@ -558,6 +558,25 @@ def test_sync_maps_should_block_zero_to_ok(db_path: Path, hub_db: Path) -> None:
     assert status == "ok"
 
 
+def test_sync_preserva_la_fase_10_5_del_gate(db_path: Path, hub_db: Path) -> None:
+    """La fase 10.5 (gate AgentArmor) no es un entero.
+
+    `int(phase)` la truncaba a 10 y en el hub el veredicto del gate se
+    confundía con el de la fase de seguridad: dos controles distintos
+    etiquetados igual.
+    """
+    _insert_grader_verdict(db_path, phase=10.5, issues=["falta gitleaks"],
+                           reasoning="gate AgentArmor")
+    n = d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
+    assert n == 1
+
+    conn = sqlite3.connect(str(hub_db))
+    phase = conn.execute("SELECT phase FROM grader_verdicts").fetchone()[0]
+    conn.close()
+    assert phase == 10.5
+    assert phase != 10
+
+
 def test_sync_idempotent_on_repeated_runs(db_path: Path, hub_db: Path) -> None:
     _insert_grader_verdict(db_path, phase=5, issues=["x"])
     n1 = d.sync_local_verdicts_to_hub(db_path, hub_db, "apex")
