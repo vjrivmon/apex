@@ -7,6 +7,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / 'lib'))
 from mcp.types import TextContent
 from apex_handlers._common import find_project_root as _find_project_root
+from apex_handlers._common import _HUB_DB
+import cross_project_flag as _cp_flag
 import grader as _grader
 import json
 import platform
@@ -32,6 +34,17 @@ async def handle_apex_grader_evaluate(db: Any, arguments: dict) -> Any:
             await db.set_meta("detected_os", _os)
         if _os:
             decisions_meta["detected_os"] = _os
+        # Regla absoluta #18: ¿se consultó el hub para esta fase? Si el hub
+        # no está disponible, el check no aplica (no se puede exigir lo que
+        # no se puede hacer).
+        _hub = _HUB_DB
+        try:
+            decisions_meta["hub_available"] = _hub.exists()
+            decisions_meta["cross_project_consulted"] = (
+                await _cp_flag.was_consulted(db, phase_n)
+            )
+        except Exception:
+            pass
     except Exception:
         decisions_meta = {}
 

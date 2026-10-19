@@ -12,6 +12,7 @@ from typing import Any
 from mcp.types import TextContent
 
 from apex_handlers._common import _HUB_DB, find_project_root, search_cross_project
+import cross_project_flag as _cp_flag
 
 # Queries dirigidas por fase — no genéricas: una búsqueda vaga devuelve ruido
 # y el gate deja de servir para nada.
@@ -84,6 +85,12 @@ async def handle_apex_phase_entry_check(db: Any, arguments: dict) -> Any:
             if key not in seen_decisions:
                 seen_decisions.add(key)
                 all_decisions.append(d)
+
+    # Regla absoluta #18: el entry-check hace el retrieval por el agente, así
+    # que cuenta como la consulta cross-project que el grader exige en las
+    # fases de decisión.
+    if _HUB_DB.exists():
+        await _cp_flag.mark_consulted(db, phase)
 
     # 3. Bloque visual auditable: si está vacío, lo dice — nunca finge hits.
     lines.append("### Lecciones cross-project aplicadas")

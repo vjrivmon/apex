@@ -178,8 +178,11 @@ def test_evaluate_blocks_no_git_phase_5(empty_repo: Path) -> None:
 
 
 def test_evaluate_passes_clean_phase_5(project_phase_5_clean: Path) -> None:
+    # Fase 5 es de decisión: la regla absoluta #18 exige haber consultado
+    # el hub cross-project. Sin ese flag, el grader bloquea.
     e = gather_evidence(project_phase_5_clean, phase=5,
-                        decisions_metadata={"detected_os": "Linux"})
+                        decisions_metadata={"detected_os": "Linux",
+                                            "cross_project_consulted": True})
     v = evaluate_deterministic(e)
     assert v.should_block is False
     assert v.quality >= QUALITY_GOOD
@@ -316,7 +319,8 @@ def test_worktree_no_produce_issue_de_git(tmp_path: Path) -> None:
     _git("worktree", "add", "-q", str(wt), cwd=repo)
 
     e = gather_evidence(wt, phase=5, component_types=[],
-                        decisions_metadata={"detected_os": "Linux"})
+                        decisions_metadata={"detected_os": "Linux",
+                                            "cross_project_consulted": True})
     v = evaluate_deterministic(e)
     assert e.git_initialized is True
     assert ISSUE_NO_GIT not in v.issues

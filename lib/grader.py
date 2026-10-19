@@ -51,7 +51,17 @@ BLOCKING_ISSUES = {
     ISSUE_MOCK_DATA,
     ISSUE_NO_E2E,
     ISSUE_EMOJI,
+    ISSUE_NO_CROSS_PROJECT,
 }
+
+# Fases donde consultar el hub (cross-project) es OBLIGATORIO: son las de
+# DECISIÓN de stack/diseño/arquitectura. Regla absoluta #18:
+# "Cross-project retrieval obligatorio antes de decisiones de diseño/stack".
+#
+# Sin esto la regla era una recomendación sin maquinaria: nada impedía
+# cerrar la fase 3 (spec) sin haber consultado una sola vez el resto del
+# ecosistema, que es justo lo que la regla quiere evitar.
+CROSS_PROJECT_PHASES = frozenset({0, 2, 3, 5})
 
 EMOJI_RE = re.compile(
     "[\U0001F300-\U0001FAFF]"      # pictogramas y símbolos
@@ -269,6 +279,15 @@ def run_deterministic_checks(evidence: Evidence) -> dict[str, bool]:
     if phase >= 8 and "web" in evidence.component_types:
         checks["e2e_for_web_ui"] = evidence.has_playwright_tests
 
+    # Cross-project obligatorio en las fases de DECISIÓN (regla absoluta #18).
+    # El flag lo escribe el handler MCP cuando el agente consulta el hub
+    # (`apex_search_cross_project` o `apex_phase_entry_check`). Si el hub no
+    # está disponible no se puede exigir: el check no aplica.
+    if phase in CROSS_PROJECT_PHASES and evidence.decisions_metadata.get(
+            "hub_available", True):
+        checks["cross_project_consulted"] = bool(
+            evidence.decisions_metadata.get("cross_project_consulted"))
+
     return checks
 
 
@@ -279,6 +298,7 @@ _CHECK_TO_ISSUE = {
     "no_emojis_in_frontend": ISSUE_EMOJI,
     "schema_contracts": ISSUE_NO_SCHEMA,
     "e2e_for_web_ui": ISSUE_NO_E2E,
+    "cross_project_consulted": ISSUE_NO_CROSS_PROJECT,
 }
 
 

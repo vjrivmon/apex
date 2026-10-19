@@ -13,6 +13,7 @@ from apex_handlers._common import find_project_root as _find_project_root
 from lint import _render_report as _render_lint_report
 from lint import run_lint as _run_lint
 from apex_handlers._common import search_cross_project as _search_cross_project
+import cross_project_flag as _cp_flag
 from synthesis import synthesize as _synthesize
 from lint import write_report as _write_lint_report
 from wiki_scaffold import append_log
@@ -112,6 +113,9 @@ async def handle_apex_search_cross_project(db: Any, arguments: dict) -> Any:
         root = _find_project_root()
         current_project = root.name.lower().replace(" ", "-")
     hits = _search_cross_project(query, limit=limit, exclude_project=current_project)
+    # Regla absoluta #18: consultar el hub cuenta como la consulta
+    # cross-project que el grader exige en las fases de decisión.
+    await _cp_flag.mark_consulted(db, arguments.get("phase"))
     if not hits["hub_available"]:
         return [TextContent(type="text", text=(
             f"hub.db no disponible en {_HUB_DB}. Lanza apex-hub (python -m backend en "

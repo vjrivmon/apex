@@ -177,6 +177,10 @@ def test_ciclo_bloquear_reevaluar_desbloquear(handlers, db, tmp_path):
     # 2. Se resuelve la causa: el proyecto pasa a tener git.
     (tmp_path / ".git").mkdir()
 
+    # 2b. Y se consultó el hub (regla absoluta #18: la fase 5 es de
+    # decisión, el grader exige el retrieval cross-project).
+    run(db.set_meta("cross_project_consulted_phase_5", "true"))
+
     # 3. Reevaluar debe producir un verdict NUEVO que levante el bloqueo.
     run(handle_apex_grader_evaluate(
         db, {"phase": 5, "mode": "deterministic", "persist": True}))
