@@ -34,7 +34,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 1116 |
+| Tests (funciones de test) | 1124 |
 | Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
 | Tools MCP | 64 |
 | Skills (`skills/`) | 25 |
@@ -70,7 +70,7 @@ necesariamente muerto: verificar antes de borrar o cablear.
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `b738ea4 feat(regla-18): el retrieval cross-project pasa a ser obligatorio de verdad` · refrescado el 2026-10-19.
+Rama `main` (árbol sucio) · HEAD `2af3b71 fix(fts): el indice refleja el estado real de los datos` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
