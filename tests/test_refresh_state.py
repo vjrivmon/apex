@@ -83,9 +83,18 @@ def test_modulos_huerfanos_no_incluye_los_cableados():
     assert "embeddings" not in huerfanos    # lo importa book_corpus
 
 
-def test_vfs_grep_sale_como_huerfano():
-    """Deuda real conocida: escrito, con tests, y sin cablear."""
-    assert "vfs_grep" in rs.orphan_modules()
+def test_vfs_grep_ya_no_es_huerfano():
+    """El VirtualFS está cableado al servidor MCP (S17.8, 2026-10-19).
+
+    Antes este test afirmaba lo contrario: `vfs_grep` estaba escrito, con
+    tests, y sin ninguna tool que lo importara — código muerto. La
+    Sprint 17.8 lo conectó (`mcp/handlers/vfs.py`), así que ya no puede
+    salir como huérfano. El mismo aplica a `vfs` y `vfs_sql_render`.
+    """
+    huerfanos = rs.orphan_modules()
+    assert "vfs_grep" not in huerfanos
+    assert "vfs" not in huerfanos
+    assert "vfs_sql_render" not in huerfanos
 
 
 # ── Bloque generado ──
