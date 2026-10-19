@@ -30,13 +30,13 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests | 848 pasando |
+| Tests | 900 pasando |
 | Tools MCP | 57 |
 | Skills (`skills/`) | 25 |
 | Hooks | 13 en disco, 8 registrados en el proyecto |
-| Tablas en `context.db` | 27 |
-| Rama | `main` (árbol sucio) |
-| HEAD | `c750cb4 fix(phase-gate): el gate ve el estado de la fase anterior` |
+| Tablas en `context.db` | 28 |
+| Rama | `feat/a8` (árbol sucio) |
+| HEAD | `e64d4c4 feat(s18): curador local opt-in con fallback estricto a la heuristica` |
 
 ### Artefactos por sprint
 
@@ -51,7 +51,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S15 advisor + traces | presente | lib/advisor.py, lib/reasoning_traces.py |
 | S16 advisor feedback | presente | lib/advisor_outcomes.py, lib/advisor_health.py |
 | S17 VirtualFS | presente | lib/vfs.py, lib/vfs_grep.py |
-| S18 Granite curator | ausente | ningún artefacto |
+| S18 Granite curator | presente | lib/curator.py |
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
 

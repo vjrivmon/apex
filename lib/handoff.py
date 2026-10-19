@@ -19,10 +19,16 @@ Componentes:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:  # el curador es opcional: sin httpx, APEX sigue funcionando igual
+    import curator as _curator
+except ImportError:  # pragma: no cover - solo si httpx no está instalado
+    _curator = None  # type: ignore
 
 # Aproximación grosera: 1 token ≈ 4 chars en inglés/español. Suficiente para
 # detectar el umbral del 40% sin depender de tiktoken.
@@ -181,11 +187,71 @@ def render_handoff(state: dict, active_goals: list[dict],
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _session_digest(state: dict, active_goals: list[dict]) -> str:
+    """Texto plano con el estado de la sesión, para resumir."""
+    lines: list[str] = []
+
+    cp = state.get("current_phase")
+    if cp:
+        lines.append(f"Fase actual: {cp.get('number')} · {cp.get('name')} · "
+                     f"{cp.get('status')}")
+        if cp.get("notes"):
+            lines.append(f"Notas de la fase: {cp['notes']}")
+
+    for v in state.get("blocking_verdicts", []):
+        lines.append(f"Verdict BLOQUEANTE fase {v.get('phase')} "
+                     f"(calidad {v.get('quality')}/4): {v.get('reasoning')}")
+    for v in state.get("recent_verdicts", []):
+        lines.append(f"Verdict reciente fase {v.get('phase')} "
+                     f"(calidad {v.get('quality')}/4): {v.get('reasoning')}")
+    for g in active_goals:
+        lines.append(f"Goal activo {g.get('id')} "
+                     f"({g.get('turns_used')}/{g.get('turn_budget')}): "
+                     f"{g.get('goal')}")
+
+    return "\n".join(lines)
+
+
+def _resumen_narrativo(state: dict, active_goals: list[dict],
+                        db_path=None) -> str | None:
+    """Resumen narrativo de la sesión con el curador local (opcional).
+
+    Devuelve None si el curador está apagado o falla: el handoff se queda
+    con la plantilla fija de siempre. El curador solo AÑADE contexto; no
+    toca las secciones de fase, verdicts ni goals.
+    """
+    if _curator is None:
+        return None
+    digest = _session_digest(state, active_goals)
+    if not digest.strip():
+        return None
+    curador = _curator.get_curator(db_path=db_path)
+    if not curador.enabled:
+        return None
+    return curador.summarize(digest, max_tokens=400)
+
+
+def _insertar_resumen(md: str, resumen: str) -> str:
+    """Mete el bloque del curador delante de '## Fase actual'."""
+    bloque = f"## Resumen de la sesión (curador)\n\n{resumen.strip()}\n\n"
+    marcador = "## Fase actual"
+    if marcador in md:
+        return md.replace(marcador, bloque + marcador, 1)
+    return md + "\n" + bloque
+
+
 async def serialize_handoff(project_root: Path | str, session_id: str,
                              db, transcript_tokens: int = 0) -> Path:
     state = await collect_state_from_db(db)
     active_goals = collect_active_goals(Path(project_root))
     md = render_handoff(state, active_goals, session_id, transcript_tokens)
+
+    # Sprint 18 (opt-in): resumen narrativo de la sesión. Sin curador, el
+    # markdown es EXACTAMENTE el de la plantilla fija de siempre.
+    narrativo = await asyncio.to_thread(
+        _resumen_narrativo, state, active_goals, getattr(db, "db_path", None))
+    if narrativo:
+        md = _insertar_resumen(md, narrativo)
 
     path = _handoff_path(Path(project_root), session_id)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -31,6 +31,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from context_db import ApexContextDB
 
+try:  # el curador es opcional: sin httpx, APEX sigue funcionando igual
+    import curator as _curator
+except ImportError:  # pragma: no cover - solo si httpx no está instalado
+    _curator = None  # type: ignore
+
 
 DEFAULT_THRESHOLDS = {
     "new_decisions_7d": 5,
@@ -129,6 +134,33 @@ def check_density(db_path: Path, thresholds: dict | None = None) -> DensitySnaps
 async def _run_dream_deep(db_path: Path, min_score: float) -> list[dict]:
     db = ApexContextDB(str(db_path))
     return await db.dream_deep(min_score=min_score)
+
+
+# ── Re-rank con el curador (Sprint 18, opt-in) ────────────────────────────
+
+def rerank_with_curator(query: str, results: list[dict],
+                        db_path: Path | str | None = None) -> list[dict]:
+    """Reordena los resultados de búsqueda usando el curador local.
+
+    Sin curador —o si la llamada al modelo falla— devuelve la lista tal cual:
+    el orden BM25 manda. El curador REORDENA, nunca descarta: el conjunto de
+    resultados es el mismo, solo cambia el orden.
+    """
+    if not results:
+        return results
+    if _curator is None:
+        return results
+    curador = _curator.get_curator(db_path=db_path)
+    if not curador.enabled:
+        return results
+    docs = [str(r.get("content", "")) for r in results]
+    orden = curador.rerank(query, docs)
+    if not orden or len(orden) != len(results):
+        return results
+    if sorted(orden) != list(range(len(results))):
+        # Orden no válido: antes la heurística que una permutación rota.
+        return results
+    return [results[i] for i in orden]
 
 
 def _render_synthesis(snapshot: DensitySnapshot, promoted: list[dict]) -> str:

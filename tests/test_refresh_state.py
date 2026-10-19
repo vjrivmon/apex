@@ -71,8 +71,12 @@ def test_detecta_biblioteca_como_presente():
 
 
 def test_detecta_sprint_ausente():
+    """S18 arrancó el 2026-10-19 (lib/curator.py): ahora el sprint ausente
+    es S19 (Advent), que sigue sin artefactos. El test sigue detectando
+    un sprint ausente; solo cambia cuál."""
     filas = dict((n, e) for n, e, _ in rs.sprint_rows())
-    assert filas["S18 Granite curator"] == "ausente"
+    assert filas["S18 Granite curator"] == "presente"
+    assert filas["S19 Advent integration"] == "ausente"
 
 
 def test_modulos_huerfanos_no_incluye_los_cableados():

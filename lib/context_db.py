@@ -24,6 +24,7 @@ Uso:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -414,6 +415,22 @@ CREATE INDEX IF NOT EXISTS idx_vfs_query_log_ts
     ON vfs_query_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vfs_query_log_project
     ON vfs_query_log(project_slug);
+
+-- Sprint 18 — telemetría del curador local: una fila por llamada al modelo
+-- (también cuando cae y se usa la heurística). kind = summarize | embed | rerank.
+CREATE TABLE IF NOT EXISTS curator_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT (datetime('now')),
+    kind TEXT NOT NULL,
+    model TEXT DEFAULT '',
+    latency_ms INTEGER DEFAULT 0,
+    fallback_used INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_curator_calls_ts
+    ON curator_calls(ts DESC);
 """
 
 PHASES = [
@@ -422,6 +439,25 @@ PHASES = [
     (8, "integración"), (9, "testing"), (10, "seguridad"), (11, "deploy"),
     (12, "iteración"), (13, "escalado"), (14, "mantenimiento"),
 ]
+
+
+async def _rerank_con_curador(query: str, results: list[dict],
+                               db_path: Path | None = None) -> list[dict]:
+    """Re-rank opcional de los resultados de búsqueda (Sprint 18, opt-in).
+
+    Import perezoso a propósito: `lib/synthesis.py` importa `context_db`, así
+    que un import de módulo aquí sería circular. Si el import falla (entorno
+    sin `lib` en el path, o sin httpx) el orden BM25 se queda como está.
+    """
+    if not results:
+        return results
+    try:
+        from synthesis import rerank_with_curator
+    except Exception:
+        return results
+    # En hilo: la llamada al modelo puede tardar hasta 3 s y no debe
+    # bloquear el event loop del servidor MCP.
+    return await asyncio.to_thread(rerank_with_curator, query, results, db_path)
 
 
 class ApexContextDB:
@@ -817,7 +853,10 @@ class ApexContextDB:
             results.append(m)
 
         results.sort(key=lambda r: r["hybrid_score"], reverse=True)
-        return results[:limit]
+        results = results[:limit]
+        # Sprint 18 (opt-in): re-rank semántico con el curador local.
+        # Sin curador, o si la llamada falla, el orden BM25 se queda intacto.
+        return await _rerank_con_curador(query, results, self.db_path)
 
     # ── Progressive Disclosure (3 niveles) ──
 

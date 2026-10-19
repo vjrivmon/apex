@@ -84,7 +84,11 @@ def test_summarize_short_returns_unchanged() -> None:
     assert summarize_for_context(out) == out
 
 
-def test_summarize_long_keeps_head_and_tail() -> None:
+def test_summarize_long_keeps_head_and_tail(monkeypatch) -> None:
+    # Estos tests fijan el CAMINO POR DEFECTO (el corte por líneas). Con el
+    # curador local activo (S18) el resumen es semántico, no un recorte: para
+    # comprobar la heurística hay que apagarlo explícitamente.
+    monkeypatch.delenv("APEX_CURATOR_MODEL", raising=False)
     lines = [f"line {i}" for i in range(200)]
     out = "\n".join(lines)
     summary = summarize_for_context(out, head_lines=5, tail_lines=3)
@@ -97,7 +101,8 @@ def test_summarize_long_keeps_head_and_tail() -> None:
     assert "line 100" not in summary
 
 
-def test_summarize_respects_max_chars() -> None:
+def test_summarize_respects_max_chars(monkeypatch) -> None:
+    monkeypatch.delenv("APEX_CURATOR_MODEL", raising=False)
     out = "a" * 10_000
     summary = summarize_for_context(out, max_chars=200)
     assert len(summary) <= 250  # algo de margen por el sufijo
