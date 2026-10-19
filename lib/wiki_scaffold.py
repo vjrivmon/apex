@@ -23,8 +23,181 @@ La separación es deliberada:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from datetime import datetime, timezone
+
+
+# --- Contención de rutas (capa L1) ---
+#
+# Un slug de wiki NO es una ruta: es el identificador de una página. Antes de
+# tocar disco se valida contra una regex cerrada y se comprueba que la ruta
+# RESUELTA (symlinks incluidos) sigue dentro de `.apex/wiki/`. Sin esto, un
+# slug con `..` escribía fuera del proyecto (F1-03).
+
+# Secciones canónicas del wiki, según SCHEMA.md.
+WIKI_SECTIONS = ("entities", "concepts", "comparisons", "queries", "raw", "synthesis")
+
+MAX_SLUG_LEN = 128
+MAX_SLUG_SEGMENT_LEN = 64
+
+# Caracteres de control (incluye el NUL) y barra invertida: nunca validos.
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_SEGMENT_RE = re.compile(r"^[\w.-]+$", re.UNICODE)
+
+
+class WikiPathError(ValueError):
+    """Slug o ruta de wiki que se sale del proyecto.
+
+    El mensaje dice siempre QUÉ se esperaba, para que el caller pueda
+    corregir la llamada sin leer el código.
+    """
+
+
+def _normalize_segment(segment: str) -> str:
+    """Normaliza un segmento de slug: lo no permitido pasa a '-'.
+
+    Se conservan letras, dígitos, '_', '-' y '.'. Los espacios y el resto de
+    signos pasan a '-', y las repeticiones se colapsan.
+    """
+    limpio = "".join(ch if (ch.isalnum() or ch in "_-.") else "-" for ch in segment)
+    limpio = re.sub(r"-{2,}", "-", limpio)
+    return limpio.strip("-")
+
+
+def _allowed_sections(wiki_dir: str | Path | None) -> list[str]:
+    """Secciones por las que se puede colgar una página.
+
+    Las canónicas de SCHEMA.md, más los directorios que ya existen en el wiki
+    (algunos proyectos usan `brand/` o `design/`, y el hook de design-inspiration
+    pide `brand/<slug>`).
+    """
+    secciones = list(WIKI_SECTIONS)
+    if wiki_dir is not None:
+        wiki = Path(wiki_dir)
+        if wiki.is_dir():
+            for hijo in sorted(wiki.iterdir()):
+                if hijo.is_dir() and hijo.name not in secciones:
+                    secciones.append(hijo.name)
+    return secciones
+
+
+def sanitize_slug(slug: str, wiki_dir: str | Path | None = None) -> str:
+    """Valida y normaliza el slug de una página wiki.
+
+    Formato aceptado: `nombre` o `seccion/nombre` (como `concepts/design-system`,
+    que es el que usan el schema de la tool y los proyectos reales). Cada
+    segmento es un identificador con `[\\w.-]+`.
+
+    Lanza `WikiPathError` (con el motivo y lo que se esperaba) si el slug
+    lleva `..`, separadores de ruta fuera de formato, caracteres de control,
+    una ruta absoluta o segmentos vacíos.
+    """
+    if not isinstance(slug, str):
+        raise WikiPathError(
+            f"El slug de wiki debe ser un texto, no {type(slug).__name__}: se esperaba "
+            "un identificador tipo 'arquitectura' o 'concepts/design-system'."
+        )
+    bruto = slug.strip()
+    if not bruto:
+        raise WikiPathError(
+            "El slug de wiki está vacío: se esperaba un identificador tipo "
+            "'arquitectura' o 'concepts/design-system'."
+        )
+    if len(bruto) > MAX_SLUG_LEN:
+        raise WikiPathError(
+            f"El slug de wiki mide {len(bruto)} caracteres (máximo {MAX_SLUG_LEN}): "
+            "se esperaba un identificador corto, no una ruta."
+        )
+    if _CONTROL_RE.search(bruto):
+        raise WikiPathError(
+            "El slug de wiki contiene caracteres de control: se esperaba un "
+            "identificador con letras, dígitos, '-', '_' o '.'."
+        )
+    if "\\" in bruto:
+        raise WikiPathError(
+            "El slug de wiki contiene '\\': se esperaba un identificador con "
+            "separador '/' (seccion/nombre) y nada más."
+        )
+    if ".." in bruto:
+        raise WikiPathError(
+            f"El slug de wiki contiene '..' ({bruto!r}): se esperaba un identificador "
+            "sin recorrido de directorios, tipo 'arquitectura' o 'concepts/design-system'."
+        )
+    partes = bruto.split("/")
+    if len(partes) > 2:
+        raise WikiPathError(
+            f"El slug de wiki tiene {len(partes) - 1} separadores '/': se esperaba como "
+            "mucho uno (seccion/nombre)."
+        )
+    if any(not parte for parte in partes):
+        raise WikiPathError(
+            f"El slug de wiki tiene un segmento vacío ({bruto!r}): se esperaba "
+            "'nombre' o 'seccion/nombre', sin '/' inicial ni final."
+        )
+    normalizados: list[str] = []
+    for parte in partes:
+        segmento = _normalize_segment(parte)
+        if (
+            not segmento
+            or not _SEGMENT_RE.match(segmento)
+            or len(segmento) > MAX_SLUG_SEGMENT_LEN
+            or not any(ch.isalnum() or ch == "_" for ch in segmento)
+        ):
+            raise WikiPathError(
+                f"El segmento {parte!r} del slug no es un identificador válido: se "
+                "esperaba un nombre con letras, dígitos, '-', '_' o '.'."
+            )
+        normalizados.append(segmento)
+    if len(normalizados) == 2:
+        seccion = normalizados[0]
+        permitidas = _allowed_sections(wiki_dir)
+        if seccion not in permitidas:
+            raise WikiPathError(
+                f"La sección {seccion!r} no existe en el wiki: se esperaba una de "
+                f"{', '.join(permitidas)}."
+            )
+    return "/".join(normalizados)
+
+
+def _resolve_wiki_dir(wiki_dir: str | Path) -> Path:
+    """Valida que `wiki_dir` sea el wiki de un proyecto (`.apex/wiki`) y lo resuelve.
+
+    Es lo que impide que `append_log`/`update_index` escriban el log o el
+    índice de un proyecto en un directorio cualquiera.
+    """
+    ruta = Path(wiki_dir).expanduser()
+    try:
+        resuelta = ruta.resolve()
+    except OSError as exc:
+        raise WikiPathError(
+            f"No se pudo resolver el directorio del wiki {ruta}: {exc}. Se esperaba "
+            "un directorio '<proyecto>/.apex/wiki'."
+        )
+    if resuelta.name != "wiki" or resuelta.parent.name != ".apex":
+        raise WikiPathError(
+            f"{resuelta} no es el wiki de un proyecto: se esperaba un directorio "
+            "'<proyecto>/.apex/wiki'."
+        )
+    return resuelta
+
+
+def wiki_page_path(wiki_dir: str | Path, slug: str) -> Path:
+    """Resuelve la ruta de una página wiki, garantizando que no sale del wiki.
+
+    Es el ÚNICO punto donde el slug se convierte en nombre de fichero: quien
+    llama no concatena nunca. La comprobación final es sobre la ruta resuelta,
+    así que un symlink tampoco puede sacarla de `.apex/wiki/`.
+    """
+    wiki = _resolve_wiki_dir(wiki_dir)
+    seguro = sanitize_slug(slug, wiki_dir=wiki)
+    destino = wiki / f"{seguro}.md"
+    if not destino.resolve().is_relative_to(wiki):
+        raise WikiPathError(
+            f"La página {seguro!r} resolvería a {destino.resolve()}, fuera de {wiki}: "
+            "se esperaba un slug que quede dentro del wiki del proyecto."
+        )
+    return destino
 
 
 # --- Estructura del segundo cerebro (fuera de wiki/) ---
@@ -299,16 +472,25 @@ _Aún no hay síntesis generadas._
 
 
 def append_log(wiki_dir: str | Path, action: str) -> None:
-    """Añade una entrada al log.md."""
-    log_path = Path(wiki_dir) / "log.md"
+    """Añade una entrada al log.md del wiki del proyecto.
+
+    El `wiki_dir` tiene que ser el wiki de un proyecto (`.apex/wiki`): con eso
+    el log nunca se escribe fuera del proyecto.
+    """
+    wiki = _resolve_wiki_dir(wiki_dir)
+    log_path = wiki / "log.md"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(f"- **{now}** — {action}\n")
 
 
 def update_index(wiki_dir: str | Path) -> None:
-    """Reconstruye index.md a partir de los archivos existentes."""
-    wiki = Path(wiki_dir)
+    """Reconstruye index.md a partir de los archivos existentes.
+
+    El `wiki_dir` tiene que ser el wiki de un proyecto (`.apex/wiki`): con eso
+    el índice nunca se escribe fuera del proyecto.
+    """
+    wiki = _resolve_wiki_dir(wiki_dir)
     sections = {
         "Entidades": "entities",
         "Conceptos": "concepts",
