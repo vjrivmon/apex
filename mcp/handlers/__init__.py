@@ -60,6 +60,14 @@ from apex_handlers.books import handle_apex_book_index
 from apex_handlers.books import handle_apex_book_list
 from apex_handlers.books import LIBRARY_TOOLS
 from apex_handlers.phase_gate import handle_apex_phase_entry_check
+from apex_handlers.vfs import handle_apex_vfs_exec
+from apex_handlers.vfs import handle_apex_vfs_ls
+from apex_handlers.vfs import handle_apex_vfs_cat
+from apex_handlers.vfs import handle_apex_vfs_grep
+from apex_handlers.vfs import VFS_TOOLS
+from apex_handlers.curator import handle_apex_curator_status
+from apex_handlers.curator import handle_apex_curator_test
+from apex_handlers.maintenance import handle_apex_db_compact
 
 HANDLERS: dict[str, Any] = {
     "apex_init_project": handle_apex_init_project,
@@ -119,4 +127,11 @@ HANDLERS: dict[str, Any] = {
     "apex_book_index": handle_apex_book_index,
     "apex_book_list": handle_apex_book_list,
     "apex_phase_entry_check": handle_apex_phase_entry_check,
+    "apex_vfs_exec": handle_apex_vfs_exec,
+    "apex_vfs_ls": handle_apex_vfs_ls,
+    "apex_vfs_cat": handle_apex_vfs_cat,
+    "apex_vfs_grep": handle_apex_vfs_grep,
+    "apex_curator_status": handle_apex_curator_status,
+    "apex_curator_test": handle_apex_curator_test,
+    "apex_db_compact": handle_apex_db_compact,
 }

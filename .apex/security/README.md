@@ -58,7 +58,7 @@ el deseo de avanzar.
   fichero tiene que existir con esa línea dentro de su rango.
 - Los números que se pueden derivar de un comando NO se hardcodean. El
   número de tools MCP sale de `len(await list_tools())`
-  (`mcp/apex_server.py:551-1894`): 57 tools MCP al 2026-10-19.
+  (`mcp/apex_server.py:566-2087`): 64 tools MCP al 2026-10-19.
   Recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada
   tool nueva; si cambia, el test lo detecta y la cifra hay que
   actualizarla.

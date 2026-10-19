@@ -8,11 +8,11 @@ asi_coverage:
   - ASI01
   - ASI04
 evidence:
-  - "Threat model: el servidor MCP habla JSON-RPC sobre stdio (mcp/apex_server.py:1962) y su unico caller es el Claude Code del propio usuario. No hay listener de red: lo unico que se lanza es el dashboard local del hub, con binario y cwd fijos (mcp/apex_server.py:191-197) y solo al arrancar el server (mcp/apex_server.py:1957-1960)."
+  - "Threat model: el servidor MCP habla JSON-RPC sobre stdio (mcp/apex_server.py:2158) y su unico caller es el Claude Code del propio usuario. No hay listener de red: lo unico que se lanza es el dashboard local del hub, con binario y cwd fijos (mcp/apex_server.py:191-197) y solo al arrancar el server (mcp/apex_server.py:2153-2156)."
   - "Ingestion sin red: lib/ingest.py recorre ficheros locales con source_dir.glob (lib/ingest.py:407) y filtra por extension (.md, .markdown, .txt, .json) en lib/ingest.py:405. Las URLs solo se EXTRAEN como texto con la regex lib/ingest.py:44; no hay fetch remoto."
   - "SQL parametrizado: las queries de lib/context_db.py que tocan datos variables usan placeholders `?` (lib/context_db.py:439, lib/context_db.py:655, lib/context_db.py:1212, lib/context_db.py:1235, lib/context_db.py:1315). Las f-strings existentes solo concatenan placeholders o nombres de tabla/columna internos, nunca input de usuario (lib/context_db.py:1173, lib/lint.py:139, lib/lint.py:189, lib/lint.py:281, lib/advisor.py:251, lib/db_compact.py:82)."
   - "Wiki scaffold: solo escribe ficheros .md dentro de .apex/ (lib/wiki_scaffold.py:94, lib/wiki_scaffold.py:150, lib/wiki_scaffold.py:205, lib/wiki_scaffold.py:345). PERO apex_wiki_add concatena el slug sin sanitizar: .apex/wiki/<slug>.md (mcp/handlers/wiki.py:33) permite traversal fuera de .apex/wiki. Ver F1-03."
-  - "Superficie de tools: 57 tools MCP al 2026-10-19, valor derivado de `len(await list_tools())` en mcp/apex_server.py:551-1894. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
+  - "Superficie de tools: 64 tools MCP al 2026-10-19, valor derivado de `len(await list_tools())` en mcp/apex_server.py:566-2087. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
   - "MCP audit: NO existe. El directorio .apex/raw/papers/ no existe en el repo, asi que el documento de superficie de ataque por tool que exige el checklist sigue pendiente (F1-02)."
 ---
 
@@ -45,7 +45,7 @@ tools (F1-02).
       internos, no de input de usuario.
 - [ ] **MCP audit** — pendiente. No hay documento formal de superficie de
       ataque por tool. El numero de tools se deriva de
-      `list_tools()` (mcp/apex_server.py:551-1894). Ver F1-02.
+      `list_tools()` (mcp/apex_server.py:566-2087). Ver F1-02.
 - [x] **Rate limiting** — N/A por diseno: el transporte es stdio local, un
       solo caller, sin red. Documentado como intencional.
 - [ ] **File type whitelist** — parcial. La ingesta filtra extensiones
@@ -86,7 +86,7 @@ grep -nE "import (urllib|requests|httpx|aiohttp)" lib/ingest.py     # 0
 # Sin eval/exec
 grep -rnE "(^|[^._a-zA-Z0-9])(eval|exec)\(" lib/ mcp/               # 0
 # Superficie de tools MCP
-grep -c '^        Tool($' mcp/apex_server.py                          # 57
+grep -c '^        Tool($' mcp/apex_server.py                          # 64
 # Extensiones ingeridas
 sed -n '405p' lib/ingest.py
 # Slug sin sanitizar en el wiki
