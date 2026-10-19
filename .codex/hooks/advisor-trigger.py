@@ -8,6 +8,21 @@ emite a stderr un mensaje pidiendo invocar `Task(subagent_type='apex-advisor')`.
 
 NO llama al modelo. NO bloquea. Si algo falla, exit 0 silencioso (mejor
 ruido que un hook que rompe la sesión).
+
+Ciclo de vida del review (Sprint 15/16, arreglado 2026-10-19):
+
+- Antes de abrir un review nuevo se cierra el que hubiera pendiente: la
+  fila se queda 'pending' si el subagente no ha hablado y se cierra con
+  su conteo real cuando ya no puede emitir más cards.
+- Un review con advice cards no se cierra en caliente: se espera una
+  ventana de asentamiento (ADVISOR_SETTLE_SEC) desde la última card.
+- Un review pending sin cards se cierra como 'skipped' tras la ventana de
+  gracia (ADVISOR_GRACE_SEC): así el circuit breaker ve los reviews vacíos.
+- Los reviews pending más viejos que ADVISOR_STALE_REVIEW_SEC se podan
+  como 'abandoned' (reparación idempotente de la basura histórica).
+- Mientras hay un review abierto NO se abre otro: sin este guard se
+  acumulaba un review por cada tool call (7269 filas 'pending' en la
+  auditoría del 2026-10-19).
 """
 from __future__ import annotations
 
@@ -95,9 +110,6 @@ def main() -> int:
         end_hook("advisor-trigger", _hook_start, exit_code=0)
         return 0
     tool = payload.get("tool_name", "") or ""
-    if tool in SKIP_TOOLS:
-        end_hook("advisor-trigger", _hook_start, exit_code=0)
-        return 0
     cwd = Path(payload.get("cwd") or os.getcwd())
     root = _find_project_root(cwd)
     if root is None:
@@ -114,10 +126,32 @@ def main() -> int:
     )
 
     try:
-        _advisor.increment_tool_count(str(db_path))
+        # 1. Reparación idempotente: podar los reviews 'pending'
+        #    huérfanos (basura histórica acumulada).
+        _advisor.reap_stale_reviews(str(db_path))
+        # 2. Cerrar los reviews que ya están listos (de cualquier
+        #    sesión: uno de una sesión anterior no puede quedar
+        #    abierto para siempre). Es donde se resetea `tool_count` y
+        #    se actualiza el circuit breaker.
+        _advisor.close_ready_reviews(str(db_path))
         force = _is_force_trigger(tool, payload)
+        pendientes = _advisor.pending_reviews(str(db_path), session_id)
+        if pendientes and force:
+            # Un force trigger invalida el review en curso.
+            for p in pendientes:
+                _advisor.close_review(str(db_path), p["id"])
+            pendientes = []
+        if tool in SKIP_TOOLS:
+            end_hook("advisor-trigger", _hook_start, exit_code=0)
+            return 0
+        _advisor.increment_tool_count(str(db_path))
         run_, reason = _advisor.should_run(str(db_path), force=force)
         if not run_:
+            end_hook("advisor-trigger", _hook_start, exit_code=0)
+            return 0
+        if pendientes:
+            # Ya hay un review abierto en esta sesión: no se apila otro
+            # (esto era el flood de 7269 reviews 'pending').
             end_hook("advisor-trigger", _hook_start, exit_code=0)
             return 0
         bundle = _advisor.build_bundle(str(db_path), session_id)
@@ -145,6 +179,8 @@ def main() -> int:
         f"  Invoca Task(subagent_type='apex-advisor', "
         f"prompt='review_id={rid}; session_id={session_id}; lee bundle "
         f"vía apex_get_context y apex_search'). MAX, no API.\n"
+        f"  El review se cierra solo cuando el subagente termine "
+        f"(o se poda por antigüedad).\n"
     )
     end_hook("advisor-trigger", _hook_start, exit_code=0)
     return 0
