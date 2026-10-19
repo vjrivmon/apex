@@ -13,6 +13,7 @@ from scaffold_devops import scaffold as _scaffold_devops
 from security_gate import scaffold_templates as _scaffold_security_templates
 from security_gate import check_gate as _check_security_gate
 from security_gate import render_report as _render_security_report
+from security_gate import verdict_from_report as _verdict_from_report
 from security_gate import write_report as _write_security_report
 from typing import Any
 
@@ -29,8 +30,19 @@ async def handle_apex_security_gate(db: Any, arguments: dict) -> Any:
     md = _render_security_report(report)
     report_path = _write_security_report(report)
     status = "PASSED" if report.passed else "BLOCKED"
+    # El veredicto es lo que convierte el informe en un gate: la transición a
+    # la fase 11 lo lee, y sin él no había nada que consultar (auditoría del
+    # 2026-10-19: el gate 10.5 no bloqueaba nada).
+    if db is not None:
+        verdict_id = await db.add_verdict(**_verdict_from_report(report))
+        verdict_msg = f"\n(Veredicto del gate 10.5: #{verdict_id})"
+    else:
+        verdict_msg = (
+            "\n(AVISO: sin BD del proyecto no se ha podido persistir el "
+            "veredicto del gate 10.5; la entrada en la fase 11 sigue bloqueada.)"
+        )
     return [TextContent(type="text", text=(
-        f"{scaffold_msg}Security Gate: **{status}**\n\n{md}\n\n(Report: {report_path})"
+        f"{scaffold_msg}Security Gate: **{status}**\n\n{md}\n\n(Report: {report_path}){verdict_msg}"
     ))]
 
 async def handle_apex_scaffold_devops(db: Any, arguments: dict) -> Any:

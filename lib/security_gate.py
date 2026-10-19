@@ -47,6 +47,15 @@ REQUIRED_LAYERS = [
     ("L8", "identity"),
 ]
 
+# La fase del gate AgentArmor no es un entero: 10.5. SQLite la guarda como
+# REAL (afinidad INTEGER, pero tipado dinámico) y se consulta igual. El gate
+# escribe aquí su veredicto para que la transición a la fase 11 tenga algo
+# que leer: sin veredicto, el gate no bloqueaba nada.
+SECURITY_GATE_PHASE = 10.5
+
+# Marcadores de que el proyecto tiene gitleaks configurado (Gap F, S19.1c).
+GITLEAKS_MARKERS = (Path(".husky") / "pre-commit", Path(".gitleaks.toml"))
+
 
 @dataclass
 class LayerStatus:
@@ -122,6 +131,57 @@ def check_gate(project_root: Path) -> GateReport:
         ))
 
     return report
+
+
+def _check_gitleaks_configured(project_root: Path) -> bool:
+    """¿Hay gitleaks configurado en el proyecto?
+
+    True si existe `.husky/pre-commit` o `.gitleaks.toml` en la raíz del
+    proyecto; False si no.
+
+    Detecta la CONFIGURACIÓN, no la instalación del binario ni la ejecución
+    real del hook: para eso está `lib/gitleaks.py` (Sprint 19). La fase 10
+    (seguridad) usa esto para no dejar pasar sin detección de secretos.
+    """
+    return any((project_root / marcador).exists() for marcador in GITLEAKS_MARKERS)
+
+
+def verdict_from_report(report: GateReport) -> dict:
+    """Traduce el informe del gate a los campos de `grader_verdicts`.
+
+    Los devuelve como kwargs de `db.add_verdict()`. `should_block` es
+    exactamente lo contrario de `report.passed`: si alguna capa no está en
+    `passed`, el veredicto bloquea la transición.
+
+    `quality` se deriva de las capas superadas (0-4): la escala del grader
+    es de 1 a 4, y aquí se reparte el rango completo porque 0 capas
+    superadas (nada revisado) tiene que distinguirse de 4.
+    """
+    total = len(report.layers) or 1
+    superadas = sum(1 for capa in report.layers if capa.status == "passed")
+    fallidas = report.failed_layers
+    quality = (superadas * 4) // total
+    issues = [f"{capa.layer}: {capa.status}" for capa in fallidas]
+    if fallidas:
+        detalle = ", ".join(f"{capa.layer} ({capa.status})" for capa in fallidas)
+        reasoning = (
+            f"Gate AgentArmor 10.5: {superadas}/{total} capas en passed. "
+            f"Bloquean: {detalle}."
+        )
+    else:
+        reasoning = f"Gate AgentArmor 10.5: {superadas}/{total} capas en passed."
+    return {
+        "phase": SECURITY_GATE_PHASE,
+        "quality": quality,
+        "category": "security",
+        "issues": issues,
+        "should_block": not report.passed,
+        "reasoning": reasoning,
+        "deterministic_checks": {
+            capa.layer: (capa.status == "passed") for capa in report.layers
+        },
+        "llm_judged": False,
+    }
 
 
 def render_report(report: GateReport) -> str:
