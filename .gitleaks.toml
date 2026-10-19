@@ -1,0 +1,37 @@
+# gitleaks — configuración de APEX (Sprint 19, Gap F).
+#
+# La fase 10 (seguridad) exige que el proyecto tenga detección automática de
+# secretos. Este fichero es esa configuración: `apex_set_phase(phase=10)` no
+# deja pasar sin él (ver lib/security_gate.py::_check_gitleaks_configured).
+#
+# Formato: `gitleaks 8.21` (la versión instalada) lee la clave singular
+# `[allowlist]`. Con `[[allowlists]]` las reglas NO se aplican: verificado
+# contra 8.21.2, el recuento de hallazgos no baja.
+#
+# Usa las reglas por defecto de gitleaks 8.x y añade un allowlist para los
+# falsos positivos conocidos de este repo.
+
+title = "APEX"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Falsos positivos conocidos de APEX"
+
+# `__pycache__` no se versiona: no hay nada que escanear y el .pyc duplica
+# los hallazgos del .py.
+paths = [
+    '''__pycache__''',
+    '''\.pyc$''',
+]
+
+# La regla `generic-api-key` interpreta como "clave: valor" cualquier línea
+# con un identificador en snake_case seguido de ">=". En lib/apex_doctor.py
+# hay una frase de un docstring que describe umbrales de conteo
+# ("count_total >= A6_MIN_FRICTION_OCCURRENCES"): no es un secreto.
+# El allowlist matchea contra el VALOR detectado, no contra la línea entera.
+stopwords = [
+    "A6_MIN_FRICTION_OCCURRENCES",
+    "A6_MIN_FRICTION_SESSIONS",
+]
