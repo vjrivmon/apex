@@ -2,9 +2,11 @@
 """SessionStart hook para APEX — inyecta lecciones cross-project al contexto.
 
 Lee ~/RoadToDevOps/apex-hub/data/hub.db (agregada por apex-hub) y extrae los
-top-5 errores recurrentes de OTROS proyectos para evitar repetirlos. Devuelve
-JSON con `hookSpecificOutput.additionalContext` que Claude Code inyecta
-directamente en el contexto al iniciar la sesión.
+errores cross-project más recurrentes de OTROS proyectos para evitar repetirlos.
+La recurrencia se calcula al leer (proyectos distintos con la misma firma),
+no leyendo `hub.db.errors.recurrence_count`, que es la recurrencia local y
+siempre vale 1. Devuelve JSON con `hookSpecificOutput.additionalContext` que
+Claude Code inyecta directamente en el contexto al iniciar la sesión.
 
 Best-effort: si hub.db no existe o hay cualquier error, devuelve stdout vacío
 (el hook no bloquea nunca el arranque de la sesión).
@@ -23,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib.hook_metrics import start_hook, end_hook
 
 HUB_DB = Path.home() / "RoadToDevOps" / "apex-hub" / "data" / "hub.db"
-MAX_ERRORS = 5
 INGEST_REMINDER_THRESHOLD = int(
     os.environ.get("APEX_LIBRARY_INGEST_THRESHOLD", "5")
 )
@@ -43,36 +44,21 @@ def _current_project_id() -> str | None:
 
 
 def _read_top_errors() -> list[dict]:
-    if not HUB_DB.exists():
-        return []
-    try:
-        conn = sqlite3.connect(f"file:{HUB_DB}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-    except sqlite3.OperationalError:
-        return []
-    try:
-        exclude = _current_project_id()
-        sql = (
-            "SELECT project_id, description, lesson, severity, recurrence_count, phase "
-            "FROM errors"
-        )
-        params: list = []
-        if exclude:
-            sql += " WHERE project_id != ?"
-            params.append(exclude)
-        sql += (
-            " ORDER BY recurrence_count DESC, "
-            " CASE severity "
-            "   WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
-            "   WHEN 'medium' THEN 2 ELSE 3 END "
-            " LIMIT ?"
-        )
-        params.append(MAX_ERRORS)
-        return [dict(r) for r in conn.execute(sql, params)]
-    except sqlite3.Error:
-        return []
-    finally:
-        conn.close()
+    """Errores cross-project con recurrencia real, agrupados y ordenados.
+
+    Antes esta función hacía `ORDER BY recurrence_count DESC` sobre
+    `hub.db.errors`, pero ese valor es la recurrencia LOCAL (sólo sube si el
+    mismo error se repite en la misma `context.db`) y el escáner del hub lo
+    copia tal cual: las 367 filas tienen `recurrence_count = 1`. El orden era
+    degenerado y el `LIMIT 5` devolvía siempre los mismos errores.
+
+    Ahora la recurrencia se calcula al leer, agrupando por firma y contando
+    PROYECTOS DISTINTOS: un error que aparece en 4 proyectos es una lección
+    del ecosistema. Ver `lib/cross_project_errors.py`.
+    """
+    from lib.cross_project_errors import top_errors
+
+    return top_errors(HUB_DB, exclude_project=_current_project_id())
 
 
 def _bump_visit_counter(project_id: str) -> int:
@@ -146,10 +132,14 @@ def _format_context(errors: list[dict]) -> str:
     ]
     for i, e in enumerate(errors, 1):
         sev = e.get("severity", "medium")
-        rec = e.get("recurrence_count", 1)
+        n_proj = e.get("project_count", 1)
+        proyectos = ", ".join(e.get("projects", []))
         lines.append(
-            f"{i}. **[{e['project_id']} · {sev} · x{rec}]** {e['description'][:220]}"
+            f"{i}. **[{sev} · {n_proj} proyecto{'s' if n_proj != 1 else ''}]** "
+            f"{e['description'][:220]}"
         )
+        if proyectos:
+            lines.append(f"   - **Visto en:** {proyectos}")
         lesson = (e.get("lesson") or "").strip()
         if lesson:
             lines.append(f"   - **Lección:** {lesson[:260]}")

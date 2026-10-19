@@ -36,7 +36,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 | Hooks | 13 en disco, 8 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
 | Rama | `main` (árbol sucio) |
-| HEAD | `c750cb4 fix(phase-gate): el gate ve el estado de la fase anterior` |
+| HEAD | `9ac9a6d chore(audit): versiona la integracion Codex/OpenCode y AGENTS.md` |
 
 ### Artefactos por sprint
 
@@ -60,6 +60,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 Código escrito que nadie usa. Suele ser trabajo a medias, no
 necesariamente muerto: verificar antes de borrar o cablear.
 
+- `lib/cross_project_errors.py`
 - `lib/db_compact.py`
 - `lib/db_utils.py`
 - `lib/hook_metrics.py`
