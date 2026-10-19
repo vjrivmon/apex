@@ -119,22 +119,34 @@ sepa:
 ~/RoadToDevOps/apex/           ← Repositorio APEX
 ├── lib/
 │   ├── context_db.py          ← BD SQLite contextual (temporal facts, FTS5)
+│   ├── project_root.py        ← Resolución de la raíz del proyecto (una sola)
+│   ├── advisor.py             ← Advisor: revisar y proponer (no escribe código)
+│   ├── curator.py             ← Curador local opt-in (APEX_CURATOR_MODEL)
+│   ├── vfs.py                 ← VirtualFS cross-project read-only
 │   └── wiki_scaffold.py       ← Generador de knowledge base (patrón Karpathy)
+├── mcp/
+│   ├── apex_server.py         ← Servidor MCP (las tools)
+│   └── handlers/              ← Un handler por tool
 ├── commands/
-│   └── apex.md                ← Comando /apex para Claude Code
+│   ├── apex.md                ← Comando /apex para Claude Code
+│   └── phases/                ← Las 15 fases + el gate 10.5
 ├── skills/
 │   ├── socratic/SKILL.md      ← Tutor socrático (3-5 rondas)
 │   ├── architect/SKILL.md     ← SolutionTypeAdvisor
 │   ├── flow-guardian/SKILL.md ← Vigilante de fases
 │   └── iterate/SKILL.md       ← Guía para fases 12-14
-├── tests/
-│   └── test_context_db.py     ← 28 tests (todos pasando)
-├── backend/                   ← Backend web (modo producción con Ollama)
-│   ├── core/                  ← Dominio + agentes + puertos
-│   ├── infrastructure/        ← Adaptadores (Ollama, ChromaDB, SQLite)
-│   └── application/           ← FastAPI + WebSocket
-└── frontend/                  ← Next.js 15 dashboard (modo producción)
+├── templates/                 ← Lo que se scaffoldea a cada proyecto
+│   ├── devops/                ← Hook de gitleaks, CI
+│   ├── commands/              ← Slash commands de APEX
+│   └── apex-security/         ← Capas AgentArmor
+├── tests/                     ← La suite completa
+├── backend/                   ← Legacy declarado, sin usar (ver AGENTS.md)
+└── .apex/                     ← El contexto del propio proyecto APEX
 ```
+
+`frontend/` ya no existe: el único frontend de APEX es `apex-hub`, en
+`~/RoadToDevOps/apex-hub/`. `backend/` sigue en el árbol por inercia
+histórica desde el Sprint 7 y no se carga en el flujo actual.
 
 ### Por proyecto (generado por /apex)
 
