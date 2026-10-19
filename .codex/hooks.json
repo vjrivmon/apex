@@ -6,19 +6,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/post-tool-archive.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/post-tool-archive.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/skill-forge-watch.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/skill-forge-watch.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/advisor-trigger.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/advisor-trigger.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/trace-prompt.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/trace-prompt.py"
           }
         ]
       },
@@ -27,7 +27,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/refresh-state.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/refresh-state.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__apex__apex_set_phase",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/phase-gate.py"
           }
         ]
       }
@@ -38,31 +49,49 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/weekly-design-lint.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/weekly-design-lint.py"
+          },
+          {
+            "type": "command",
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/session-start.py"
+          },
+          {
+            "type": "command",
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/pending-notes.py"
           }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/end-of-day-doctor.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/end-of-day-doctor.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/advisor-outcome-watch.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/advisor-outcome-watch.py"
+          },
+          {
+            "type": "command",
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/advice-injector.py"
+          },
+          {
+            "type": "command",
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/context-watch.py"
           }
         ]
       }
     ],
     "Stop": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.venv/bin/python3 '/home/vicente/RoadToDevOps/apex/.codex/hooks/refresh-state.py'"
+            "command": "/home/vicente/RoadToDevOps/apex/.venv/bin/python3 /home/vicente/RoadToDevOps/apex/.codex/hooks/refresh-state.py"
           }
         ]
       }
