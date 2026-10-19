@@ -23,6 +23,13 @@ from typing import Any
 
 _FEATURE_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,49}$")
 
+# Un guard es el NOMBRE de una condición (`has_required_fields`,
+# `payment_authorized`), no una expresión. La skill /prototype lo dice
+# explícitamente: "Si una transición depende de una condición, nómbrala en el
+# campo guard". Por eso se valida como identificador: el TUI generado tiene
+# que poder invocar el guard por nombre.
+_GUARD_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
+
 
 def _validate_inputs(
     feature_name: str,
@@ -60,6 +67,14 @@ def _validate_inputs(
             raise ValueError(
                 f"transición #{i}: estado destino "
                 f"{tr['to']!r} desconocido")
+        guard = tr.get("guard")
+        if guard is not None:
+            if not isinstance(guard, str) or not _GUARD_NAME_RE.match(guard):
+                raise ValueError(
+                    f"transición #{i}: guard {guard!r} inválido. Un guard es "
+                    f"el NOMBRE de una condición (ej. 'has_required_fields'), "
+                    f"no una expresión: minúsculas, dígitos y guiones bajos, "
+                    f"empezando por letra")
 
 
 def _check_reachability(
@@ -121,6 +136,27 @@ def _render_tui(
         f"        self._fire(event={tr['event']!r})"
         for tr in transitions
     )
+    # Un método por guard distinto. El cuerpo lo rellena quien edita el
+    # fichero: el scaffold sale con `return True` (guard abierto) para que el
+    # TUI arranque, pero la transición queda CONTRACTUAL: si el guard pasa a
+    # False, la transición se bloquea y el TUI lo dice.
+    guard_names = sorted({
+        tr["guard"] for tr in transitions if tr.get("guard")
+    })
+    guards_block = "\n".join(
+        f"    def guard_{name}(self) -> bool:\n"
+        f"        # IMPLEMENTA la condición real de {name!r}.\n"
+        f"        # Devuelve False para bloquear la transición que lo nombra.\n"
+        f"        return True"
+        for name in guard_names
+    )
+    if guards_block:
+        guards_block = (
+            "\n    # ── Guards contractuales ─────────────────────────────────\n"
+            "    # Cada guard nombra una condición. Si devuelve False, la\n"
+            "    # transición queda bloqueada y el TUI lo dice en pantalla.\n"
+            + guards_block
+        )
     return f'''"""Prototipo APEX (skill /prototype) — {feature_name}.
 
 Generado por `apex_prototype_init`. Edita aquí la lógica de guards y
@@ -167,6 +203,7 @@ class PrototypeApp(App):
         super().__init__()
         self.state = INITIAL_STATE
         self.history: list[str] = [INITIAL_STATE]
+        self.blocked: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -175,12 +212,25 @@ class PrototypeApp(App):
 
     def _render(self) -> str:
         path = " → ".join(self.history[-6:])
-        return f"feature: {{FEATURE_NAME}}\\nestado: {{self.state}}\\npath: {{path}}"
+        head = f"feature: {{FEATURE_NAME}}\\nestado: {{self.state}}\\npath: {{path}}"
+        if self.blocked:
+            head += f"\\nbloqueado: {{self.blocked}}"
+        return head
 
     def _fire(self, event: str) -> None:
         for tr in TRANSITIONS:
             if tr["from"] == self.state and tr["event"] == event:
-                # TODO: evaluar tr.get("guard") cuando se modele de verdad.
+                guard = tr.get("guard")
+                if guard and not getattr(self, f"guard_{{guard}}")():
+                    # El guard manda: la transición NO ocurre y se explica por
+                    # qué. Antes esto se ignoraba con un TODO.
+                    self.blocked = (
+                        f"guard '{{guard}}' bloquea "
+                        f"{{tr['from']}} → {{tr['to']}}"
+                    )
+                    self.query_one("#current", Static).update(self._render())
+                    return
+                self.blocked = ""
                 self.state = tr["to"]
                 self.history.append(self.state)
                 self.query_one("#current", Static).update(self._render())
@@ -188,6 +238,7 @@ class PrototypeApp(App):
         # Evento no aplica desde el estado actual; refrescar igual.
         self.query_one("#current", Static).update(self._render())
 
+{guards_block}
 {actions_block}
 
 

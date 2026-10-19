@@ -36,7 +36,7 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 | Hooks | 13 en disco, 8 registrados en el proyecto |
 | Tablas en `context.db` | 27 |
 | Rama | `main` (árbol sucio) |
-| HEAD | `9ac9a6d chore(audit): versiona la integracion Codex/OpenCode y AGENTS.md` |
+| HEAD | `8ec093b fix(cross-project): la recurrencia de errores se calcula al leer` |
 
 ### Artefactos por sprint
 

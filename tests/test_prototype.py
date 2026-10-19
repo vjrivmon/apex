@@ -308,3 +308,194 @@ class TestMCPWiring:
         ))
         text = res[0].text
         assert "Validación falló" in text or "initial_state" in text
+
+
+# ── Guards contractuales ─────────────────────────────────────────────────
+#
+# La skill /prototype dice: "Si una transición depende de una condición
+# (`has_required_fields`, `payment_authorized`), nómbrala en el campo `guard`.
+# Los guards son contractuales." Hasta ahora el TUI generado lo ignoraba con
+# un TODO y la transición ocurría igual. Estos tests fijan que el guard se
+# EVALÚA y que bloquea la transición cuando devuelve False.
+
+
+@pytest.fixture
+def textual_falso(monkeypatch):
+    """Módulo textual mínimo para poder importar el TUI generado.
+
+    `textual` no es dependencia de APEX: el scaffold dice "pip install
+    textual" y el TUI es opcional. Para poder ejercitar la lógica del guard
+    sin la TUI real, se inyecta un doble mínimo.
+    """
+    import types
+
+    class _Static:
+        def __init__(self, *args, **kwargs):
+            self.rendered = ""
+
+        def update(self, text):
+            self.rendered = text
+
+    class _App:
+        def __init__(self, *args, **kwargs):
+            self._widgets = {"#current": _Static()}
+
+        def query_one(self, selector, widget_type=None):
+            return self._widgets[selector]
+
+        def run(self):
+            return None
+
+    app_mod = types.ModuleType("textual.app")
+    app_mod.App = _App
+    app_mod.ComposeResult = list
+
+    binding_mod = types.ModuleType("textual.binding")
+    binding_mod.Binding = tuple
+
+    widgets_mod = types.ModuleType("textual.widgets")
+    widgets_mod.Footer = _Static
+    widgets_mod.Header = _Static
+    widgets_mod.Static = _Static
+
+    textual_mod = types.ModuleType("textual")
+    textual_mod.app = app_mod
+    textual_mod.binding = binding_mod
+    textual_mod.widgets = widgets_mod
+
+    monkeypatch.setitem(sys.modules, "textual", textual_mod)
+    monkeypatch.setitem(sys.modules, "textual.app", app_mod)
+    monkeypatch.setitem(sys.modules, "textual.binding", binding_mod)
+    monkeypatch.setitem(sys.modules, "textual.widgets", widgets_mod)
+    return textual_mod
+
+
+def _cargar_tui(ruta: Path, nombre: str):
+    spec = importlib.util.spec_from_file_location(nombre, ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestGuards:
+    def test_genera_un_metodo_por_guard(self, project: Path):
+        out = proto.apex_prototype_init(
+            project_root=project,
+            feature_name="checkout_flow",
+            states=["cart", "shipping", "paid"],
+            transitions=[
+                {"from": "cart", "event": "next", "to": "shipping",
+                 "guard": "has_required_fields"},
+                {"from": "shipping", "event": "pay", "to": "paid",
+                 "guard": "payment_authorized"},
+                {"from": "shipping", "event": "cancel", "to": "cart"},
+            ],
+            initial_state="cart",
+        )
+        src = Path(out["tui_path"]).read_text(encoding="utf-8")
+        assert "def guard_has_required_fields(self) -> bool:" in src
+        assert "def guard_payment_authorized(self) -> bool:" in src
+        # Un guard por transición con nombre, no por transición.
+        assert src.count("def guard_") == 2
+        ast.parse(src)  # sigue siendo Python válido
+
+    def test_no_hay_metodos_de_guard_si_no_hay_guards(self, project: Path):
+        out = proto.apex_prototype_init(
+            project_root=project,
+            feature_name="sin_guards",
+            states=["a", "b"],
+            transitions=[{"from": "a", "event": "go", "to": "b"}],
+            initial_state="a",
+        )
+        src = Path(out["tui_path"]).read_text(encoding="utf-8")
+        assert "def guard_" not in src
+
+    def test_guard_abierto_permite_la_transicion(
+        self, project: Path, textual_falso,
+    ):
+        out = proto.apex_prototype_init(
+            project_root=project,
+            feature_name="checkout_flow",
+            states=["cart", "shipping", "paid"],
+            transitions=[
+                {"from": "cart", "event": "next", "to": "shipping",
+                 "guard": "has_required_fields"},
+                {"from": "shipping", "event": "pay", "to": "paid"},
+            ],
+            initial_state="cart",
+        )
+        mod = _cargar_tui(Path(out["tui_path"]), "tui_guards_abiertos")
+        app = mod.PrototypeApp()
+        app._fire("next")
+        assert app.state == "shipping"
+        assert app.blocked == ""
+
+    def test_guard_cerrado_bloquea_la_transicion(
+        self, project: Path, textual_falso,
+    ):
+        out = proto.apex_prototype_init(
+            project_root=project,
+            feature_name="checkout_flow",
+            states=["cart", "shipping", "paid"],
+            transitions=[
+                {"from": "cart", "event": "next", "to": "shipping",
+                 "guard": "has_required_fields"},
+                {"from": "shipping", "event": "pay", "to": "paid"},
+            ],
+            initial_state="cart",
+        )
+        mod = _cargar_tui(Path(out["tui_path"]), "tui_guard_cerrado")
+        app = mod.PrototypeApp()
+        # El guard se implementa en el fichero generado: aquí se fuerza a
+        # False para comprobar que la transición NO ocurre.
+        app.guard_has_required_fields = lambda: False
+        app._fire("next")
+        assert app.state == "cart", "el guard cerrado debe impedir la transición"
+        assert "has_required_fields" in app.blocked
+        assert "cart" in app.blocked and "shipping" in app.blocked
+
+    def test_transicion_sin_guard_sigue_pasando(
+        self, project: Path, textual_falso,
+    ):
+        out = proto.apex_prototype_init(
+            project_root=project,
+            feature_name="checkout_flow",
+            states=["cart", "shipping", "paid"],
+            transitions=[
+                {"from": "cart", "event": "next", "to": "shipping",
+                 "guard": "has_required_fields"},
+                {"from": "cart", "event": "cancel", "to": "paid"},
+            ],
+            initial_state="cart",
+        )
+        mod = _cargar_tui(Path(out["tui_path"]), "tui_sin_guard")
+        app = mod.PrototypeApp()
+        app.guard_has_required_fields = lambda: False
+        app._fire("cancel")
+        assert app.state == "paid"
+        assert app.blocked == ""
+
+    def test_guard_invalido_se_rechaza_en_validacion(self, project: Path):
+        with pytest.raises(ValueError, match="guard"):
+            proto.apex_prototype_init(
+                project_root=project,
+                feature_name="bad_guard",
+                states=["a", "b"],
+                transitions=[
+                    {"from": "a", "event": "go", "to": "b",
+                     "guard": "no es un identificador"},
+                ],
+                initial_state="a",
+            )
+
+    def test_guard_no_string_vacia_se_rechaza(self, project: Path):
+        with pytest.raises(ValueError, match="guard"):
+            proto.apex_prototype_init(
+                project_root=project,
+                feature_name="empty_guard",
+                states=["a", "b"],
+                transitions=[
+                    {"from": "a", "event": "go", "to": "b", "guard": ""},
+                ],
+                initial_state="a",
+            )
