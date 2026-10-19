@@ -36,7 +36,7 @@ vive en la rama `archive/legacy-web` y NO se carga en el flujo actual.
 | Métrica | Valor |
 |---|---|
 | Tests (funciones de test) | 1131 |
-| Tests (suite ejecutada) | 876 pasando, 4 omitidos (snapshot 2026-10-19, 762 funciones de test) |
+| Tests (suite ejecutada) | 1361 pasando, 5 omitidos (snapshot 2026-10-19, 1131 funciones de test) |
 | Tools MCP | 64 |
 | Skills (`skills/`) | 25 |
 | Hooks en disco | 13 |
@@ -64,7 +64,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 
 ### Contexto del repo (volátil)
 
-Rama `main` (árbol sucio) · HEAD `0353a05 feat(postura): reglas 21-22 y postura compartida en todos los roles` · refrescado el 2026-10-19.
+Rama `main` · HEAD `f5aad41 docs(agentes): la narrativa recoge lo cerrado en la segunda tanda` · refrescado el 2026-10-19.
 
 <!-- APEX:STATE:END -->
 
