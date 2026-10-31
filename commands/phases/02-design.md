@@ -5,7 +5,8 @@ para crear mockups visuales. Si la decision afecta al aspecto visual, DEBE
 acompanarse de un artefacto visual.
 
 Esta fase tiene 3 bloques: Arquitectura, Identidad Visual, y UX. Se ejecutan EN
-ORDEN. No saltar a wireframes sin tener la paleta definida.
+ORDEN. No saltar a wireframes sin tener la paleta definida. El bloque de
+stills (Stageshow) entra cuando hay ilustración de producto.
 
 ## Herramientas de diseno y su mejor uso
 
@@ -17,6 +18,7 @@ ORDEN. No saltar a wireframes sin tener la paleta definida.
 | AI Designer   | Prototipado HTML rapido                          | `mcp__aidesigner__*` (si disponible) |
 | Excalidraw    | Diagramas, flujos, mapas de navegacion           | `mcp__claude_ai_Excalidraw__*`       |
 | Figma MCP     | Manual de identidad, design tokens, mockups finos| `mcp__figma__*` (si disponible)      |
+| Stageshow     | Stills, bentos, demos con cursor, feature cards | skill `stageshow`                    |
 
 El agente debe decidir cual usar para cada tarea. **Obligatorio usar al menos
 2 herramientas distintas** en identidad visual (Bloque B). Si hay duda,
@@ -129,6 +131,22 @@ OBLIGATORIO si el proyecto es producto de mercado (web/app/SaaS).
   final. Si `should_block=true`, atacar issues antes de avanzar.
 - **[2q]** `apex_set_phase(phase_number=2, status="completed")`.
 
+## Bloque E: Stills, animación y bento (Stageshow)
+
+Obligatorio cuando el entregable incluye una ilustración de producto:
+still, feature card, landing, demo con cursor o bento. Leer
+`skills/stageshow/SKILL.md` y seguir el proceso **mirar, historia, ejemplo,
+filmar, correcciones**.
+
+`apex_recommend_skills(phase=2, brief="...")` devuelve `stageshow` cuando el
+brief es ese trabajo visual. El kit React vive en `skills/stageshow/kit/`
+(MIT, Benji Taylor). Los iconos de aplicaciones de terceros y las marcas
+oficiales de Linear, American Express y USDC no están en esta copia: ver
+`skills/stageshow/APEX-VENDOR.md`.
+
+Pencil, Stitch y Figma siguen en wireframes y en el design system. Stageshow
+cubre la ilustración que se ve como el producto.
+
 ## North star visual (referencias)
 
 Apuntar al nivel de calidad de: `drapz.design`, Buffet Designs (Solaris),
@@ -137,6 +155,10 @@ Havernex. Consultar `skills/brand-identity/SKILL.md`.
 
 ## Skills recomendadas
 
+- **`stageshow`** — stills de producto, animaciones, bentos y demos con
+  cursor. Proceso: mirar, historia, ejemplo, filmar, correcciones.
+  `skills/stageshow/SKILL.md`. Entra cuando hay que mostrar la interfaz
+  como ilustración. `apex_recommend_skills` la elige para ese brief.
 - **`grill-with-docs`** (Sprint 14) — antes de cerrar el DESIGN.md,
   estresa cada decision visual/arquitectonica preguntando una a una.
   Afilara terminos difusos ("componente" vs "modulo", "servicio" vs
@@ -155,5 +177,8 @@ Havernex. Consultar `skills/brand-identity/SKILL.md`.
   (si producto de mercado).
 - Mapa de navegación Excalidraw exportado.
 - 3 user flows documentados.
+- Si el entregable incluye stills, landings, demos o bentos: al menos uno
+  producido con la skill `stageshow` (proceso mirar, historia, ejemplo,
+  filmar, correcciones) y filmado.
 - Verdict del grader: `should_block=false`.
 - Fase marcada como `completed` (sólo si verdict pasa).

@@ -35,15 +35,15 @@ vive en la rama `archive/legacy-web` y NO se carga en el flujo actual.
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 1131 |
+| Tests (funciones de test) | 1141 |
 | Tests (suite ejecutada) | 1361 pasando, 5 omitidos (snapshot 2026-10-19, 1131 funciones de test) |
-| Tools MCP | 64 |
-| Skills (`skills/`) | 25 |
+| Tools MCP | 65 |
+| Skills (`skills/`) | 26 |
 | Hooks en disco | 13 |
 | Hooks registrados en el proyecto | 8 |
-| Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
+| Hooks registrados globalmente (`~/.claude/settings.json`) | 0 |
 | Tablas en el schema (`lib/context_db.py`) | 28 |
-| Tablas en la BD viva (`.apex/context.db`) | 35 |
+| Tablas en la BD viva (`.apex/context.db`) | 0 |
 
 ### Artefactos por sprint
 
@@ -61,10 +61,11 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S18 Granite curator | presente | lib/curator.py |
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
+| Stageshow | presente | skills/stageshow/SKILL.md, lib/skill_router.py |
 
 ### Contexto del repo (volátil)
 
-Rama `main` · HEAD `f5aad41 docs(agentes): la narrativa recoge lo cerrado en la segunda tanda` · refrescado el 2026-10-19.
+Rama `cursor/stageshow-skill-da51` · HEAD `1882e33 feat(stageshow): stills, bento y demos en la fase 2` · refrescado el 2026-10-31.
 
 <!-- APEX:STATE:END -->
 

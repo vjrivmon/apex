@@ -319,7 +319,7 @@ Antes de cualquier fase, tener leidas en contexto:
   segun contexto (socratic, architect, brand-identity, second-brain,
   devops, security-audit, code-review, flow-guardian, iterate, monitor,
   onboard-existing, portfolio-publisher, design-research, design-system,
-  tools-integration).
+  tools-integration, stageshow).
 - **MCP tools (`mcp__apex__*`)** = adapters al context.db + hub.
 
 Aplicacion directa del principio hexagonal + SMA: orquestador delega,

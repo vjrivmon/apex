@@ -1,5 +1,11 @@
 # BLUEPRINT — APEX
 
+> Nota 2026-10-31. Este snapshot de mayo de 2026 está superado. La fuente
+> única del estado es `AGENTS.md`. Stageshow (stills, animación, bento y el
+> proceso mirar, historia, ejemplo, filmar, correcciones) quedó implementado:
+> `skills/stageshow/`, `lib/skill_router.py`, tool `apex_recommend_skills`.
+> Atribución y licencia MIT: `skills/stageshow/APEX-VENDOR.md`.
+
 > Snapshot del estado actual y arranque de la próxima sesión. Se
 > sobrescribe en cada handoff. Última actualización: **2026-05-08**
 > tras cierre de **Sprint 16** y arranque de **Sprint 17**.

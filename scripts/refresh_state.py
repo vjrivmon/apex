@@ -87,6 +87,7 @@ SPRINT_ARTIFACTS: dict[str, list[str]] = {
     "S18 Granite curator": ["lib/curator.py"],
     "S19 Advent integration": ["templates/.github/workflows/gitleaks.yml"],
     "Biblioteca de libros": ["lib/book_chunker.py", "lib/book_corpus.py"],
+    "Stageshow": ["skills/stageshow/SKILL.md", "lib/skill_router.py"],
 }
 
 # Métricas del bloque. `comparable` indica si el valor cuenta como DERIVA:

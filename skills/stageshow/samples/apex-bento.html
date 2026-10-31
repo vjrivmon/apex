@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>APEX — still de la fase 2</title>
+<!-- proceso: mirar, historia, ejemplo, filmar, correcciones -->
+<style>
+  :root {
+    --ground: #e6e1d6;
+    --ground-hot: #f4f0e8;
+    --tile: #f7f4ee;
+    --ink: #1c1917;
+    --muted: #a8a29e;
+    --bar: #e4dfd6;
+    --bar-strong: #d4cfc4;
+    --accent: #9a3412;
+    --window: #fffcf8;
+    --dark: #211e1b;
+    --cream: #f4efe6;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--ground);
+  }
+
+  body {
+    width: 1100px;
+    height: 640px;
+    padding: 28px;
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background:
+      radial-gradient(880px 420px at 12% 0%, var(--ground-hot) 0%, transparent 70%),
+      var(--ground);
+  }
+
+  .grid {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1.65fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 22px;
+    background: var(--tile);
+  }
+
+  .hero { grid-row: 1 / span 2; }
+
+  /* La ventana nace con un solo gutter y se sale por la derecha y por abajo.
+     El recorte es el del tile, no un marco parejo de cuatro lados. */
+  .window {
+    position: absolute;
+    top: 32px;
+    left: 32px;
+    width: 640px;
+    height: 620px;
+    background: var(--window);
+    border-radius: 14px 0 0 0;
+    box-shadow: 0 28px 60px rgba(28, 25, 23, 0.10);
+  }
+
+  .chrome {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d6d1c8;
+  }
+
+  .title {
+    margin-left: 8px;
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    color: #78716c;
+  }
+
+  .rows { padding: 6px 8px 0 18px; }
+
+  .row {
+    height: 52px;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 0 14px 0 10px;
+    border-radius: 10px;
+  }
+
+  .blob {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--bar);
+  }
+
+  .lines { display: flex; flex-direction: column; gap: 7px; }
+
+  .bar {
+    height: 8px;
+    border-radius: 99px;
+    background: var(--bar);
+  }
+
+  .bar.short { width: 38%; background: var(--bar-strong); }
+  .w72 { width: 72%; }
+  .w64 { width: 64%; }
+  .w80 { width: 80%; }
+  .w58 { width: 58%; }
+  .w70 { width: 70%; }
+  .w46 { width: 46%; }
+
+  .row.selected {
+    background: #f4ebe3;
+  }
+
+  .mark {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--accent);
+  }
+
+  .copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+  .name {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 18px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .sub {
+    font-size: 12px;
+    color: #78716c;
+    letter-spacing: 0.01em;
+  }
+
+  .stat {
+    background: var(--dark);
+    color: var(--cream);
+  }
+
+  .stat-copy {
+    position: absolute;
+    left: 26px;
+    bottom: 22px;
+  }
+
+  .stat-kicker {
+    margin: 0 0 8px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #d6d3d1;
+  }
+
+  .stat-num {
+    margin: 0;
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 84px;
+    line-height: 0.8;
+    letter-spacing: -0.045em;
+    font-weight: 500;
+  }
+
+  .chip {
+    position: absolute;
+    top: 22px;
+    right: 22px;
+    width: 72px;
+    height: 48px;
+    border-radius: 12px;
+    background: #2c2825;
+    padding: 14px 12px;
+  }
+
+  .chip .bar { background: #3f3a36; width: 100%; }
+
+  .object { background: var(--tile); }
+
+  .stack {
+    position: absolute;
+    left: 28px;
+    right: 56px;
+    bottom: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ghost {
+    height: 14px;
+    border-radius: 99px;
+    background: var(--bar);
+  }
+
+  .ghost.a { width: 78%; }
+  .ghost.b { width: 54%; }
+
+  .button {
+    position: absolute;
+    left: 28px;
+    bottom: 32px;
+    height: 44px;
+    padding: 0 22px;
+    border-radius: 12px;
+    background: var(--ink);
+    color: var(--cream);
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+  }
+
+  .cursor {
+    position: absolute;
+    left: 104px;
+    bottom: 36px;
+    width: 32px;
+    height: 32px;
+  }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <section class="tile hero" aria-label="Fase en curso">
+      <div class="window">
+        <div class="chrome">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="title">apex</span>
+        </div>
+        <div class="rows">
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w72"></span><span class="bar short"></span></span>
+          </div>
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w64"></span><span class="bar short"></span></span>
+          </div>
+          <div class="row selected">
+            <span class="mark"></span>
+            <span class="copy">
+              <span class="name">Diseño</span>
+              <span class="sub">C4, stills, mapa</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w80"></span><span class="bar short"></span></span>
+          </div>
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w58"></span><span class="bar short"></span></span>
+          </div>
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w70"></span><span class="bar short"></span></span>
+          </div>
+          <div class="row">
+            <span class="blob"></span>
+            <span class="lines"><span class="bar w46"></span><span class="bar short"></span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tile stat" aria-label="Fase activa">
+      <div class="chip" aria-hidden="true"><span class="bar"></span></div>
+      <div class="stat-copy">
+        <p class="stat-kicker">Fase activa</p>
+        <p class="stat-num">02</p>
+      </div>
+    </section>
+
+    <section class="tile object" aria-label="Filmar el still">
+      <div class="stack" aria-hidden="true">
+        <span class="ghost a"></span>
+        <span class="ghost b"></span>
+      </div>
+      <div class="button">Filmar</div>
+      <svg class="cursor" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#fffcf8" stroke="#1c1917" stroke-width="1.4" stroke-linejoin="round"
+              d="M5.2 3.2l0 14.2 3.8-3.3 3.1 5.6 2.3-1.3-3.1-5.6 5.3-.5z"/>
+      </svg>
+    </section>
+  </div>
+</body>
+</html>
