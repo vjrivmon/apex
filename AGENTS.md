@@ -64,7 +64,7 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 
 ### Contexto del repo (volátil)
 
-Rama `cursor/stageshow-skill-da51` (árbol sucio) · HEAD `71e202a merge(analisis): comparacion de la reescritura del router de la rama sin fusionar` · refrescado el 2026-10-31.
+Rama `cursor/stageshow-skill-da51` · HEAD `1882e33 feat(stageshow): stills, bento y demos en la fase 2` · refrescado el 2026-10-31.
 
 <!-- APEX:STATE:END -->
 
