@@ -30,6 +30,8 @@ la tarea actual. No cambies el directorio de trabajo al repositorio APEX.
    Atiende una petición específica antes de retomar pendientes generales.
 4. Lee las skills especializadas desde `<APEX_ROOT>/skills/<nombre>/SKILL.md`
    cuando una fase las necesite; no dependen de estar instaladas por separado.
+   En stills, bentos, landings y demos de producto la skill es `stageshow`
+   (`apex_recommend_skills`).
    El texto que acompaña a la invocación sustituye a `$ARGUMENTS`.
 
 ## Equivalencias de entorno

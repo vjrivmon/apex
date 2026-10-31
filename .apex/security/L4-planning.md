@@ -10,7 +10,7 @@ asi_coverage:
   - ASI08
 evidence:
   - "Planning lo hace Claude Code (el caller). APEX no ejecuta planning autonomo: es un MCP server que expone herramientas bajo demanda, una tool por llamada (mcp/apex_server.py:2090-2092)."
-  - "Superficie de tools: 64 tools MCP al 2026-10-19, valor derivado de `len(await list_tools())` en mcp/apex_server.py:566-2087. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
+  - "Superficie de tools: 65 tools MCP al 2026-10-31, valor derivado de `len(await list_tools())` en mcp/apex_server.py:566-2087. No se hardcodea: recalcular con `grep -c '^        Tool($' mcp/apex_server.py` tras cada tool nueva."
   - "Sin carga dinamica de tools: el registro de handlers es un dict literal (mcp/handlers/__init__.py:72-137), el set de tools de biblioteca es un frozenset literal (mcp/handlers/books.py:21-23) y el del VirtualFS tambien (mcp/handlers/vfs.py:49-51)."
   - "Subprocess con allowlist: el unico Popen del servidor MCP es el del hub, con lista fija [python, -m, backend], cwd fijo _HUB_DIR y sin argumentos del caller (mcp/apex_server.py:175-220, Popen en mcp/apex_server.py:191-197). Se dispara al arrancar el server (mcp/apex_server.py:2153-2156), NO desde apex_init_project (mcp/handlers/context.py:18-33)."
   - "Escrituras fuera de .apex/: el scaffold de devops copia plantillas a .github/, docker/ y monitor/ del target (lib/scaffold_devops.py:75-96) y el portfolio escribe <slug>.mdx en el out_dir (mcp/handlers/portfolio.py:40-53). Ninguno de los dos valida que el path no salga del proyecto (F4-02)."

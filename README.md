@@ -134,7 +134,8 @@ sepa:
 │   ├── socratic/SKILL.md      ← Tutor socrático (3-5 rondas)
 │   ├── architect/SKILL.md     ← SolutionTypeAdvisor
 │   ├── flow-guardian/SKILL.md ← Vigilante de fases
-│   └── iterate/SKILL.md       ← Guía para fases 12-14
+│   ├── iterate/SKILL.md       ← Guía para fases 12-14
+│   └── stageshow/SKILL.md     ← Stills, bento y demos (MIT, Benji Taylor)
 ├── templates/                 ← Lo que se scaffoldea a cada proyecto
 │   ├── devops/                ← Hook de gitleaks, CI
 │   ├── commands/              ← Slash commands de APEX

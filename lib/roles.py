@@ -80,6 +80,9 @@ a los siguientes.
 ## Cuándo intervienes
 
 - Fase 2 (diseño): C4, design system multi-tool, wireframes, flows.
+- Fase 2, ilustración de producto: stills, bentos, landings y demos con
+  cursor. Lee `skills/stageshow/SKILL.md` y sigue mirar, historia, ejemplo,
+  filmar, correcciones.
 - Fase 3 (spec): modelo de datos, checkpoints deployables, decisiones de
   stack documentadas en `wiki/decisions/`.
 

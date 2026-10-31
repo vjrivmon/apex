@@ -34,15 +34,15 @@ frontend es `apex-hub` (repo aparte en `~/RoadToDevOps/apex-hub/`).
 
 | Métrica | Valor |
 |---|---|
-| Tests (funciones de test) | 1131 |
+| Tests (funciones de test) | 1141 |
 | Tests (suite ejecutada) | 1361 pasando, 5 omitidos (snapshot 2026-10-19, 1131 funciones de test) |
-| Tools MCP | 64 |
-| Skills (`skills/`) | 25 |
+| Tools MCP | 65 |
+| Skills (`skills/`) | 26 |
 | Hooks en disco | 13 |
 | Hooks registrados en el proyecto | 8 |
-| Hooks registrados globalmente (`~/.claude/settings.json`) | 5 |
+| Hooks registrados globalmente (`~/.claude/settings.json`) | 0 |
 | Tablas en el schema (`lib/context_db.py`) | 28 |
-| Tablas en la BD viva (`.apex/context.db`) | 35 |
+| Tablas en la BD viva (`.apex/context.db`) | 0 |
 
 ### Artefactos por sprint
 
@@ -60,10 +60,11 @@ si el sprint está *cerrado* — eso es juicio y vive en la narrativa.
 | S18 Granite curator | presente | lib/curator.py |
 | S19 Advent integration | ausente | ningún artefacto |
 | Biblioteca de libros | presente | lib/book_chunker.py, lib/book_corpus.py |
+| Stageshow | presente | skills/stageshow/SKILL.md, lib/skill_router.py |
 
 ### Contexto del repo (volátil)
 
-Rama `main` · HEAD `f5aad41 docs(agentes): la narrativa recoge lo cerrado en la segunda tanda` · refrescado el 2026-10-19.
+Rama `cursor/stageshow-skill-da51` (árbol sucio) · HEAD `71e202a merge(analisis): comparacion de la reescritura del router de la rama sin fusionar` · refrescado el 2026-10-31.
 
 <!-- APEX:STATE:END -->
 
@@ -271,6 +272,14 @@ a S19 por la urgencia de Gap F (gitleaks). Los tres están ejecutados (2026-10-1
 | S17 | VirtualFS cross-project | cerrado: 4 tools `apex_vfs_*` registradas | `.apex/sprints/sprint-17-vfs-and-sprint-18-curator-blueprint.md` |
 | S18 | Granite Curator opt-in vía `APEX_CURATOR_MODEL` | cerrado: opt-in, fallback estricto a la heurística | (mismo fichero que S17) |
 | S19 | Advent Integration | Tier 1 cerrado (gitleaks, CI, slash commands, CLAUDE.md APEX-aware). Tiers 2 y 4 sin empezar | `.apex/sprints/sprint-19-advent-integration-blueprint.md` |
+| Stageshow | Stills, animación, bento y demos de producto | implementado: skill vendida (MIT), router `lib/skill_router.py`, tool `apex_recommend_skills` | `skills/stageshow/APEX-VENDOR.md` |
+
+Stageshow (stills, animación, bentos y el proceso mirar, historia, ejemplo,
+filmar, correcciones) estaba en el trabajo visual pendiente de la fase 2.
+Quedó implementado: la skill vive en `skills/stageshow/`, el router en
+`lib/skill_router.py` y la tool `apex_recommend_skills`. La licencia MIT de
+Benji Taylor permite la copia; el detalle de atribución y de lo que no se
+redistribuye está en `skills/stageshow/APEX-VENDOR.md`.
 
 Pendientes sin sprint asignado: embeddings sobre la wiki del proyecto
 (la infraestructura ya existe en `lib/embeddings.py`), integración Pencil MCP

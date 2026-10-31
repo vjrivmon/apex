@@ -45,7 +45,7 @@ SKILLS_BY_SOLUTION_TYPE: dict[str, tuple[str, ...]] = {
     "cli": ("tdd", "code-review", "security-audit"),
     "bot": ("tdd", "monitor", "second-brain"),
     "mcp": ("tools-integration", "code-review", "security-audit"),
-    "app": ("design-system", "tdd", "monitor"),
+    "app": ("design-system", "stageshow", "tdd", "monitor"),
     "agent": ("architect", "grill-with-docs", "prototype"),
     "streamlit": ("tdd", "monitor", "flow-guardian"),
 }
@@ -56,6 +56,7 @@ SKILL_DESCRIPTIONS: dict[str, str] = {
     "architect": "decisiones de stack, diseño de sistemas y specs",
     "code-review": "revisión de cambios antes de commitear",
     "design-system": "tokens de diseño, accesibilidad y consistencia visual",
+    "stageshow": "stills de producto, animaciones, bento y demos con cursor",
     "flow-guardian": "revisión de flujos end-to-end y de los casos límite",
     "grill-with-docs": "interrogatorio al plan contra el dominio",
     "monitor": "observabilidad, health checks y alertas",
@@ -233,6 +234,8 @@ def _render_skills(state: ProjectState) -> list[str]:
     out.append("")
     out.append("Para el rol especializado de la fase actual: "
                "`mcp__apex__apex_recommend_role(phase=N)`.")
+    out.append("Para stills, bentos, landings y demos: "
+               "`mcp__apex__apex_recommend_skills(phase=N, brief=...)`.")
     return out
 
 

@@ -125,7 +125,8 @@ VFS_TOOLS = _handlers.VFS_TOOLS
 # - Curador: es un servicio local opt-in (`APEX_CURATOR_MODEL`), no estado de
 #   proyecto; su telemetría cae al `context.db` del cwd si lo hay.
 # - Compactador: resuelve su propio `context.db` y avisa si no hay ninguno.
-NO_PROJECT_DB_TOOLS = LIBRARY_TOOLS | VFS_TOOLS | frozenset({
+# - Skills visuales: `apex_recommend_skills` lee `skills/` del repo, no la BD.
+NO_PROJECT_DB_TOOLS = LIBRARY_TOOLS | VFS_TOOLS | _handlers.SKILL_TOOLS | frozenset({
     "apex_curator_status",
     "apex_curator_test",
     "apex_db_compact",
@@ -1046,6 +1047,34 @@ async def list_tools() -> list[Tool]:
                     "path": {
                         "type": "string",
                         "description": "Path del DESIGN.md (default: ./DESIGN.md)",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="apex_recommend_skills",
+            description=(
+                "Elige las skills de diseño para una fase y un brief. Devuelve "
+                "stageshow (stills, bento, landing, demo con cursor) cuando el "
+                "trabajo es una ilustración de producto, y en la fase 2 añade "
+                "design-research, brand-identity y design-system. Un diagrama C4 "
+                "no arrastra stageshow. No necesita proyecto APEX: lee skills/ "
+                "del repo. El proceso de stageshow es mirar, historia, ejemplo, "
+                "filmar, correcciones."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "phase": {
+                        "type": "integer",
+                        "description": "Fase 0-14. La 2 suma las skills de identidad.",
+                    },
+                    "brief": {
+                        "type": "string",
+                        "description": (
+                            "Qué hay que producir. Un still, bento, landing o "
+                            "demo con cursor devuelve stageshow."
+                        ),
                     },
                 },
             },
@@ -2107,8 +2136,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     # se consulta desde cualquier sitio, incluso sin proyecto APEX. Por eso se
     # despacha ANTES de _get_db(), que lanzaría NotAnApexProjectError.
     # Lo mismo vale para el VirtualFS (cross-project por definición), el
-    # curador (servicio local opt-in) y el compactador (resuelve su propia
-    # context.db): son las tools de `NO_PROJECT_DB_TOOLS`.
+    # curador (servicio local opt-in), el compactador (resuelve su propia
+    # context.db) y la recomendación de skills (lee `skills/` del repo):
+    # son las tools de `NO_PROJECT_DB_TOOLS`.
     # apex_init_project crea el `.apex/`: no puede exigirlo de antemano.
     try:
         if name in NO_PROJECT_DB_TOOLS:

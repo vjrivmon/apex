@@ -68,6 +68,8 @@ from apex_handlers.vfs import VFS_TOOLS
 from apex_handlers.curator import handle_apex_curator_status
 from apex_handlers.curator import handle_apex_curator_test
 from apex_handlers.maintenance import handle_apex_db_compact
+from apex_handlers.skills import handle_apex_recommend_skills
+from apex_handlers.skills import SKILL_TOOLS
 
 HANDLERS: dict[str, Any] = {
     "apex_init_project": handle_apex_init_project,
@@ -134,4 +136,5 @@ HANDLERS: dict[str, Any] = {
     "apex_curator_status": handle_apex_curator_status,
     "apex_curator_test": handle_apex_curator_test,
     "apex_db_compact": handle_apex_db_compact,
+    "apex_recommend_skills": handle_apex_recommend_skills,
 }

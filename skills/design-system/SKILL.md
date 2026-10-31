@@ -14,6 +14,9 @@ description: Define tokens semánticos, tipografía, espaciado, iconografía y p
 > - Esta skill (`design-system`) cubre los **tokens semánticos, tipografía,
 >   espaciado, iconografía, y protocolo de verificación** una vez la identidad
 >   está acordada.
+> - Para **stills, bentos, landings y demos con cursor** (la ilustración que
+>   se ve como el producto): usar `stageshow/SKILL.md`. Proceso: mirar,
+>   historia, ejemplo, filmar, correcciones.
 
 ## Cuándo activar
 
